@@ -1,11 +1,36 @@
-Generate SF WLD model based on data
+# Generate SF WLD model based on data
 
-See e.g. https://github.com/official-stockfish/Stockfish/pull/3981
+## Usage
 
 To generate the WLD model two steps are needed:
 
-1) Run scoreWLDstat.py to parse a large collection of pgn files providing the data 
-2) Run scoreWLDana_moves_fit.py to compute the model parameters 
+1. Run scoreWLDstat.py to parse a large collection of pgn files providing the data. The script will look for pgn files in the current directory tree that match fishtest names: `"[a-z0-9]*-[0-9]*.pgn"`
+
+2. Run scoreWLDana_moves_fit.py to compute the model parameters
+
+
+## Results
+
+See e.g. https://github.com/official-stockfish/Stockfish/pull/3981 also available as images in examples/
+
+### Sample win rate model at move 30
+<p align="center">
+  <img src="examples/Figure_1.png?raw=true" width="1200">
+</p>
+### a,b parameter dependence with move number
+<p align="center">
+  <img src="examples/Figure_2.png?raw=true" width="1200">
+</p>
+### 2D contour plot of the data
+<p align="center">
+  <img src="examples/Figure_3.png?raw=true" width="1200">
+</p>
+### 2D contour plot of the model
+<p align="center">
+  <img src="examples/Figure_4.png?raw=true" width="1200">
+</p>
+
+## Contents
 
 further tools can be used to experiment:
 
@@ -16,4 +41,5 @@ further tools can be used to experiment:
 
 *  scoreWLDana_moves.py : similar to above, analyze wrt to moves
 *  scoreWLDana_material.py : similar to above analyze wrt to material
+
 
