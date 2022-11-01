@@ -11,6 +11,19 @@ from scipy.interpolate import griddata
 from scipy.optimize import curve_fit
 import numpy as np
 
+parser = argparse.ArgumentParser()
+
+parser.add_argument(
+    "--NormalizeToPawnValue",
+    type=int,
+    default=208,
+    help="The value that can be used to convert the cp value in the pgn to the SF internal score"
+)
+args = parser.parse_args()
+
+print("--NormalizeToPawnValue: conversion of {} for converting the pgn scores to the internal score".format(args.NormalizeToPawnValue))
+
+
 #
 # read score stats as obtained from fishtest games
 #
@@ -34,6 +47,10 @@ for k, v in inpdict.items():
         continue
     if move < 0 or move > 120:
         continue
+
+    # convert the cp score to the internal value
+    score = score * args.pawn2internal / 100
+
     if result == "W":
         win[(score, move)] += v
     elif result == "L":
@@ -119,11 +136,12 @@ for m in range(3, 120, grouping):
         for x in xdata:
             ymodel.append(winmodel(x, popt[0], popt[1]))
         plt.plot(xdata, ymodel, "r-", label="Model winrate ")
-        plt.xlabel("score")
+        plt.xlabel("Interal value units")
         plt.ylabel("outcome")
         plt.legend()
         plt.show()
         plt.close()
+
 
 #
 # now capture the functional behavior of a and b as a function of the move counter
@@ -135,16 +153,25 @@ popt_as, pcov = curve_fit(poly3, model_ms, model_as)
 label_as = "as = ((%5.3f * x / 32 + %5.3f) * x / 32 + %5.3f) * x / 32 + %5.3f" % tuple(
     popt_as
 )
-print(label_as)
-print(popt_as)
-
 # fit b
 popt_bs, pcov = curve_fit(poly3, model_ms, model_bs)
 label_bs = "bs = ((%5.3f * x / 32 + %5.3f) * x / 32 + %5.3f) * x / 32 + %5.3f" % tuple(
     popt_bs
 )
+
+#
+# now we can define the conversion factor from internal score to centipawn such that
+# an expected win score of 50% is for a score of 'a', we pick this value for move number 32
+# (where the sum of the a coefs is equal to the interpolated a).
+print("const int NormalizeToPawnValue = {};".format(int(sum(popt_as))))
+
+print("Parameters in internal Value units: ")
+
+# give as output as well
+print(label_as)
 print(label_bs)
-print(popt_bs)
+print("     constexpr double as[] = {%13.8f, %13.8f, %13.8f, %13.8f};"%tuple(popt_as))
+print("     constexpr double bs[] = {%13.8f, %13.8f, %13.8f, %13.8f };"%tuple(popt_bs))
 
 # graphs of a and b as a function of the move number
 plt.figure(figsize=(24, 16))
@@ -154,19 +181,17 @@ plt.plot(model_ms, model_bs, "g.", label="bs")
 plt.plot(model_ms, poly3(model_ms, *popt_bs), "m-", label="fit: " + label_bs)
 
 plt.xlabel("move")
-plt.ylabel("parameter")
+plt.ylabel("parameters (in interal Value units, ()")
 plt.legend()
 plt.show()
 plt.close()
-
-print(wdl(330, 21, popt_as, popt_bs))
 
 #
 # now generate contour plot of raw data
 #
 print("processing done, plotting data")
 font = {"family": "DejaVu Sans", "weight": "normal", "size": 20}
-grid_x, grid_y = np.mgrid[-200:400:30j, 10:120:22j]
+grid_x, grid_y = np.mgrid[-400:800:30j, 10:120:22j]
 points = np.array(list(zip(xs, ys)))
 zz = griddata(points, zs, (grid_x, grid_y), method="cubic")
 fig = plt.figure(figsize=(24, 16))
@@ -182,7 +207,7 @@ ax.clabel(CS, inline=1, colors="black")
 ax.set_title(
     "Fraction of positions, with a given move number and score, leading to a win"
 )
-ax.set_xlabel("score")
+ax.set_xlabel("internal Value units")
 ax.set_ylabel("move")
 ax.yaxis.grid(True)
 ax.xaxis.grid(True)
@@ -198,7 +223,7 @@ for i in range(0, len(xs)):
 
 print("processing done, plotting model")
 font = {"family": "DejaVu Sans", "weight": "normal", "size": 20}
-grid_x, grid_y = np.mgrid[-200:400:30j, 10:120:22j]
+grid_x, grid_y = np.mgrid[-400:800:30j, 10:120:22j]
 points = np.array(list(zip(xs, ys)))
 zz = griddata(points, zs, (grid_x, grid_y), method="cubic")
 fig = plt.figure(figsize=(24, 16))
@@ -214,7 +239,7 @@ ax.clabel(CS, inline=1, colors="black")
 ax.set_title(
     "Fraction of positions, with a given move number and score, leading to a win"
 )
-ax.set_xlabel("score")
+ax.set_xlabel("internal Value units")
 ax.set_ylabel("move")
 ax.yaxis.grid(True)
 ax.xaxis.grid(True)
