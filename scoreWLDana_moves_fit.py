@@ -49,7 +49,7 @@ for k, v in inpdict.items():
         continue
 
     # convert the cp score to the internal value
-    score = score * args.pawn2internal / 100
+    score = score * args.NormalizeToPawnValue / 100
 
     if result == "W":
         win[(score, move)] += v
