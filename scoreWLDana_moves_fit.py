@@ -16,12 +16,14 @@ parser = argparse.ArgumentParser()
 parser.add_argument(
     "--NormalizeToPawnValue",
     type=int,
-    default=348,
+    default=361,
     help="The value that can be used to convert the cp value in the pgn to the SF internal score"
 )
 args = parser.parse_args()
 
 print("--NormalizeToPawnValue: conversion of {} for converting the pgn scores to the internal score".format(args.NormalizeToPawnValue))
+
+save_dpi=150
 
 
 #
@@ -128,9 +130,10 @@ for m in range(3, 120, grouping):
     model_as.append(popt[0])
     model_bs.append(popt[1])
 
-    # plot sample curve at move 30.
-    if m == 30:
-        plt.figure(figsize=(24, 16))
+    # plot sample curve at move 32.
+    if m == 32:
+        print("Plotting data at move 32")
+        plt.figure(figsize=(11.69,8.27))
         plt.plot(xdata, ydata, "b.", label="Measured winrate")
         ymodel = []
         for x in xdata:
@@ -139,6 +142,7 @@ for m in range(3, 120, grouping):
         plt.xlabel("Interal value units")
         plt.ylabel("outcome")
         plt.legend()
+        plt.savefig("data_m32.png",dpi=save_dpi)
         plt.show()
         plt.close()
 
@@ -163,7 +167,11 @@ label_bs = "bs = ((%5.3f * x / 32 + %5.3f) * x / 32 + %5.3f) * x / 32 + %5.3f" %
 # now we can define the conversion factor from internal score to centipawn such that
 # an expected win score of 50% is for a score of 'a', we pick this value for move number 32
 # (where the sum of the a coefs is equal to the interpolated a).
-print("const int NormalizeToPawnValue = {};".format(int(sum(popt_as))))
+isum_a=int(sum(popt_as))
+isum_b=int(sum(popt_bs))
+print("const int NormalizeToPawnValue = {};".format(isum_a))
+print("Corresponding spread = {};".format(isum_b))
+print("Corresponding normalized spread = {};".format(sum(popt_bs) / sum(popt_as)))
 
 print("Parameters in internal Value units: ")
 
@@ -174,7 +182,8 @@ print("     constexpr double as[] = {%13.8f, %13.8f, %13.8f, %13.8f};"%tuple(pop
 print("     constexpr double bs[] = {%13.8f, %13.8f, %13.8f, %13.8f };"%tuple(popt_bs))
 
 # graphs of a and b as a function of the move number
-plt.figure(figsize=(24, 16))
+print("Plotting move dependence of model parameters")
+plt.figure(figsize=(11.69,8.27))
 plt.plot(model_ms, model_as, "b.", label="as")
 plt.plot(model_ms, poly3(model_ms, *popt_as), "r-", label="fit: " + label_as)
 plt.plot(model_ms, model_bs, "g.", label="bs")
@@ -183,19 +192,20 @@ plt.plot(model_ms, poly3(model_ms, *popt_bs), "m-", label="fit: " + label_bs)
 plt.xlabel("move")
 plt.ylabel("parameters (in interal Value units, ()")
 plt.legend()
+plt.savefig("model_params.png",dpi=save_dpi)
 plt.show()
 plt.close()
 
 #
 # now generate contour plot of raw data
 #
-print("processing done, plotting data")
-font = {"family": "DejaVu Sans", "weight": "normal", "size": 20}
+print("processing done, plotting 2D data")
+#font = {"family": "DejaVu Sans", "weight": "normal", "size": 20}
 grid_x, grid_y = np.mgrid[-400:800:30j, 10:120:22j]
 points = np.array(list(zip(xs, ys)))
 zz = griddata(points, zs, (grid_x, grid_y), method="cubic")
-fig = plt.figure(figsize=(24, 16))
-plt.rc("font", **font)
+fig = plt.figure(figsize=(11.69,8.27))
+#plt.rc("font", **font)
 left, bottom, width, height = 0.1, 0.1, 0.8, 0.8
 ax = fig.add_axes([left, bottom, width, height])
 cp = plt.contourf(grid_x, grid_y, zz, [0, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 1.0])
@@ -211,6 +221,7 @@ ax.set_xlabel("internal Value units")
 ax.set_ylabel("move")
 ax.yaxis.grid(True)
 ax.xaxis.grid(True)
+plt.savefig("raw_data_2D.png",dpi=save_dpi)
 plt.show()
 plt.close()
 
@@ -221,13 +232,13 @@ plt.close()
 for i in range(0, len(xs)):
     zs[i] = wdl(xs[i], ys[i], popt_as, popt_bs)[0] / 1000.0
 
-print("processing done, plotting model")
-font = {"family": "DejaVu Sans", "weight": "normal", "size": 20}
+print("processing done, plotting 2D model")
+#font = {"family": "DejaVu Sans", "weight": "normal", "size": 20}
 grid_x, grid_y = np.mgrid[-400:800:30j, 10:120:22j]
 points = np.array(list(zip(xs, ys)))
 zz = griddata(points, zs, (grid_x, grid_y), method="cubic")
-fig = plt.figure(figsize=(24, 16))
-plt.rc("font", **font)
+fig = plt.figure(figsize=(11.69,8.27))
+#plt.rc("font", **font)
 left, bottom, width, height = 0.1, 0.1, 0.8, 0.8
 ax = fig.add_axes([left, bottom, width, height])
 cp = plt.contourf(grid_x, grid_y, zz, [0, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 1.0])
@@ -243,5 +254,6 @@ ax.set_xlabel("internal Value units")
 ax.set_ylabel("move")
 ax.yaxis.grid(True)
 ax.xaxis.grid(True)
+plt.savefig("model_data_2D.png",dpi=save_dpi)
 plt.show()
 plt.close()
