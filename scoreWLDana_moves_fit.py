@@ -1,9 +1,6 @@
 from collections import Counter
-import sys
 import json
-import os
 import argparse
-import io
 from ast import literal_eval
 import matplotlib.pyplot as plt
 import numpy as np

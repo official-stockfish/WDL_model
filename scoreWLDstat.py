@@ -3,13 +3,9 @@ from collections import Counter
 import chess
 import chess.pgn
 import re
-import sys
-import random
 import json
 import os
 import argparse
-import io
-
 
 class PosAnalyser:
     def __init__(self, plies):
@@ -45,7 +41,6 @@ class PosAnalyser:
             # look at the game,
             plies = 0
             board = game.board()
-            fen = None
             for node in game.mainline():
 
                 plies = plies + 1
@@ -58,7 +53,6 @@ class PosAnalyser:
                 m = p.search(node.comment)
                 if m:
                     score = m.group(1)
-                    depth = int(m.group(2))
                     m = mateRe.search(score)
                     if m:
                         if m.group(1) == "+":
@@ -76,21 +70,12 @@ class PosAnalyser:
                         score = -score
                     scorekey = score
 
-                knights = len(board.pieces(chess.KNIGHT, chess.WHITE)) + len(
-                    board.pieces(chess.KNIGHT, chess.BLACK)
-                )
-                bishops = len(board.pieces(chess.BISHOP, chess.WHITE)) + len(
-                    board.pieces(chess.BISHOP, chess.BLACK)
-                )
-                rooks = len(board.pieces(chess.ROOK, chess.WHITE)) + len(
-                    board.pieces(chess.ROOK, chess.BLACK)
-                )
-                queens = len(board.pieces(chess.QUEEN, chess.WHITE)) + len(
-                    board.pieces(chess.QUEEN, chess.BLACK)
-                )
-                pawns = len(board.pieces(chess.PAWN, chess.WHITE)) + len(
-                    board.pieces(chess.PAWN, chess.BLACK)
-                )
+                knights = bin(board.knights).count("1")
+                bishops = bin(board.bishops).count("1")
+                rooks = bin(board.rooks).count("1")
+                queens = bin(board.queens).count("1")
+                pawns = bin(board.pawns).count("1")
+
                 matcountkey = 9 * queens + 5 * rooks + 3 * knights + 3 * bishops + pawns
 
                 if scorekey:
@@ -101,43 +86,43 @@ class PosAnalyser:
         pgnfilein.close()
         return matstats
 
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
 
-parser = argparse.ArgumentParser()
-
-parser.add_argument(
-    "--matching_plies",
-    type=int,
-    default=6,
-    help="Number of plies that the material situation needs to be on the board (unused).",
-)
-args = parser.parse_args()
-
-# find the set of fishtest pgns (looking in the full file tree)
-p = re.compile("[a-z0-9]*-[0-9]*.pgn")
-
-pgns = []
-for path, subdirs, files in os.walk(".", followlinks=True):
-    for name in files:
-        m = p.match(name)
-        if m:
-            pgns.append(os.path.join(path, name))
-
-# map sharp_pos to all pgn files using an executor
-ana = PosAnalyser(args.matching_plies)
-
-res = Counter()
-with concurrent.futures.ProcessPoolExecutor() as e:
-    results = e.map(ana.ana_pos, pgns, chunksize=100)
-    for r in results:
-        res.update(r)
-
-# and print all the fens
-with open("scoreWLDstat.json", "w") as outfile:
-    json.dump(
-        {
-            str(k): v
-            for k, v in sorted(res.items(), key=lambda item: item[1], reverse=True)
-        },
-        outfile,
-        indent=1,
+    parser.add_argument(
+        "--matching_plies",
+        type=int,
+        default=6,
+        help="Number of plies that the material situation needs to be on the board (unused).",
     )
+    
+    parser.add_argument(
+        "--dir",
+        type=str,
+        default="pgns",
+        help="Directory with the pgns."
+    )
+    
+    args = parser.parse_args()
+
+    pgns = [args.dir + "/" + f for f in os.listdir(args.dir) if f.endswith("pgn")]
+    
+    # map sharp_pos to all pgn files using an executor
+    ana = PosAnalyser(args.matching_plies)
+
+    res = Counter()
+    with concurrent.futures.ProcessPoolExecutor() as e:
+        results = e.map(ana.ana_pos, pgns, chunksize=100)
+        for r in results:
+            res.update(r)
+
+    # and print all the fens
+    with open("scoreWLDstat.json", "w") as outfile:
+        json.dump(
+            {
+                str(k): v
+                for k, v in sorted(res.items(), key=lambda item: item[1], reverse=True)
+            },
+            outfile,
+            indent=1,
+        )
