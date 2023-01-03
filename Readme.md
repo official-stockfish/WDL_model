@@ -4,7 +4,7 @@
 
 To generate the WLD model two steps are needed:
 
-1. Run scoreWLDstat.py to parse a large collection of pgn files providing the data. The script will look for pgn files in the current directory tree that match fishtest names: `"[a-z0-9]*-[0-9]*.pgn"`
+1. Run scoreWLDstat.py to parse a large collection of pgn files providing the data. By default the script will look for pgn files in the pgn folder that end with `.pgn`, unless a different directory is specified.
 
 2. Run scoreWLDana_moves_fit.py to compute the model parameters
 
