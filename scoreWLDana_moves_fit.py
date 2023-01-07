@@ -136,7 +136,7 @@ for m in range(3, 120, grouping):
         for x in xdata:
             ymodel.append(winmodel(x, popt[0], popt[1]))
         plt.plot(xdata, ymodel, "r-", label="Model winrate ")
-        plt.xlabel("Interal value units")
+        plt.xlabel("Internal value units")
         plt.ylabel("outcome")
         plt.legend()
         plt.savefig("data_m32.png",dpi=save_dpi)
@@ -187,7 +187,7 @@ plt.plot(model_ms, model_bs, "g.", label="bs")
 plt.plot(model_ms, poly3(model_ms, *popt_bs), "m-", label="fit: " + label_bs)
 
 plt.xlabel("move")
-plt.ylabel("parameters (in interal Value units, ()")
+plt.ylabel("parameters (in internal Value units, ()")
 plt.legend()
 plt.savefig("model_params.png",dpi=save_dpi)
 plt.show()
