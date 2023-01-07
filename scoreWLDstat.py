@@ -78,7 +78,7 @@ class PosAnalyser:
 
                 matcountkey = 9 * queens + 5 * rooks + 3 * knights + 3 * bishops + pawns
 
-                if scorekey:
+                if scorekey is not None:
                     matstats[(resultkey, plieskey, matcountkey, scorekey)] += 1
 
                 board = node.board()
