@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.interpolate import griddata
 from scipy.optimize import curve_fit
-import numpy as np
 
 parser = argparse.ArgumentParser()
 
@@ -14,13 +13,21 @@ parser.add_argument(
     "--NormalizeToPawnValue",
     type=int,
     default=361,
-    help="The value that can be used to convert the cp value in the pgn to the SF internal score"
+    help="The value that can be used to convert the cp value in the pgn to the SF internal score",
 )
 args = parser.parse_args()
 
-print("--NormalizeToPawnValue: conversion of {} for converting the pgn scores to the internal score".format(args.NormalizeToPawnValue))
+print(
+    "--NormalizeToPawnValue: conversion of {} for converting the pgn scores to the internal score".format(
+        args.NormalizeToPawnValue
+    )
+)
 
-save_dpi=150
+save_dpi = 300
+fig, axs = plt.subplots(
+    2, 3, figsize=(11.69 * 1.5, 8.27 * 1.5), constrained_layout=True
+)
+fig.suptitle("Summary of win-loss-draw model analysis", fontsize="x-large")
 
 
 #
@@ -69,12 +76,16 @@ coords.sort()
 xs = []
 ys = []
 zs = []
+zdraws = []
+zlosses = []
 for coord in coords:
     total = float(win[coord] + loss[coord] + draw[coord])
     x, y = coord
     xs.append(x)
     ys.append(y)
     zs.append(win[coord] / total)
+    zdraws.append(draw[coord] / total)
+    zlosses.append(loss[coord] / total)
 
 #
 # fit a model to predict winrate from score and move
@@ -104,7 +115,7 @@ def wdl(score, move, popt_as, popt_bs):
 # convert to model, fit the winmodel a and b,
 # for a given value of the move counter
 #
-scores, moves, winrate = xs, ys, zs
+scores, moves, winrate, drawrate, lossrate = xs, ys, zs, zdraws, zlosses
 
 model_ms = []
 model_as = []
@@ -116,32 +127,53 @@ for m in range(3, 120, grouping):
     mmax = m + grouping
     xdata = []
     ydata = []
+    ydrawdata = []
+    ylossdata = []
     for i in range(0, len(moves)):
         if moves[i] < mmin or moves[i] >= mmax:
             continue
         xdata.append(scores[i])
         ydata.append(winrate[i])
+        ydrawdata.append(drawrate[i])
+        ylossdata.append(lossrate[i])
 
-    popt, pcov = curve_fit(winmodel, xdata, ydata, p0=[125, 55])
+    popt, pcov = curve_fit(
+        winmodel,
+        xdata,
+        ydata,
+        p0=[args.NormalizeToPawnValue, args.NormalizeToPawnValue / 6],
+    )
     model_ms.append(m)
     model_as.append(popt[0])
     model_bs.append(popt[1])
 
     # plot sample curve at move 32.
     if m == 32:
-        print("Plotting data at move 32")
-        plt.figure(figsize=(11.69,8.27))
-        plt.plot(xdata, ydata, "b.", label="Measured winrate")
+        axs[0, 0].plot(xdata, ydata, "b.", label="Measured winrate")
+        axs[0, 0].plot(xdata, ydrawdata, "g.", label="Measured drawrate")
+        axs[0, 0].plot(xdata, ylossdata, "c.", label="Measured lossrate")
+
         ymodel = []
         for x in xdata:
             ymodel.append(winmodel(x, popt[0], popt[1]))
-        plt.plot(xdata, ymodel, "r-", label="Model winrate ")
-        plt.xlabel("Internal value units")
-        plt.ylabel("outcome")
-        plt.legend()
-        plt.savefig("data_m32.png",dpi=save_dpi)
-        plt.show()
-        plt.close()
+        axs[0, 0].plot(xdata, ymodel, "r-", label="Model")
+
+        ymodel = []
+        for x in xdata:
+            ymodel.append(winmodel(-x, popt[0], popt[1]))
+        axs[0, 0].plot(xdata, ymodel, "r-")
+
+        ymodel = []
+        for x in xdata:
+            ymodel.append(
+                1 - winmodel(x, popt[0], popt[1]) - winmodel(-x, popt[0], popt[1])
+            )
+        axs[0, 0].plot(xdata, ymodel, "r-")
+
+        axs[0, 0].set_xlabel("Internal value units")
+        axs[0, 0].set_ylabel("outcome")
+        axs[0, 0].legend(fontsize="small")
+        axs[0, 0].set_title("Comparison of model and measured data at move 32")
 
 
 #
@@ -164,93 +196,112 @@ label_bs = "bs = ((%5.3f * x / 32 + %5.3f) * x / 32 + %5.3f) * x / 32 + %5.3f" %
 # now we can define the conversion factor from internal score to centipawn such that
 # an expected win score of 50% is for a score of 'a', we pick this value for move number 32
 # (where the sum of the a coefs is equal to the interpolated a).
-isum_a=int(sum(popt_as))
-isum_b=int(sum(popt_bs))
+isum_a = int(sum(popt_as))
+isum_b = int(sum(popt_bs))
 print("const int NormalizeToPawnValue = {};".format(isum_a))
 print("Corresponding spread = {};".format(isum_b))
 print("Corresponding normalized spread = {};".format(sum(popt_bs) / sum(popt_as)))
 
-print("Parameters in internal Value units: ")
+print("Parameters in internal value units: ")
 
 # give as output as well
 print(label_as)
 print(label_bs)
-print("     constexpr double as[] = {%13.8f, %13.8f, %13.8f, %13.8f};"%tuple(popt_as))
-print("     constexpr double bs[] = {%13.8f, %13.8f, %13.8f, %13.8f };"%tuple(popt_bs))
+print("     constexpr double as[] = {%13.8f, %13.8f, %13.8f, %13.8f};" % tuple(popt_as))
+print(
+    "     constexpr double bs[] = {%13.8f, %13.8f, %13.8f, %13.8f };" % tuple(popt_bs)
+)
 
 # graphs of a and b as a function of the move number
 print("Plotting move dependence of model parameters")
-plt.figure(figsize=(11.69,8.27))
-plt.plot(model_ms, model_as, "b.", label="as")
-plt.plot(model_ms, poly3(model_ms, *popt_as), "r-", label="fit: " + label_as)
-plt.plot(model_ms, model_bs, "g.", label="bs")
-plt.plot(model_ms, poly3(model_ms, *popt_bs), "m-", label="fit: " + label_bs)
+axs[1, 0].plot(model_ms, model_as, "b.", label="as")
+axs[1, 0].plot(model_ms, poly3(model_ms, *popt_as), "r-", label="fit: " + label_as)
+axs[1, 0].plot(model_ms, model_bs, "g.", label="bs")
+axs[1, 0].plot(model_ms, poly3(model_ms, *popt_bs), "m-", label="fit: " + label_bs)
 
-plt.xlabel("move")
-plt.ylabel("parameters (in internal Value units, ()")
-plt.legend()
-plt.savefig("model_params.png",dpi=save_dpi)
-plt.show()
-plt.close()
+axs[1, 0].set_xlabel("move")
+axs[1, 0].set_ylabel("parameters (in internal value units)")
+axs[1, 0].legend(fontsize="x-small")
+axs[1, 0].set_title("Winrate model parameters")
 
 #
-# now generate contour plot of raw data
+# now generate contour plots
 #
 print("processing done, plotting 2D data")
-#font = {"family": "DejaVu Sans", "weight": "normal", "size": 20}
-grid_x, grid_y = np.mgrid[-400:800:30j, 10:120:22j]
+for i in [0, 1]:
+    for j in [1, 2]:
+        axs[i, j].yaxis.grid(True)
+        axs[i, j].xaxis.grid(True)
+        axs[i, j].set_xlabel("internal Value units")
+        axs[i, j].set_ylabel("move")
+
+# for wins, data
+xmin = -((1 * args.NormalizeToPawnValue) // 100 + 1) * 100
+xmax = ((3 * args.NormalizeToPawnValue) // 100 + 1) * 100
+grid_x, grid_y = np.mgrid[xmin:xmax:30j, 10:120:22j]
 points = np.array(list(zip(xs, ys)))
 zz = griddata(points, zs, (grid_x, grid_y), method="linear")
-fig = plt.figure(figsize=(11.69,8.27))
-#plt.rc("font", **font)
-left, bottom, width, height = 0.1, 0.1, 0.8, 0.8
-ax = fig.add_axes([left, bottom, width, height])
-cp = plt.contourf(grid_x, grid_y, zz, [0, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 1.0])
-plt.colorbar(cp)
-CS = plt.contour(
+cp = axs[0, 1].contourf(
+    grid_x, grid_y, zz, [0, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 1.0]
+)
+fig.colorbar(cp, ax=axs[:, 2], shrink=0.618)
+CS = axs[0, 1].contour(
     grid_x, grid_y, zz, [0, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 1.0], colors="black"
 )
-ax.clabel(CS, inline=1, colors="black")
-ax.set_title(
-    "Data: Fraction of positions, with a given move number and score, leading to a win"
-)
-ax.set_xlabel("internal Value units")
-ax.set_ylabel("move")
-ax.yaxis.grid(True)
-ax.xaxis.grid(True)
-plt.savefig("raw_data_2D.png",dpi=save_dpi)
-plt.show()
-plt.close()
+axs[0, 1].clabel(CS, inline=1, colors="black")
+axs[0, 1].set_title("Data: Fraction of positions leading to a win")
 
-#
-# now model
-#
-
+# for wins, model
 for i in range(0, len(xs)):
     zs[i] = wdl(xs[i], ys[i], popt_as, popt_bs)[0] / 1000.0
 
-print("processing done, plotting 2D model")
-#font = {"family": "DejaVu Sans", "weight": "normal", "size": 20}
-grid_x, grid_y = np.mgrid[-400:800:30j, 10:120:22j]
+grid_x, grid_y = np.mgrid[xmin:xmax:30j, 10:120:22j]
 points = np.array(list(zip(xs, ys)))
 zz = griddata(points, zs, (grid_x, grid_y), method="linear")
-fig = plt.figure(figsize=(11.69,8.27))
-#plt.rc("font", **font)
-left, bottom, width, height = 0.1, 0.1, 0.8, 0.8
-ax = fig.add_axes([left, bottom, width, height])
-cp = plt.contourf(grid_x, grid_y, zz, [0, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 1.0])
-plt.colorbar(cp)
-CS = plt.contour(
+cp = axs[1, 1].contourf(
+    grid_x, grid_y, zz, [0, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 1.0]
+)
+CS = axs[1, 1].contour(
     grid_x, grid_y, zz, [0, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 1.0], colors="black"
 )
-ax.clabel(CS, inline=1, colors="black")
-ax.set_title(
-    "Model results: Fraction of positions, with a given move number and score, leading to a win"
+axs[1, 1].clabel(CS, inline=1, colors="black")
+axs[1, 1].set_title("Model: Fraction of positions leading to a win")
+
+
+# for draws, data
+xmin = -((2 * args.NormalizeToPawnValue) // 100 + 1) * 100
+xmax = ((2 * args.NormalizeToPawnValue) // 100 + 1) * 100
+grid_x, grid_y = np.mgrid[xmin:xmax:30j, 10:120:22j]
+points = np.array(list(zip(xs, ys)))
+zz = griddata(points, zdraws, (grid_x, grid_y), method="linear")
+cp = axs[0, 2].contourf(
+    grid_x, grid_y, zz, [0, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 1.0]
 )
-ax.set_xlabel("internal Value units")
-ax.set_ylabel("move")
-ax.yaxis.grid(True)
-ax.xaxis.grid(True)
-plt.savefig("model_data_2D.png",dpi=save_dpi)
+CS = axs[0, 2].contour(
+    grid_x, grid_y, zz, [0, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 1.0], colors="black"
+)
+axs[0, 2].clabel(CS, inline=1, colors="black")
+axs[0, 2].set_title("Data: Fraction of positions leading to a draw")
+
+# for wins, draws
+for i in range(0, len(xs)):
+    zs[i] = wdl(xs[i], ys[i], popt_as, popt_bs)[1] / 1000.0
+
+grid_x, grid_y = np.mgrid[xmin:xmax:30j, 10:120:22j]
+points = np.array(list(zip(xs, ys)))
+zz = griddata(points, zs, (grid_x, grid_y), method="linear")
+cp = axs[1, 2].contourf(
+    grid_x, grid_y, zz, [0, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 1.0]
+)
+CS = axs[1, 2].contour(
+    grid_x, grid_y, zz, [0, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 1.0], colors="black"
+)
+axs[1, 2].clabel(CS, inline=1, colors="black")
+axs[1, 2].set_title("Model: Fraction of positions leading to a draw")
+
+
+fig.align_labels()
+
+plt.savefig("WLD_model_summary.png", dpi=save_dpi)
 plt.show()
 plt.close()
