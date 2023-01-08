@@ -12,23 +12,10 @@ For this step, specify the with option `--NormalizePawnValue` the correct number
 
 ## Results
 
-See e.g. https://github.com/official-stockfish/Stockfish/pull/3981 also available as images in examples/
+See e.g. https://github.com/official-stockfish/Stockfish/pull/3981 (older version) also available as images in examples/
 
-### Sample win rate model at move 30
 <p align="center">
-  <img src="examples/Figure_1.png?raw=true" width="1200">
-</p>
-### a,b parameter dependence with move number
-<p align="center">
-  <img src="examples/Figure_2.png?raw=true" width="1200">
-</p>
-### 2D contour plot of the data
-<p align="center">
-  <img src="examples/Figure_3.png?raw=true" width="1200">
-</p>
-### 2D contour plot of the model
-<p align="center">
-  <img src="examples/Figure_4.png?raw=true" width="1200">
+  <img src="WLD_model_summary.png?raw=true" width="1200">
 </p>
 
 ## Contents
