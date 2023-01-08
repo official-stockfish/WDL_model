@@ -212,7 +212,7 @@ CS = plt.contour(
 )
 ax.clabel(CS, inline=1, colors="black")
 ax.set_title(
-    "Fraction of positions, with a given move number and score, leading to a win"
+    "Data: Fraction of positions, with a given move number and score, leading to a win"
 )
 ax.set_xlabel("internal Value units")
 ax.set_ylabel("move")
@@ -245,7 +245,7 @@ CS = plt.contour(
 )
 ax.clabel(CS, inline=1, colors="black")
 ax.set_title(
-    "Fraction of positions, with a given move number and score, leading to a win"
+    "Model results: Fraction of positions, with a given move number and score, leading to a win"
 )
 ax.set_xlabel("internal Value units")
 ax.set_ylabel("move")
