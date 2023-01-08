@@ -4,7 +4,7 @@
 
 To generate the WLD model two steps are needed:
 
-1. Run scoreWLDstat.py to parse a large collection of pgn files providing the data. By default the script will look for pgn files in the pgn folder that end with `.pgn`, unless a different directory is specified.
+1. Run scoreWLDstat.py to parse a large collection of pgn files providing the data. By default the script will look for pgn files in the pgn folder that end with `.pgn`, unless a different directory is specified. For this step, specify the with option `--NormalizePawnValue` the correct number to convert pawn scores (as assumed to be in the pgn) to the units internally used by the engine.
 
 2. Run scoreWLDana_moves_fit.py to compute the model parameters
 
