@@ -200,7 +200,7 @@ print("processing done, plotting 2D data")
 #font = {"family": "DejaVu Sans", "weight": "normal", "size": 20}
 grid_x, grid_y = np.mgrid[-400:800:30j, 10:120:22j]
 points = np.array(list(zip(xs, ys)))
-zz = griddata(points, zs, (grid_x, grid_y), method="cubic")
+zz = griddata(points, zs, (grid_x, grid_y), method="linear")
 fig = plt.figure(figsize=(11.69,8.27))
 #plt.rc("font", **font)
 left, bottom, width, height = 0.1, 0.1, 0.8, 0.8
@@ -233,7 +233,7 @@ print("processing done, plotting 2D model")
 #font = {"family": "DejaVu Sans", "weight": "normal", "size": 20}
 grid_x, grid_y = np.mgrid[-400:800:30j, 10:120:22j]
 points = np.array(list(zip(xs, ys)))
-zz = griddata(points, zs, (grid_x, grid_y), method="cubic")
+zz = griddata(points, zs, (grid_x, grid_y), method="linear")
 fig = plt.figure(figsize=(11.69,8.27))
 #plt.rc("font", **font)
 left, bottom, width, height = 0.1, 0.1, 0.8, 0.8
