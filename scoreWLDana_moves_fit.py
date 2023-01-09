@@ -223,6 +223,7 @@ axs[1, 0].set_xlabel("move")
 axs[1, 0].set_ylabel("parameters (in internal value units)")
 axs[1, 0].legend(fontsize="x-small")
 axs[1, 0].set_title("Winrate model parameters")
+axs[1, 0].set_ylim(bottom=0.0)
 
 #
 # now generate contour plots
