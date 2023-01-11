@@ -1,4 +1,5 @@
 import concurrent.futures
+import multiprocessing
 from collections import Counter
 import chess
 import chess.pgn
@@ -118,9 +119,11 @@ if __name__ == "__main__":
     
     # map sharp_pos to all pgn files using an executor
     ana = PosAnalyser(args.matching_plies)
-
-    chunks_size = 100
+    targetchunks = (100 * max(1, multiprocessing.cpu_count()))
+    chunks_size = (len(pgns) + targetchunks - 1)  // targetchunks
     pgnschunked = list(chunks(pgns, chunks_size))
+
+    print("Found {} pgn files, creating {} chunks".format(len(pgns), len(pgnschunked)))
 
     res = Counter()
     futures = []
