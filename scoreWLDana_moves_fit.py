@@ -174,7 +174,8 @@ for m in range(3, 120, grouping):
         axs[0, 0].set_ylabel("outcome")
         axs[0, 0].legend(fontsize="small")
         axs[0, 0].set_title("Comparison of model and measured data at move 32")
-
+        xmax = ((3 * args.NormalizeToPawnValue) // 100 + 1) * 100
+        axs[0, 0].set_xlim([-xmax, xmax])
 
 #
 # now capture the functional behavior of a and b as a function of the move counter

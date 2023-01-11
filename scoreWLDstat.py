@@ -9,10 +9,12 @@ import os
 import argparse
 from tqdm import tqdm
 
+
 def chunks(lst, n):
     """Yield successive n-sized chunks from lst."""
     for i in range(0, len(lst), n):
         yield lst[i : i + n]
+
 
 class PosAnalyser:
     def __init__(self, plies):
@@ -22,9 +24,9 @@ class PosAnalyser:
         matstats = Counter()
         gameCounter = 0
         for filename in files:
-            pgnfilein = open(filename, "r", encoding="utf-8-sig", errors="surrogateescape")
-
-
+            pgnfilein = open(
+                filename, "r", encoding="utf-8-sig", errors="surrogateescape"
+            )
 
             p = re.compile("([+-]*M*[0-9.]*)/([0-9]*)")
             mateRe = re.compile("([+-])M[0-9]*")
@@ -40,11 +42,11 @@ class PosAnalyser:
                 # get result
                 result = game.headers["Result"]
                 if result == "1/2-1/2":
-                    resultkey = "D"
+                    resultkey = {chess.WHITE: "D", chess.BLACK: "D"}
                 elif result == "1-0":
-                    resultkey = "W"
+                    resultkey = {chess.WHITE: "W", chess.BLACK: "L"}
                 elif result == "0-1":
-                    resultkey = "L"
+                    resultkey = {chess.WHITE: "L", chess.BLACK: "W"}
                 else:
                     continue
 
@@ -76,8 +78,6 @@ class PosAnalyser:
                             elif score < -1000:
                                 score = -1000
                             score = (score // 5) * 5  # reduce precision
-                        if turn == chess.BLACK:
-                            score = -score
                         scorekey = score
 
                     knights = bin(board.knights).count("1")
@@ -86,15 +86,20 @@ class PosAnalyser:
                     queens = bin(board.queens).count("1")
                     pawns = bin(board.pawns).count("1")
 
-                    matcountkey = 9 * queens + 5 * rooks + 3 * knights + 3 * bishops + pawns
+                    matcountkey = (
+                        9 * queens + 5 * rooks + 3 * knights + 3 * bishops + pawns
+                    )
 
                     if scorekey is not None:
-                        matstats[(resultkey, plieskey, matcountkey, scorekey)] += 1
+                        matstats[
+                            (resultkey[turn], plieskey, matcountkey, scorekey)
+                        ] += 1
 
                     board = node.board()
             pgnfilein.close()
-            
+
         return matstats
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -105,29 +110,30 @@ if __name__ == "__main__":
         default=6,
         help="Number of plies that the material situation needs to be on the board (unused).",
     )
-    
+
     parser.add_argument(
-        "--dir",
-        type=str,
-        default="pgns",
-        help="Directory with the pgns."
+        "--dir", type=str, default="pgns", help="Directory with the pgns."
     )
-    
+
     args = parser.parse_args()
 
     pgns = [args.dir + "/" + f for f in os.listdir(args.dir) if f.endswith("pgn")]
-    
+
     # map sharp_pos to all pgn files using an executor
     ana = PosAnalyser(args.matching_plies)
-    targetchunks = (100 * max(1, multiprocessing.cpu_count()))
-    chunks_size = (len(pgns) + targetchunks - 1)  // targetchunks
+    targetchunks = 100 * max(1, multiprocessing.cpu_count())
+    chunks_size = (len(pgns) + targetchunks - 1) // targetchunks
     pgnschunked = list(chunks(pgns, chunks_size))
 
-    print("Found {} pgn files, creating {} chunks".format(len(pgns), len(pgnschunked)))
+    print(
+        "Found {} pgn files, creating {} chunks for processing.".format(
+            len(pgns), len(pgnschunked)
+        )
+    )
 
     res = Counter()
     futures = []
-    
+
     with tqdm(total=len(pgnschunked), smoothing=0, miniters=1) as pbar:
         with concurrent.futures.ProcessPoolExecutor() as e:
             for entry in pgnschunked:
@@ -136,6 +142,8 @@ if __name__ == "__main__":
             for future in concurrent.futures.as_completed(futures):
                 pbar.update(1)
                 res.update(future.result())
+
+    print("Retained {} scored positions for analysis".format(res.total()))
 
     # and print all the fens
     with open("scoreWLDstat.json", "w") as outfile:
