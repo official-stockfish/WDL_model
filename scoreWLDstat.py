@@ -95,7 +95,7 @@ class PosAnalyser:
                             (resultkey[turn], plieskey, matcountkey, scorekey)
                         ] += 1
 
-                    board = node.board()
+                    board.push(node.move)
             pgnfilein.close()
 
         return matstats
