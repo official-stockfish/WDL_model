@@ -115,9 +115,16 @@ if __name__ == "__main__":
         "--dir", type=str, default="pgns", help="Directory with the pgns."
     )
 
+    parser.add_argument(
+        "--file", type=str, default="", help="A specific file to use."
+    )
+
     args = parser.parse_args()
 
-    pgns = [args.dir + "/" + f for f in os.listdir(args.dir) if f.endswith("pgn")]
+    if args.file != "":
+       pgns = [args.file]
+    else:
+       pgns = [args.dir + "/" + f for f in os.listdir(args.dir) if f.endswith("pgn")]
 
     # map sharp_pos to all pgn files using an executor
     ana = PosAnalyser(args.matching_plies)

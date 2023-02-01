@@ -14,8 +14,16 @@ parser.add_argument(
     "--NormalizeToPawnValue",
     type=int,
     default=361,
-    help="The value that can be used to convert the cp value in the pgn to the SF internal score",
+    help="The value that can be used to convert the cp value in the pgn to the SF internal score.",
 )
+
+parser.add_argument(
+    "--show",
+    action=argparse.BooleanOptionalAction,
+    default=True,
+    help="Show graphics or not. An image is always saved. Useful for batch processing.",
+)
+
 args = parser.parse_args()
 
 print(
@@ -34,10 +42,11 @@ fig.suptitle("Summary of win-loss-draw model analysis", fontsize="x-large")
 #
 # read score stats as obtained from fishtest games
 #
+print("reading data")
 with open("scoreWLDstat.json", "r") as infile:
     inputdata = json.load(infile)
+print("Done.")
 
-print("read data")
 
 #
 # transform to just score, move data (i.e. piece count summed out)
@@ -97,7 +106,6 @@ for coord in coords:
 def winmodel(x, a, b):
     return 1.0 / (1.0 + np.exp(-(x - a) / b))
 
-
 def poly3(x, a, b, c, d):
     xnp = np.asarray(x) / 32
     return ((a * xnp + b) * xnp + c) * xnp + d
@@ -154,6 +162,10 @@ for m in range(3, 120, grouping):
         ydata.append(winrate[i])
         ydrawdata.append(drawrate[i])
         ylossdata.append(lossrate[i])
+
+    # skip fit for move counts with very few data points
+    if len(ydata) < 10:
+        continue
 
     popt, pcov = curve_fit(
         winmodel,
@@ -217,11 +229,14 @@ label_bs = "bs = ((%5.3f * x / 32 + %5.3f) * x / 32 + %5.3f) * x / 32 + %5.3f" %
 # now we can define the conversion factor from internal score to centipawn such that
 # an expected win score of 50% is for a score of 'a', we pick this value for move number 32
 # (where the sum of the a coefs is equal to the interpolated a).
-isum_a = int(sum(popt_as))
-isum_b = int(sum(popt_bs))
+fsum_a = sum(popt_as)
+fsum_b = sum(popt_bs)
+isum_a = int(fsum_a)
+isum_b = int(fsum_b)
 print("const int NormalizeToPawnValue = {};".format(isum_a))
 print("Corresponding spread = {};".format(isum_b))
-print("Corresponding normalized spread = {};".format(sum(popt_bs) / sum(popt_as)))
+print("Corresponding normalized spread = {};".format(fsum_b / fsum_a))
+print("Draw rate at 0.0 eval at move 32 = {};".format(1 - 2 / (1 + math.exp(fsum_a / fsum_b))))
 
 print("Parameters in internal value units: ")
 
@@ -313,5 +328,6 @@ normalized_axis(axs[1, 2])
 fig.align_labels()
 
 plt.savefig("WLD_model_summary.png", dpi=save_dpi)
-plt.show()
+if args.show:
+   plt.show()
 plt.close()
