@@ -16,7 +16,7 @@ For this step, specify the with option `--NormalizePawnValue` the correct number
   <img src="WLD_model_summary.png?raw=true" width="1200">
 </p>
 
-See e.g. https://github.com/official-stockfish/Stockfish/pull/3981 (older version) 
+See e.g. https://github.com/official-stockfish/Stockfish/pull/4373
 
 ## Contents
 
