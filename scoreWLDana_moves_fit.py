@@ -13,7 +13,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument(
     "--NormalizeToPawnValue",
     type=int,
-    default=361,
+    default=328,
     help="The value that can be used to convert the cp value in the pgn to the SF internal score.",
 )
 
