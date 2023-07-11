@@ -1,3 +1,6 @@
-pgns
 *.png
 *.json
+*.pgn
+
+pgns*
+main*
