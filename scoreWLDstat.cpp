@@ -165,7 +165,7 @@ void ana_game(map_t &pos_map, const std::optional<Game> &game) {
             }
 
             if (game.value().headers().find("Result") == game.value().headers().end()) {
-                break;
+                continue;
             }
 
             ana_game(pos_map, game);
