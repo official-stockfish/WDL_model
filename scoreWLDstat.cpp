@@ -101,7 +101,7 @@ void ana_game(map_t &pos_map, const std::optional<Game> &game) {
             break;
         }
 
-        const auto match_score = utils::splitString(move.comment, '/');
+        const size_t delimiter_pos = move.comment.find('/');
 
         const int plieskey = (plies + 1) / 2;
 
@@ -109,18 +109,20 @@ void ana_game(map_t &pos_map, const std::optional<Game> &game) {
 
         bool found_score = false;
 
-        if (match_score.size() >= 1 && move.comment != "book") {
+        if (delimiter_pos != std::string::npos && move.comment != "book") {
+            const auto match_score = move.comment.substr(0, delimiter_pos);
+
             found_score = true;
 
-            if (match_score[0][1] == 'M') {
-                if (match_score[0][1] == '+') {
+            if (match_score[1] == 'M') {
+                if (match_score[0] == '+') {
                     score_key = 1001;
                 } else {
                     score_key = -1001;
                 }
 
             } else {
-                const auto score = std::stof(match_score[0]);
+                const auto score = std::stof(match_score);
 
                 int score_adjusted = score * 100;
 
