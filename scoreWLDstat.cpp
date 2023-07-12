@@ -53,6 +53,50 @@ std::atomic<std::size_t> total_chunks = 0;
 
 namespace analysis {
 
+/// @brief Custom stof implementation to avoid locale issues, once clang supports std::from_chars
+/// for floats this can be removed
+/// @param str
+/// @return
+float fast_stof(const char *str) {
+    float result = 0.0f;
+    int sign = 1;
+    int decimal = 0;
+    float fraction = 1.0f;
+
+    // Handle sign
+    if (*str == '-') {
+        sign = -1;
+        str++;
+    } else if (*str == '+') {
+        str++;
+    }
+
+    // Convert integer part
+    while (*str >= '0' && *str <= '9') {
+        result = result * 10.0f + (*str - '0');
+        str++;
+    }
+
+    // Convert decimal part
+    if (*str == '.') {
+        str++;
+        while (*str >= '0' && *str <= '9') {
+            result = result * 10.0f + (*str - '0');
+            fraction *= 10.0f;
+            str++;
+        }
+        decimal = 1;
+    }
+
+    // Apply sign and adjust for decimal
+    result *= sign;
+    if (decimal) {
+        result /= fraction;
+    }
+
+    return result;
+}
+
 /// @brief Magic value for fishtest pgns, ~1.2 million keys
 static constexpr int map_size = 1200000;
 
@@ -122,7 +166,7 @@ void ana_game(map_t &pos_map, const std::optional<Game> &game) {
                 }
 
             } else {
-                const auto score = std::stof(match_score);
+                const auto score = fast_stof(match_score.c_str());
 
                 int score_adjusted = score * 100;
 
