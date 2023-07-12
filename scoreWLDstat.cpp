@@ -186,7 +186,9 @@ void ana_game(map_t &pos_map, const std::optional<Game> &game) {
     std::vector<std::string> files;
 
     for (const auto &entry : fs::directory_iterator(path)) {
-        files.push_back(entry.path().string());
+        if (entry.path().extension() == ".pgn") {
+            files.push_back(entry.path().string());
+        }
     }
 
     return files;
