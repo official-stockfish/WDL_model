@@ -60,6 +60,10 @@ static constexpr int map_size = 1200000;
 /// @param pos_map
 /// @param game
 void ana_game(map_t &pos_map, const std::optional<Game> &game) {
+    if (game.value().headers().find("Result") == game.value().headers().end()) {
+        return;
+    }
+
     const auto result = game.value().headers().at("Result");
 
     ResultKey key;
@@ -162,10 +166,6 @@ void ana_game(map_t &pos_map, const std::optional<Game> &game) {
 
             if (!game.has_value()) {
                 break;
-            }
-
-            if (game.value().headers().find("Result") == game.value().headers().end()) {
-                continue;
             }
 
             ana_game(pos_map, game);
