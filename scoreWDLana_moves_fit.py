@@ -36,7 +36,7 @@ save_dpi = 300
 fig, axs = plt.subplots(
     2, 3, figsize=(11.69 * 1.5, 8.27 * 1.5), constrained_layout=True
 )
-fig.suptitle("Summary of win-loss-draw model analysis", fontsize="x-large")
+fig.suptitle("Summary of win-draw-loss model analysis", fontsize="x-large")
 
 
 #
@@ -105,6 +105,7 @@ for coord in coords:
 
 def winmodel(x, a, b):
     return 1.0 / (1.0 + np.exp(-(x - a) / b))
+
 
 def poly3(x, a, b, c, d):
     xnp = np.asarray(x) / 32
@@ -236,7 +237,11 @@ isum_b = int(fsum_b)
 print("const int NormalizeToPawnValue = {};".format(isum_a))
 print("Corresponding spread = {};".format(isum_b))
 print("Corresponding normalized spread = {};".format(fsum_b / fsum_a))
-print("Draw rate at 0.0 eval at move 32 = {};".format(1 - 2 / (1 + math.exp(fsum_a / fsum_b))))
+print(
+    "Draw rate at 0.0 eval at move 32 = {};".format(
+        1 - 2 / (1 + math.exp(fsum_a / fsum_b))
+    )
+)
 
 print("Parameters in internal value units: ")
 
@@ -329,5 +334,5 @@ fig.align_labels()
 
 plt.savefig("WDL_model_summary.png", dpi=save_dpi)
 if args.show:
-   plt.show()
+    plt.show()
 plt.close()
