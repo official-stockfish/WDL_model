@@ -327,7 +327,7 @@ normalized_axis(axs[1, 2])
 
 fig.align_labels()
 
-plt.savefig("WLD_model_summary.png", dpi=save_dpi)
+plt.savefig("WDL_model_summary.png", dpi=save_dpi)
 if args.show:
    plt.show()
 plt.close()
