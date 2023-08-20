@@ -25,7 +25,7 @@ struct ResultKey {
     Result black;
 };
 
-/// @brief [WLD, plies, score, score] tuple key for the position map
+/// @brief [WLD, plies, matcount, score] tuple key for the position map
 using map_key_t = std::tuple<Result, int, int, int>;
 
 struct key_hash {
