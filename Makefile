@@ -19,4 +19,4 @@ ifeq ($(uname_S), Darwin)
 endif
 
 all:
-	$(CXX) $(CXXFLAGS) $(NATIVE) -o main scoreWLDstat.cpp
+	$(CXX) $(CXXFLAGS) $(NATIVE) -o main scoreWDLstat.cpp
