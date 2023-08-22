@@ -361,7 +361,7 @@ int main(int argc, char const *argv[]) {
     }
 
     // save json to file
-    std::ofstream outFile("scoreWLDstat.json");
+    std::ofstream outFile("scoreWDLstat.json");
     outFile << j.dump(2);
     outFile.close();
 

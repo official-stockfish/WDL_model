@@ -3,4 +3,5 @@
 *.pgn
 
 pgns*
-main*
+scoreWDLstat
+scoreWDLstat.exe
