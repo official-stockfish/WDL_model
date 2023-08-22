@@ -1,4 +1,3 @@
-
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -18,36 +17,46 @@ namespace fs = std::filesystem;
 
 using namespace chess;
 
-enum class Result { WIN, LOSS, DRAW };
+enum class Result { WIN = 'W', DRAW = 'D', LOSS = 'L' };
 
 struct ResultKey {
     Result white;
     Result black;
 };
 
-/// @brief [WLD, plies, matcount, score] tuple key for the position map
-using map_key_t = std::tuple<Result, int, int, int>;
-
-struct key_hash {
-    std::size_t operator()(const map_key_t &k) const {
+struct Key {
+    Result outcome;  // game outcome from PoV of side to move
+    int move, material, score;  // move number, material count, engine's eval
+    bool operator==(const Key &k) const {
+        return outcome == k.outcome && move == k.move &&
+               material == k.material && score == k.score;
+    }
+    operator std::size_t() const {
         // golden ratio hashing, thus 0x9e3779b9
-        std::uint32_t hash = static_cast<int>(std::get<0>(k));
-        hash ^= std::get<1>(k) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
-        hash ^= std::get<2>(k) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
-        hash ^= std::get<3>(k) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+        std::uint32_t hash = static_cast<int>(outcome);
+        hash ^= move + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+        hash ^= material + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+        hash ^= score + 0x9e3779b9 + (hash << 6) + (hash >> 2);
         return hash;
     }
-};
-
-struct key_equal {
-    bool operator()(const map_key_t &v0, const map_key_t &v1) const {
-        return std::get<0>(v0) == std::get<0>(v1) && std::get<1>(v0) == std::get<1>(v1) &&
-               std::get<2>(v0) == std::get<2>(v1) && std::get<3>(v0) == std::get<3>(v1);
+    operator std::string() const {
+        return "('" + std::string(1, static_cast<char>(outcome)) + "', "
+                    + std::to_string(move) + ", "
+                    + std::to_string(material) + ", "
+                    + std::to_string(score) + ")";
     }
 };
 
-/// @brief Custom unordered map type to allow for tuple keys
-using map_t = std::unordered_map<map_key_t, int, key_hash, key_equal>;
+// overload the std::hash function for Key
+template <>
+struct std::hash<Key> {
+    std::size_t operator()(const Key& k) const {
+        return static_cast<std::size_t>(k);
+    }
+};
+
+// unordered map to count (outcome, move, material, score) tuples in pgns
+using map_t = std::unordered_map<Key, int>;
 
 std::atomic<std::size_t> total_chunks = 0;
 
@@ -110,17 +119,17 @@ void ana_game(map_t &pos_map, const std::optional<Game> &game) {
 
     const auto result = game.value().headers().at("Result");
 
-    ResultKey key;
+    ResultKey resultkey;
 
     if (result == "1-0") {
-        key.white = Result::WIN;
-        key.black = Result::LOSS;
+        resultkey.white = Result::WIN;
+        resultkey.black = Result::LOSS;
     } else if (result == "0-1") {
-        key.white = Result::LOSS;
-        key.black = Result::WIN;
+        resultkey.white = Result::LOSS;
+        resultkey.black = Result::WIN;
     } else if (result == "1/2-1/2") {
-        key.white = Result::DRAW;
-        key.black = Result::DRAW;
+        resultkey.white = Result::DRAW;
+        resultkey.black = Result::DRAW;
     } else {
         return;
     }
@@ -136,72 +145,60 @@ void ana_game(map_t &pos_map, const std::optional<Game> &game) {
         board.set960(true);
     }
 
-    int plies = 0;
+    int ply = 0;
 
     for (const auto &move : game.value().moves()) {
-        plies++;
-
-        if (plies > 400) {
+        if (++ply > 400) {
             break;
         }
 
         const size_t delimiter_pos = move.comment.find('/');
 
-        const int plieskey = (plies + 1) / 2;
-
-        int score_key = 0;
-
-        bool found_score = false;
+        Key key;
+        key.score = 1002;
 
         if (delimiter_pos != std::string::npos && move.comment != "book") {
             const auto match_score = move.comment.substr(0, delimiter_pos);
 
-            found_score = true;
-
             if (match_score[1] == 'M') {
                 if (match_score[0] == '+') {
-                    score_key = 1001;
+                    key.score = 1001;
                 } else {
-                    score_key = -1001;
+                    key.score = -1001;
                 }
 
             } else {
-                const auto score = fast_stof(match_score.c_str());
+                int score = 100 * fast_stof(match_score.c_str());
 
-                int score_adjusted = score * 100;
-
-                if (score_adjusted > 1000) {
-                    score_adjusted = 1000;
-                } else if (score_adjusted < -1000) {
-                    score_adjusted = -1000;
+                if (score > 1000) {
+                    score = 1000;
+                } else if (score < -1000) {
+                    score = -1000;
                 }
 
-                score_key = int(std::floor(score_adjusted / 5.0)) * 5;
+                key.score = int(std::floor(score / 5.0)) * 5;  // reduce precision
             }
         }
 
-        const auto knights = builtin::popcount(board.pieces(PieceType::KNIGHT));
-        const auto bishops = builtin::popcount(board.pieces(PieceType::BISHOP));
-        const auto rooks = builtin::popcount(board.pieces(PieceType::ROOK));
-        const auto queens = builtin::popcount(board.pieces(PieceType::QUEEN));
-        const auto pawns = builtin::popcount(board.pieces(PieceType::PAWN));
-
-        const int matcountkey = 9 * queens + 5 * rooks + 3 * bishops + 3 * knights + pawns;
-
-        if (found_score) {
-            const auto turn = board.sideToMove() == Color::WHITE ? key.white : key.black;
-
-            const auto key = std::make_tuple(turn, plieskey, matcountkey, score_key);
+        if (key.score != 1002) {  // a score was found
+            key.outcome = board.sideToMove() == Color::WHITE ? resultkey.white : resultkey.black;
+            key.move = (ply + 1) / 2;  // move number
+            const auto knights = builtin::popcount(board.pieces(PieceType::KNIGHT));
+            const auto bishops = builtin::popcount(board.pieces(PieceType::BISHOP));
+            const auto rooks = builtin::popcount(board.pieces(PieceType::ROOK));
+            const auto queens = builtin::popcount(board.pieces(PieceType::QUEEN));
+            const auto pawns = builtin::popcount(board.pieces(PieceType::PAWN));
+            key.material = 9 * queens + 5 * rooks + 3 * bishops + 3 * knights + pawns;
             pos_map[key] += 1;
+
         }
 
         board.makeMove(move.move);
     }
 }
 
-[[nodiscard]] map_t ana_files(std::vector<std::string> files) {
-    map_t pos_map;
-    pos_map.reserve(map_size);
+void ana_files(map_t &map, const std::vector<std::string> &files) {
+    map.reserve(map_size);
 
     for (const auto &file : files) {
         std::ifstream pgn_file(file);
@@ -214,13 +211,11 @@ void ana_game(map_t &pos_map, const std::optional<Game> &game) {
                 break;
             }
 
-            ana_game(pos_map, game);
+            ana_game(map, game);
         }
 
         pgn_file.close();
     }
-
-    return pos_map;
 }
 
 }  // namespace analysis
@@ -263,19 +258,6 @@ void ana_game(map_t &pos_map, const std::optional<Game> &game) {
     return chunks;
 }
 
-std::string convertResultToChar(Result result) {
-    switch (result) {
-        case Result::WIN:
-            return "W";
-        case Result::LOSS:
-            return "L";
-        case Result::DRAW:
-            return "D";
-        default:
-            throw std::runtime_error("Invalid result");
-    }
-}
-
 /// @brief
 /// @param argc
 /// @param argv Possible ones are --dir and --file
@@ -295,10 +277,10 @@ int main(int argc, char const *argv[]) {
         files_pgn = get_files();
     }
 
-    // Create more chunks than threads to avoid threads from ideling.
+    // Create more chunks than threads to prevent threads from idling.
     int target_chunks = 4 * std::max(1, int(std::thread::hardware_concurrency()));
 
-    std::vector<std::vector<std::string>> files_chunked = split_chunks(files_pgn, target_chunks);
+    auto files_chunked = split_chunks(files_pgn, target_chunks);
 
     std::cout << "Found " << files_pgn.size() << " pgn files, creating " << files_chunked.size()
               << " chunks for processing." << std::endl;
@@ -319,7 +301,8 @@ int main(int argc, char const *argv[]) {
 
     for (const auto &files : files_chunked) {
         pool.enqueue([&files, &map_mutex, &pos_map, &files_chunked]() {
-            const auto map = analysis::ana_files(files);
+            map_t map;
+            analysis::ana_files(map, files);
 
             total_chunks++;
 
@@ -352,10 +335,7 @@ int main(int argc, char const *argv[]) {
     nlohmann::json j;
 
     for (const auto &pair : pos_map) {
-        const auto map_key_t = "('" + convertResultToChar(std::get<0>(pair.first)) + "', " +
-                               std::to_string(std::get<1>(pair.first)) + ", " +
-                               std::to_string(std::get<2>(pair.first)) + ", " +
-                               std::to_string(std::get<3>(pair.first)) + ")";
+        const auto map_key_t = static_cast<std::string>(pair.first);
         j[map_key_t] = pair.second;
         total += pair.second;
     }
