@@ -6,7 +6,7 @@ import numpy as np
 from scipy.interpolate import griddata
 
 
-with open("scoreWLDstat.json", "r") as infile:
+with open("scoreWDLstat.json", "r") as infile:
     inputdata = json.load(infile)
 
 print("read data")

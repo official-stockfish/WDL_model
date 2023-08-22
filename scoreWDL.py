@@ -43,7 +43,7 @@ fig.suptitle("Summary of win-draw-loss model analysis", fontsize="x-large")
 # read score stats as obtained from fishtest games
 #
 print("reading data")
-with open("scoreWLDstat.json", "r") as infile:
+with open("scoreWDLstat.json", "r") as infile:
     inputdata = json.load(infile)
 print("Done.")
 

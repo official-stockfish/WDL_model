@@ -1,15 +1,39 @@
 # Generate SF WDL model based on data
 
+Stockfish's "centipawn" evaluation is decoupled from the classical value
+of a pawn, and is calibrated such that an advantage of
+"100 centipawns" means the engine has a 50% probability to win
+from this position in selfplay at fishtest LTC time control.
+
 ## Usage
 
-To generate the WDL model three steps are needed:
+To update Stockfish's internal WDL model, the following steps are needed:
 
-1. You first need to compile `scoreWDL.cpp`. The simplest way to do that is to use the supplied Makefile, in which case you only need to run `make` in the current directory. This will output an executable named `main`.
+1. Obtain a large collection of engine-vs-engine games 
+(at fishtest LTC time control) in pgn format and
+save the pgn files in the `pgns` folder. This can, for example, be achieved
+by running `python download_fishtest_pgns.py --path pgns` once a day.
 
-2. Run `main` to parse a large collection of pgn files providing the data. By default the script will look for pgn files in the `pgns` folder that end with `.pgn`, unless a different directory is specified using `main --dir \<path-to-dir\>`.
+2. Use `make` to compile `scoreWDLstat.cpp`, which will produce an executable
+named `scoreWDLstat`.
 
-3. Run scoreWDL.py to compute the model parameters
-   For this step, specify the with option `--NormalizeToPawnValue` the correct number to convert pawn scores (as assumed to be in the pgn) to the units internally used by the engine.
+3. Run `scoreWDLstat` to parse the pgn files in the `pgns` folder. A different
+directory can be specified with `scoreWDLstat --dir <path-to-dir>`. The
+computed WDL statistics will be stored in a file called `scoreWDLstat.json`.
+The file will have entries of the form `"('D', 1, 78, 35)": 668132`, meaning
+this tuple for `(outcome, move, material, eval)` was seen a total of 668132
+times in the processed pgn files.
+
+4. Run `python scoreWDL.py` to compute the WDL model parameters from the
+data stored in `scoreWDLstat.json`. The script needs as input the value
+`--NormalizeToPawnValue` from within Stockfish's
+[`uci.h`](https://github.com/official-stockfish/Stockfish/blob/master/src/uci.h),
+to be able to correctly convert the centipawn values from the pgn files to
+the unit internally used by the engine. The script will output the new
+values for `NormalizeToPawnValue` in
+[`uci.h`](https://github.com/official-stockfish/Stockfish/blob/master/src/uci.h)
+and `as[]`, `bs[]` in
+[`uci.cpp`](https://github.com/official-stockfish/Stockfish/blob/master/src/uci.cpp). See e.g. https://github.com/official-stockfish/Stockfish/pull/4373
 
 ## Results
 
@@ -17,16 +41,11 @@ To generate the WDL model three steps are needed:
   <img src="WDL_model_summary.png?raw=true" width="1200">
 </p>
 
-See e.g. https://github.com/official-stockfish/Stockfish/pull/4373
-
 ## Contents
 
-further tools can be used to experiment:
+Other scripts that can be used to visualize different WDL data:
 
-- scoreWDLstat.cpp : extract counts of game outcomes as a function of score, material count and move number (needs fishtest games)
-  produces scoreWDLstat.json : extracted data from games
-  "('D', 1, 78, 35)": 668132, -> outcome = draw, move = 1, material = 78, eval = 35 cp -> 668132 positions
-- scoreWDLana_moves_fit.py : fit some models
-
-- scoreWDLana_moves.py : similar to above, analyze wrt to moves
-- scoreWDLana_material.py : similar to above analyze wrt to material
+- `scoreWDLana_moves.py` : similar to `scoreWDL.py`, analyze wrt to moves
+- `scoreWDLana_material.py` : similar to `scoreWDL.py`, analyze wrt to material
+---
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
