@@ -10,9 +10,9 @@
 #include <unordered_map>
 #include <vector>
 
-#include "chess.hpp"
-#include "json.hpp"
-#include "threadpool.hpp"
+#include "external/chess.hpp"
+#include "external/json.hpp"
+#include "external/threadpool.hpp"
 
 namespace fs = std::filesystem;
 
