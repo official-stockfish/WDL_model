@@ -20,3 +20,7 @@ endif
 
 all:
 	$(CXX) $(CXXFLAGS) $(NATIVE) -o scoreWDLstat scoreWDLstat.cpp
+format:
+	clang-format -i scoreWDLstat.cpp
+clean:
+	rm -f scoreWDLstat scoreWDLstat.exe

@@ -25,11 +25,10 @@ struct ResultKey {
 };
 
 struct Key {
-    Result outcome;  // game outcome from PoV of side to move
+    Result outcome;             // game outcome from PoV of side to move
     int move, material, score;  // move number, material count, engine's eval
     bool operator==(const Key &k) const {
-        return outcome == k.outcome && move == k.move &&
-               material == k.material && score == k.score;
+        return outcome == k.outcome && move == k.move && material == k.material && score == k.score;
     }
     operator std::size_t() const {
         // golden ratio hashing, thus 0x9e3779b9
@@ -40,19 +39,15 @@ struct Key {
         return hash;
     }
     operator std::string() const {
-        return "('" + std::string(1, static_cast<char>(outcome)) + "', "
-                    + std::to_string(move) + ", "
-                    + std::to_string(material) + ", "
-                    + std::to_string(score) + ")";
+        return "('" + std::string(1, static_cast<char>(outcome)) + "', " + std::to_string(move) +
+               ", " + std::to_string(material) + ", " + std::to_string(score) + ")";
     }
 };
 
 // overload the std::hash function for Key
 template <>
 struct std::hash<Key> {
-    std::size_t operator()(const Key& k) const {
-        return static_cast<std::size_t>(k);
-    }
+    std::size_t operator()(const Key &k) const { return static_cast<std::size_t>(k); }
 };
 
 // unordered map to count (outcome, move, material, score) tuples in pgns
@@ -67,9 +62,9 @@ namespace analysis {
 /// @param str
 /// @return
 float fast_stof(const char *str) {
-    float result = 0.0f;
-    int sign = 1;
-    int decimal = 0;
+    float result   = 0.0f;
+    int sign       = 1;
+    int decimal    = 0;
     float fraction = 1.0f;
 
     // Handle sign
@@ -182,15 +177,14 @@ void ana_game(map_t &pos_map, const std::optional<Game> &game) {
 
         if (key.score != 1002) {  // a score was found
             key.outcome = board.sideToMove() == Color::WHITE ? resultkey.white : resultkey.black;
-            key.move = (ply + 1) / 2;  // move number
+            key.move    = (ply + 1) / 2;  // move number
             const auto knights = builtin::popcount(board.pieces(PieceType::KNIGHT));
             const auto bishops = builtin::popcount(board.pieces(PieceType::BISHOP));
-            const auto rooks = builtin::popcount(board.pieces(PieceType::ROOK));
-            const auto queens = builtin::popcount(board.pieces(PieceType::QUEEN));
-            const auto pawns = builtin::popcount(board.pieces(PieceType::PAWN));
-            key.material = 9 * queens + 5 * rooks + 3 * bishops + 3 * knights + pawns;
+            const auto rooks   = builtin::popcount(board.pieces(PieceType::ROOK));
+            const auto queens  = builtin::popcount(board.pieces(PieceType::QUEEN));
+            const auto pawns   = builtin::popcount(board.pieces(PieceType::PAWN));
+            key.material       = 9 * queens + 5 * rooks + 3 * bishops + 3 * knights + pawns;
             pos_map[key] += 1;
-
         }
 
         board.makeMove(move.move);
@@ -244,7 +238,7 @@ void ana_files(map_t &map, const std::vector<std::string> &files) {
     const int chunks_size = (pgns.size() + target_chunks - 1) / target_chunks;
 
     auto begin = pgns.begin();
-    auto end = pgns.end();
+    auto end   = pgns.end();
 
     std::vector<std::vector<std::string>> chunks;
 
@@ -269,10 +263,10 @@ int main(int argc, char const *argv[]) {
 
     if (std::find(args.begin(), args.end(), "--dir") != args.end()) {
         const auto path = std::find(args.begin(), args.end(), "--dir") + 1;
-        files_pgn = get_files(*path);
+        files_pgn       = get_files(*path);
     } else if (std::find(args.begin(), args.end(), "--file") != args.end()) {
         const auto path = std::find(args.begin(), args.end(), "--file") + 1;
-        files_pgn = {*path};
+        files_pgn       = {*path};
     } else {
         files_pgn = get_files();
     }
@@ -336,7 +330,7 @@ int main(int argc, char const *argv[]) {
 
     for (const auto &pair : pos_map) {
         const auto map_key_t = static_cast<std::string>(pair.first);
-        j[map_key_t] = pair.second;
+        j[map_key_t]         = pair.second;
         total += pair.second;
     }
 
