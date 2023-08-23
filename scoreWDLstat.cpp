@@ -252,31 +252,7 @@ void ana_files(map_t &map, const std::vector<std::string> &files) {
     return chunks;
 }
 
-/// @brief
-/// @param argc
-/// @param argv Possible ones are --dir, --file and -o
-/// @return
-int main(int argc, char const *argv[]) {
-    const std::vector<std::string> args(argv + 1, argv + argc);
-
-    std::vector<std::string> files_pgn;
-
-    auto pos = std::find(args.begin(), args.end(), "--dir");
-    if (pos != args.end() && std::next(pos) != args.end()) {
-        files_pgn = get_files(*std::next(pos));
-    } else if ((pos = std::find(args.begin(), args.end(), "--file")) != args.end() &&
-               std::next(pos) != args.end()) {
-        files_pgn = {*std::next(pos)};
-    } else {
-        files_pgn = get_files();
-    }
-
-    std::string jsonFile = "scoreWDLstat.json";
-    if ((pos = std::find(args.begin(), args.end(), "-o")) != args.end() &&
-        std::next(pos) != args.end()) {
-        jsonFile = *std::next(pos);
-    }
-
+void process(const std::vector<std::string> &files_pgn, map_t &pos_map) {
     // Create more chunks than threads to prevent threads from idling.
     int target_chunks = 4 * std::max(1, int(std::thread::hardware_concurrency()));
 
@@ -284,9 +260,6 @@ int main(int argc, char const *argv[]) {
 
     std::cout << "Found " << files_pgn.size() << " pgn files, creating " << files_chunked.size()
               << " chunks for processing." << std::endl;
-
-    map_t pos_map;
-    pos_map.reserve(analysis::map_size);
 
     // Mutex for pos_map access
     std::mutex map_mutex;
@@ -296,8 +269,6 @@ int main(int argc, char const *argv[]) {
 
     // Print progress
     std::cout << "\rProgress: " << total_chunks << "/" << files_chunked.size() << std::flush;
-
-    const auto t0 = std::chrono::high_resolution_clock::now();
 
     for (const auto &files : files_chunked) {
         pool.enqueue([&files, &map_mutex, &pos_map, &files_chunked]() {
@@ -323,13 +294,12 @@ int main(int argc, char const *argv[]) {
 
     // Wait for all threads to finish
     pool.wait();
+}
 
-    const auto t1 = std::chrono::high_resolution_clock::now();
-
-    std::cout << "\nTime taken: "
-              << std::chrono::duration_cast<std::chrono::seconds>(t1 - t0).count() << "s"
-              << std::endl;
-
+/// @brief Save the position map to a json file.
+/// @param pos_map
+/// @param json_filename
+void save(const map_t &pos_map, const std::string &json_filename) {
     std::uint64_t total = 0;
 
     nlohmann::json j;
@@ -341,12 +311,72 @@ int main(int argc, char const *argv[]) {
     }
 
     // save json to file
-    std::ofstream outFile(jsonFile);
-    outFile << j.dump(2);
-    outFile.close();
+    std::ofstream out_file(json_filename);
+    out_file << j.dump(2);
+    out_file.close();
 
-    std::cout << "Wrote " << total << " scored positions to " << jsonFile << " for analysis."
+    std::cout << "Wrote " << total << " scored positions to " << json_filename << " for analysis."
               << std::endl;
+}
+
+bool find_argument(const std::vector<std::string> &args,
+                   std::vector<std::string>::const_iterator &pos, std::string_view arg) {
+    pos = std::find(args.begin(), args.end(), arg);
+
+    return pos != args.end() && std::next(pos) != args.end();
+}
+
+void print_usage() {
+    std::cout << "Usage: scoreWDLstat [options]" << std::endl;
+    std::cout << "Options:" << std::endl;
+    std::cout << "  --dir <path>  Path to directory containing pgns" << std::endl;
+    std::cout << "  --file <path> Path to pgn file" << std::endl;
+    std::cout << "  -o <path>     Path to output json file" << std::endl;
+}
+
+/// @brief
+/// @param argc
+/// @param argv Possible ones are --dir, --file and -o
+/// @return
+int main(int argc, char const *argv[]) {
+    const std::vector<std::string> args(argv + 1, argv + argc);
+
+    std::vector<std::string> files_pgn;
+    std::string json_filename = "scoreWDLstat.json";
+
+    std::vector<std::string>::const_iterator pos;
+
+    if (std::find(args.begin(), args.end(), "--help") != args.end()) {
+        print_usage();
+        return 0;
+    }
+
+    if (find_argument(args, pos, "--dir")) {
+        files_pgn = get_files(*std::next(pos));
+    } else if (find_argument(args, pos, "--file")) {
+        files_pgn = {*std::next(pos)};
+    } else {
+        files_pgn = get_files();
+    }
+
+    if (find_argument(args, pos, "-o")) {
+        json_filename = *std::next(pos);
+    }
+
+    map_t pos_map;
+    pos_map.reserve(analysis::map_size);
+
+    const auto t0 = std::chrono::high_resolution_clock::now();
+
+    process(files_pgn, pos_map);
+
+    const auto t1 = std::chrono::high_resolution_clock::now();
+
+    std::cout << "\nTime taken: "
+              << std::chrono::duration_cast<std::chrono::seconds>(t1 - t0).count() << "s"
+              << std::endl;
+
+    save(pos_map, json_filename);
 
     return 0;
 }
