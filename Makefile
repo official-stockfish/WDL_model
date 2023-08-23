@@ -23,4 +23,4 @@ all:
 format:
 	clang-format -i scoreWDLstat.cpp
 clean:
-	rm scoreWDLstat scoreWDLstat.exe
+	rm -f scoreWDLstat scoreWDLstat.exe
