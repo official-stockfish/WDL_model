@@ -23,4 +23,4 @@ all:
 format:
 	clang-format -i scoreWDLstat.cpp
 clean:
-	rm scoreWDLstat.json
+	rm scoreWDLstat scoreWDLstat.exe
