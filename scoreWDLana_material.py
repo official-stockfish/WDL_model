@@ -1,15 +1,22 @@
+import json, argparse, numpy as np, matplotlib.pyplot as plt
 from collections import Counter
-import json
 from ast import literal_eval
-import matplotlib.pyplot as plt
-import numpy as np
 from scipy.interpolate import griddata
 
+parser = argparse.ArgumentParser()
 
-with open("scoreWDLstat.json", "r") as infile:
+parser.add_argument(
+    "filename",
+    nargs="?",
+    help="json file with WDL statistics",
+    default="scoreWDLstat.json",
+)
+args = parser.parse_args()
+
+print(f"Reading data from {args.filename}.")
+with open(args.filename) as infile:
     inputdata = json.load(infile)
-
-print("read data")
+print("Done.")
 
 inpdict = {literal_eval(k): v for k, v in inputdata.items()}
 

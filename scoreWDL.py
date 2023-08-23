@@ -1,15 +1,17 @@
+import json, argparse, math, numpy as np, matplotlib.pyplot as plt
 from collections import Counter
-import json
-import argparse
 from ast import literal_eval
-import matplotlib.pyplot as plt
-import numpy as np
 from scipy.interpolate import griddata
 from scipy.optimize import curve_fit
-import math
 
 parser = argparse.ArgumentParser()
 
+parser.add_argument(
+    "filename",
+    nargs="?",
+    help="json file with WDL statistics",
+    default="scoreWDLstat.json",
+)
 parser.add_argument(
     "--NormalizeToPawnValue",
     type=int,
@@ -42,8 +44,8 @@ fig.suptitle("Summary of win-draw-loss model analysis", fontsize="x-large")
 #
 # read score stats as obtained from fishtest games
 #
-print("reading data")
-with open("scoreWDLstat.json", "r") as infile:
+print(f"Reading data from {args.filename}.")
+with open(args.filename) as infile:
     inputdata = json.load(infile)
 print("Done.")
 
