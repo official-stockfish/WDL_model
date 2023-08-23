@@ -254,21 +254,27 @@ void ana_files(map_t &map, const std::vector<std::string> &files) {
 
 /// @brief
 /// @param argc
-/// @param argv Possible ones are --dir and --file
+/// @param argv Possible ones are --dir, --file and -o
 /// @return
 int main(int argc, char const *argv[]) {
     const std::vector<std::string> args(argv + 1, argv + argc);
 
     std::vector<std::string> files_pgn;
 
-    if (std::find(args.begin(), args.end(), "--dir") != args.end()) {
-        const auto path = std::find(args.begin(), args.end(), "--dir") + 1;
-        files_pgn       = get_files(*path);
-    } else if (std::find(args.begin(), args.end(), "--file") != args.end()) {
-        const auto path = std::find(args.begin(), args.end(), "--file") + 1;
-        files_pgn       = {*path};
+    auto pos = std::find(args.begin(), args.end(), "--dir");
+    if (pos != args.end() && std::next(pos) != args.end()) {
+        files_pgn = get_files(*std::next(pos));
+    } else if ((pos = std::find(args.begin(), args.end(), "--file")) != args.end() &&
+               std::next(pos) != args.end()) {
+        files_pgn = {*std::next(pos)};
     } else {
         files_pgn = get_files();
+    }
+
+    std::string jsonFile = "scoreWDLstat.json";
+    if ((pos = std::find(args.begin(), args.end(), "-o")) != args.end() &&
+        std::next(pos) != args.end()) {
+        jsonFile = *std::next(pos);
     }
 
     // Create more chunks than threads to prevent threads from idling.
@@ -335,11 +341,12 @@ int main(int argc, char const *argv[]) {
     }
 
     // save json to file
-    std::ofstream outFile("scoreWDLstat.json");
+    std::ofstream outFile(jsonFile);
     outFile << j.dump(2);
     outFile.close();
 
-    std::cout << "Retained " << total << " scored positions for analysis." << std::endl;
+    std::cout << "Wrote " << total << " scored positions to " << jsonFile << " for analysis."
+              << std::endl;
 
     return 0;
 }
