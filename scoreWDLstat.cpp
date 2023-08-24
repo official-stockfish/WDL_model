@@ -326,8 +326,8 @@ bool find_argument(const std::vector<std::string> &args,
     return pos != args.end() && std::next(pos) != args.end();
 }
 
-void print_usage() {
-    std::cout << "Usage: scoreWDLstat [options]" << std::endl;
+void print_usage(char const *program_name) {
+    std::cout << "Usage: " << program_name << " [options]" << std::endl;
     std::cout << "Options:" << std::endl;
     std::cout << "  --dir <path>  Path to directory containing pgns" << std::endl;
     std::cout << "  --file <path> Path to pgn file" << std::endl;
@@ -347,7 +347,7 @@ int main(int argc, char const *argv[]) {
     std::vector<std::string>::const_iterator pos;
 
     if (std::find(args.begin(), args.end(), "--help") != args.end()) {
-        print_usage();
+        print_usage(argv[0]);
         return 0;
     }
 
