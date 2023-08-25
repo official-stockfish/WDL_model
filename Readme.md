@@ -5,6 +5,13 @@ of a pawn, and is calibrated such that an advantage of
 "100 centipawns" means the engine has a 50% probability to win
 from this position in selfplay at fishtest LTC time control.
 
+## Install
+```
+python3 -m venv env
+source env/bin/activate
+pip install scipy matplotlib
+```
+
 ## Usage
 
 To update Stockfish's internal WDL model, the following steps are needed:
