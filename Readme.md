@@ -9,7 +9,7 @@ from this position in selfplay at fishtest LTC time control.
 ```
 python3 -m venv env
 source env/bin/activate
-pip install scipy matplotlib
+pip install -r requirements.txt
 ```
 
 ## Usage
