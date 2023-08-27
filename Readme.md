@@ -3,7 +3,12 @@
 Stockfish's "centipawn" evaluation is decoupled from the classical value
 of a pawn, and is calibrated such that an advantage of
 "100 centipawns" means the engine has a 50% probability to win
-from this position in selfplay at fishtest LTC time control.
+from this position in selfplay at move 32 at fishtest LTC time control.\
+If the option `UCI_ShowWDL` is enabled, the engine will show Win-Draw-Loss
+probabilities alongside its "centipawn" evaluation. These probabilities
+depend on the engine's evaluation and the move number, and are computed
+from a WDL model that can be generated from fishtest data with the help of
+the scripts in this repository.
 
 ## Install
 ```
@@ -46,11 +51,13 @@ and `as[]`, `bs[]` in
   <img src="WDL_model_summary.png?raw=true" width="1200">
 </p>
 
-## Contents
+## Data visualization
 
-Other scripts that can be used to visualize different WDL data:
+These scripts can be used to visualize different WDL data:
 
-- `scoreWDLana_moves.py` : similar to `scoreWDL.py`, analyze wrt to moves
-- `scoreWDLana_material.py` : similar to `scoreWDL.py`, analyze wrt to material
+- `scoreWDL.py` : apart from fitting and visualizing the WDL model, creates
+win-rate and draw-rate contour plots in the (score, move) plane
+- `scoreWDLana_moves.py` : similar to `scoreWDL.py`, creates only a draw-rate contour plot in the (score, move) plane
+- `scoreWDLana_material.py` : similar to `scoreWDL.py`, creates only a win-rate contour plot in the (score, material) plane
 ---
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
