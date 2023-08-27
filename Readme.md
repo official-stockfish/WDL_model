@@ -58,6 +58,6 @@ These scripts can be used to visualize different WDL data:
 - `scoreWDL.py` : apart from fitting and visualizing the WDL model, creates
 win-rate and draw-rate contour plots in the (score, move) plane
 - `scoreWDLana_moves.py` : similar to `scoreWDL.py`, creates only a draw-rate contour plot in the (score, move) plane
-- `scoreWDLana_material.py` : similar to `scoreWDL.py`, creates only a win-rate contour plot in the (score, move) plane
+- `scoreWDLana_material.py` : similar to `scoreWDL.py`, creates only a win-rate contour plot in the (score, material) plane
 ---
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
