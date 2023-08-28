@@ -67,7 +67,7 @@ xs, ys, zwins, zdraws, zlosses = [], [], [], [], []
 for x, y in coords:
     xs.append(x)
     ys.append(y)
-    total = float(win[x, y] + draw[x, y] + loss[x, y])
+    total = win[x, y] + draw[x, y] + loss[x, y]
     zwins.append(win[x, y] / total)
     zdraws.append(draw[x, y] / total)
     zlosses.append(loss[x, y] / total)

@@ -31,7 +31,7 @@ win, draw, loss = Counter(), Counter(), Counter()
 # filter out (score, material) WDL data (i.e. move summed out)
 for (result, move, material, score), v in inpdict.items():
     # exclude large scores and the endings of very long games
-    if abs(score) > 400:  #  or move < 0 or move > 120:
+    if abs(score) > 400 or move < 0 or move > 120:
         continue
     if result == "W":
         win[score, material] += v
@@ -50,7 +50,7 @@ xs, ys, zwins = [], [], []
 for x, y in coords:
     xs.append(x)
     ys.append(y)
-    total = float(win[x, y] + loss[x, y] + draw[x, y])
+    total = win[x, y] + loss[x, y] + draw[x, y]
     zwins.append(win[x, y] / total)
 
 print("Processing done, plotting.")
