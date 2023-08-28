@@ -84,7 +84,8 @@ win, draw, loss = Counter(), Counter(), Counter()
 # filter out (score, yData) WDL data (i.e. material or move summed out)
 for (result, move, material, score), v in inpdict.items():
     # exclude large scores and unwanted move numbers
-    if abs(score) > 400 or move < args.moveMin or move > args.moveMax:
+    if abs(score) > 400 or move < 0 or move > args.moveMax:
+    ### if abs(score) > 400 or move < 0args.moveMin or move > args.moveMax: TODO
         continue
 
     # convert the cp score to the internal value
@@ -172,7 +173,8 @@ if args.fit:
     model_ms, model_as, model_bs = [], [], []
 
     grouping = 1
-    for m in range(args.moveMin, args.moveMax + 1, grouping):
+    for m in range(args.moveMin, args.moveMax, grouping):
+    ### for m in range(args.moveMin, args.moveMax + 1, grouping): TODO
         mmin = m
         mmax = m + grouping
         xdata, ywindata, ydrawdata, ylossdata = [], [], [], []
@@ -301,7 +303,8 @@ for i in range(0, figRows):
 xmin = -((1 * args.NormalizeToPawnValue) // 100 + 1) * 100
 xmax = ((3 * args.NormalizeToPawnValue) // 100 + 1) * 100
 if args.yData == "move":
-    grid_x, grid_y = np.mgrid[xmin:xmax:30j, args.moveMin : args.moveMax : 22j]
+    grid_x, grid_y = np.mgrid[xmin:xmax:30j, 10 : args.moveMax : 22j]
+    ### grid_x, grid_y = np.mgrid[xmin:xmax:30j, args.moveMin : args.moveMax : 22j] TODO
 else:
     grid_x, grid_y = np.mgrid[xmin:xmax:30j, 0:78:22j]
 points = np.array(list(zip(xs, ys)))
@@ -330,7 +333,8 @@ if args.fit:
 xmin = -((2 * args.NormalizeToPawnValue) // 100 + 1) * 100
 xmax = ((2 * args.NormalizeToPawnValue) // 100 + 1) * 100
 if args.yData == "move":
-    grid_x, grid_y = np.mgrid[xmin:xmax:30j, args.moveMin : args.moveMax : 22j]
+    grid_x, grid_y = np.mgrid[xmin:xmax:30j, 10 : args.moveMax : 22j]
+    ### grid_x, grid_y = np.mgrid[xmin:xmax:30j, args.moveMin : args.moveMax : 22j] TODO
 else:
     grid_x, grid_y = np.mgrid[xmin:xmax:30j, 0:78:22j]
 points = np.array(list(zip(xs, ys)))
