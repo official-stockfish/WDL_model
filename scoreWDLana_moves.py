@@ -3,61 +3,60 @@ from collections import Counter
 from ast import literal_eval
 from scipy.interpolate import griddata
 
-parser = argparse.ArgumentParser()
-
+parser = argparse.ArgumentParser(
+    description="Create a draw-rate contour plot in the (score, move) plane from fishtest game statistics.",
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+)
 parser.add_argument(
     "filename",
     nargs="?",
-    help="json file with WDL statistics",
+    help="json file with fishtest games' WDL statistics",
     default="scoreWDLstat.json",
+)
+parser.add_argument(
+    "--show",
+    action=argparse.BooleanOptionalAction,
+    default=True,
+    help="Show graphics or not. An image is always saved. Useful for batch processing.",
 )
 args = parser.parse_args()
 
 print(f"Reading data from {args.filename}.")
 with open(args.filename) as infile:
     inputdata = json.load(infile)
-print("Done.")
 
+print("Filtering data.")
 inpdict = {literal_eval(k): v for k, v in inputdata.items()}
+win, draw, loss = Counter(), Counter(), Counter()
+# filter out (score, move) WDL data (i.e. material summed out)
+for (result, move, _, score), v in inpdict.items():
+    # exclude large scores, early moves and the endings of very long games
+    if abs(score) > 400 or move < 10 or move > 120:
+        continue
 
-win = Counter()
-loss = Counter()
-draw = Counter()
-for k, v in inpdict.items():
-    (result, move, material, score) = k
-    if score < -400 or score > 400:
-        continue
-    if move < 10 or move > 120:
-        continue
     if result == "W":
-        win[(score, move)] += v
-    elif result == "L":
-        loss[(score, move)] += v
+        win[score, move] += v
     elif result == "D":
-        draw[(score, move)] += v
+        draw[score, move] += v
+    elif result == "L":
+        loss[score, move] += v
 
-print("counted")
-
-coords = list(
-    set(k for k in win).union(set(k for k in loss)).union(set(k for k in draw))
-)
-coords.sort()
-xs = []
-ys = []
-zs = []
-for coord in coords:
-    total = float(win[coord] + loss[coord] + draw[coord])
-    x, y = coord
+# create (score, move) -> WDL ratio data
+coords = sorted(set(list(win.keys()) + list(draw.keys()) + list(loss.keys())))
+xs, ys, zdraws = [], [], []
+for x, y in coords:
     xs.append(x)
     ys.append(y)
-    zs.append(draw[coord] / total)
+    total = float(win[x, y] + draw[x, y] + loss[x, y])
+    zdraws.append(draw[x, y] / total)
 
-print("processing done, plotting")
+
+print("Processing done, plotting.")
 font = {"family": "DejaVu Sans", "weight": "normal", "size": 20}
 grid_x, grid_y = np.mgrid[-400:400:40j, 10:120:22j]
 points = np.array(list(zip(xs, ys)))
-zz = griddata(points, zs, (grid_x, grid_y), method="cubic")
-fig = plt.figure(figsize=(6, 5))
+zz = griddata(points, zdraws, (grid_x, grid_y), method="cubic")
+fig = plt.figure(figsize=(11.69 * 1.5, 8.27 * 1.5))
 plt.rc("font", **font)
 left, bottom, width, height = 0.1, 0.1, 0.8, 0.8
 ax = fig.add_axes([left, bottom, width, height])
@@ -74,4 +73,8 @@ ax.set_xlabel("score")
 ax.set_ylabel("move")
 ax.yaxis.grid(True)
 ax.xaxis.grid(True)
-plt.show()
+plt.savefig("WDL_model_moves.png", dpi=300)
+if args.show:
+    plt.show()
+plt.close()
+print("Saved graphics to WDL_model_moves.png.")
