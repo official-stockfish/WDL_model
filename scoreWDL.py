@@ -1,103 +1,76 @@
-import json, argparse, math, numpy as np, matplotlib.pyplot as plt
+import json, argparse, numpy as np, matplotlib.pyplot as plt
 from collections import Counter
 from ast import literal_eval
 from scipy.interpolate import griddata
 from scipy.optimize import curve_fit
 
-parser = argparse.ArgumentParser()
-
+parser = argparse.ArgumentParser(
+    description="Fit Stockfish's WDL model to fishtest game statistics.",
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+)
 parser.add_argument(
     "filename",
     nargs="?",
-    help="json file with WDL statistics",
+    help="json file with fishtest games' WDL statistics",
     default="scoreWDLstat.json",
 )
 parser.add_argument(
     "--NormalizeToPawnValue",
     type=int,
     default=328,
-    help="The value that can be used to convert the cp value in the pgn to the SF internal score.",
+    help="Value needed for converting the games' cp scores to the SF's internal score.",
 )
-
+parser.add_argument(
+    "--moveTarget",
+    type=int,
+    default=32,
+    help="Move at which new rescaled 100cp should correspond to 50:50 winning chances.",
+)
 parser.add_argument(
     "--show",
     action=argparse.BooleanOptionalAction,
     default=True,
     help="Show graphics or not. An image is always saved. Useful for batch processing.",
 )
-
 args = parser.parse_args()
 
-print(
-    "--NormalizeToPawnValue: conversion of {} for converting the pgn scores to the internal score".format(
-        args.NormalizeToPawnValue
-    )
-)
-
-save_dpi = 300
-fig, axs = plt.subplots(
-    2, 3, figsize=(11.69 * 1.5, 8.27 * 1.5), constrained_layout=True
-)
-fig.suptitle("Summary of win-draw-loss model analysis", fontsize="x-large")
-
-
-#
-# read score stats as obtained from fishtest games
-#
-print(f"Reading data from {args.filename}.")
+print(f"Reading score stats from {args.filename}.")
 with open(args.filename) as infile:
     inputdata = json.load(infile)
-print("Done.")
 
-
-#
-# transform to just score, move data (i.e. piece count summed out)
-# limit to smaller scores and exclude the endings of very long games
-#
+print(f"Converting scores with NormalizeToPawnValue = {args.NormalizeToPawnValue}.")
 inpdict = {literal_eval(k): v for k, v in inputdata.items()}
-
-win = Counter()
-loss = Counter()
-draw = Counter()
-for k, v in inpdict.items():
-    (result, move, material, score) = k
-    if score < -400 or score > 400:
-        continue
-    if move < 0 or move > 120:
+win, draw, loss = Counter(), Counter(), Counter()
+# filter out (score, move) WDL data (i.e. material summed out)
+for (result, move, _, score), v in inpdict.items():
+    # exclude large scores and the endings of very long games
+    if abs(score) > 400 or move < 0 or move > 120:
         continue
 
     # convert the cp score to the internal value
     score = score * args.NormalizeToPawnValue / 100
 
     if result == "W":
-        win[(score, move)] += v
-    elif result == "L":
-        loss[(score, move)] += v
+        win[score, move] += v
     elif result == "D":
-        draw[(score, move)] += v
+        draw[score, move] += v
+    elif result == "L":
+        loss[score, move] += v
 
-print("counted")
-
-#
-# make score, move -> win ratio data
-#
-coords = list(
-    set(k for k in win).union(set(k for k in loss)).union(set(k for k in draw))
+print(
+    f"Retained (W,D,L) = ({sum(win.values())}, {sum(draw.values())}, {sum(loss.values())}) positions."
 )
-coords.sort()
-xs = []
-ys = []
-zs = []
-zdraws = []
-zlosses = []
-for coord in coords:
-    total = float(win[coord] + loss[coord] + draw[coord])
-    x, y = coord
+
+# create (score, move) -> WDL ratio data
+coords = sorted(set(list(win.keys()) + list(draw.keys()) + list(loss.keys())))
+xs, ys, zwins, zdraws, zlosses = [], [], [], [], []
+for x, y in coords:
     xs.append(x)
     ys.append(y)
-    zs.append(win[coord] / total)
-    zdraws.append(draw[coord] / total)
-    zlosses.append(loss[coord] / total)
+    total = win[x, y] + draw[x, y] + loss[x, y]
+    zwins.append(win[x, y] / total)
+    zdraws.append(draw[x, y] / total)
+    zlosses.append(loss[x, y] / total)
 
 #
 # fit a model to predict winrate from score and move
@@ -110,8 +83,15 @@ def winmodel(x, a, b):
 
 
 def poly3(x, a, b, c, d):
-    xnp = np.asarray(x) / 32
+    xnp = np.asarray(x) / args.moveTarget
     return ((a * xnp + b) * xnp + c) * xnp + d
+
+
+def poly3_str(coeffs):
+    return (
+        "((%5.3f * x / %d + %5.3f) * x / %d + %5.3f) * x / %d + %5.3f"
+        % tuple(val for pair in zip(coeffs, [args.moveTarget] * 4) for val in pair)[:-1]
+    )
 
 
 def wdl(score, move, popt_as, popt_bs):
@@ -120,44 +100,44 @@ def wdl(score, move, popt_as, popt_bs):
     w = int(1000 * winmodel(score, a, b))
     l = int(1000 * winmodel(-score, a, b))
     d = 1000 - w - l
-    return (w, d, l)
+    return w, d, l
 
 
 def normalized_axis(ax):
     ax2 = ax.twiny()
-    tickmin = math.ceil(ax.get_xlim()[0] / args.NormalizeToPawnValue) * 2
-    tickmax = math.floor(ax.get_xlim()[1] / args.NormalizeToPawnValue) * 2 + 1
+    tickmin = int(np.ceil(ax.get_xlim()[0] / args.NormalizeToPawnValue)) * 2
+    tickmax = int(np.floor(ax.get_xlim()[1] / args.NormalizeToPawnValue)) * 2 + 1
     new_tick_locations = np.array(
         [x / 2 * args.NormalizeToPawnValue for x in range(tickmin, tickmax)]
     )
 
     def tick_function(X):
         V = X / args.NormalizeToPawnValue
-        return [("%.0f" % z if z % 1 < 0.1 else "") for z in V]
+        return [(f"{z:.0f}" if z % 1 < 0.1 else "") for z in V]
 
     ax2.set_xlim(ax.get_xlim())
     ax2.set_xticks(new_tick_locations)
     ax2.set_xticklabels(tick_function(new_tick_locations))
 
 
+fig, axs = plt.subplots(
+    2, 3, figsize=(11.69 * 1.5, 8.27 * 1.5), constrained_layout=True
+)
+fig.suptitle("Summary of win-draw-loss model analysis", fontsize="x-large")
+
 #
 # convert to model, fit the winmodel a and b,
 # for a given value of the move counter
 #
-scores, moves, winrate, drawrate, lossrate = xs, ys, zs, zdraws, zlosses
+scores, moves, winrate, drawrate, lossrate = xs, ys, zwins, zdraws, zlosses
 
-model_ms = []
-model_as = []
-model_bs = []
+model_ms, model_as, model_bs = [], [], []
 
 grouping = 1
 for m in range(3, 120, grouping):
     mmin = m
     mmax = m + grouping
-    xdata = []
-    ydata = []
-    ydrawdata = []
-    ylossdata = []
+    xdata, ydata, ydrawdata, ylossdata = [], [], [], []
     for i in range(0, len(moves)):
         if moves[i] < mmin or moves[i] >= mmax:
             continue
@@ -180,8 +160,8 @@ for m in range(3, 120, grouping):
     model_as.append(popt[0])
     model_bs.append(popt[1])
 
-    # plot sample curve at move 32.
-    if m == 32:
+    # plot sample curve at moveTarget
+    if m == args.moveTarget:
         axs[0, 0].plot(xdata, ydata, "b.", label="Measured winrate")
         axs[0, 0].plot(xdata, ydrawdata, "g.", label="Measured drawrate")
         axs[0, 0].plot(xdata, ylossdata, "c.", label="Measured lossrate")
@@ -206,7 +186,9 @@ for m in range(3, 120, grouping):
         axs[0, 0].set_xlabel("Evaluation [lower: Internal Value units, upper: Pawns]")
         axs[0, 0].set_ylabel("outcome")
         axs[0, 0].legend(fontsize="small")
-        axs[0, 0].set_title("Comparison of model and measured data at move 32")
+        axs[0, 0].set_title(
+            f"Comparison of model and measured data at move {args.moveTarget}"
+        )
         xmax = ((3 * args.NormalizeToPawnValue) // 100 + 1) * 100
         axs[0, 0].set_xlim([-xmax, xmax])
         normalized_axis(axs[0, 0])
@@ -217,32 +199,22 @@ for m in range(3, 120, grouping):
 # simple polynomial fit
 #
 
-# fit a
+# fit a and b
 popt_as, pcov = curve_fit(poly3, model_ms, model_as)
-label_as = "as = ((%5.3f * x / 32 + %5.3f) * x / 32 + %5.3f) * x / 32 + %5.3f" % tuple(
-    popt_as
-)
-# fit b
 popt_bs, pcov = curve_fit(poly3, model_ms, model_bs)
-label_bs = "bs = ((%5.3f * x / 32 + %5.3f) * x / 32 + %5.3f) * x / 32 + %5.3f" % tuple(
-    popt_bs
-)
+label_as, label_bs = "as = " + poly3_str(popt_as), "bs = " + poly3_str(popt_bs)
 
 #
 # now we can define the conversion factor from internal score to centipawn such that
-# an expected win score of 50% is for a score of 'a', we pick this value for move number 32
+# an expected win score of 50% is for a score of 'a', we pick this value for the moveTarget
 # (where the sum of the a coefs is equal to the interpolated a).
 fsum_a = sum(popt_as)
 fsum_b = sum(popt_bs)
-isum_a = int(fsum_a)
-isum_b = int(fsum_b)
-print("const int NormalizeToPawnValue = {};".format(isum_a))
-print("Corresponding spread = {};".format(isum_b))
-print("Corresponding normalized spread = {};".format(fsum_b / fsum_a))
+print(f"const int NormalizeToPawnValue = {int(fsum_a)};")
+print(f"Corresponding spread = {int(fsum_b)};")
+print(f"Corresponding normalized spread = {fsum_b / fsum_a};")
 print(
-    "Draw rate at 0.0 eval at move 32 = {};".format(
-        1 - 2 / (1 + math.exp(fsum_a / fsum_b))
-    )
+    f"Draw rate at 0.0 eval at move {args.moveTarget} = {1 - 2 / (1 + np.exp(fsum_a / fsum_b))};"
 )
 
 print("Parameters in internal value units: ")
@@ -256,7 +228,7 @@ print(
 )
 
 # graphs of a and b as a function of the move number
-print("Plotting move dependence of model parameters")
+print("Plotting move dependence of model parameters.")
 axs[1, 0].plot(model_ms, model_as, "b.", label="as")
 axs[1, 0].plot(model_ms, poly3(model_ms, *popt_as), "r-", label="fit: " + label_as)
 axs[1, 0].plot(model_ms, model_bs, "g.", label="bs")
@@ -273,7 +245,7 @@ axs[1, 0].set_ylim(bottom=0.0)
 #
 contourlines = [0, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.97, 1.0]
 
-print("processing done, plotting 2D data")
+print("Processing done, plotting 2D data.")
 for i in [0, 1]:
     for j in [1, 2]:
         axs[i, j].yaxis.grid(True)
@@ -288,7 +260,7 @@ grid_x, grid_y = np.mgrid[xmin:xmax:30j, 10:120:22j]
 points = np.array(list(zip(xs, ys)))
 
 # data
-zz = griddata(points, zs, (grid_x, grid_y), method="linear")
+zz = griddata(points, zwins, (grid_x, grid_y), method="linear")
 cp = axs[0, 1].contourf(grid_x, grid_y, zz, contourlines)
 fig.colorbar(cp, ax=axs[:, 2], shrink=0.618)
 CS = axs[0, 1].contour(grid_x, grid_y, zz, contourlines, colors="black")
@@ -298,14 +270,13 @@ normalized_axis(axs[0, 1])
 
 # model
 for i in range(0, len(xs)):
-    zs[i] = wdl(xs[i], ys[i], popt_as, popt_bs)[0] / 1000.0
-zz = griddata(points, zs, (grid_x, grid_y), method="linear")
+    zwins[i] = wdl(xs[i], ys[i], popt_as, popt_bs)[0] / 1000.0
+zz = griddata(points, zwins, (grid_x, grid_y), method="linear")
 cp = axs[1, 1].contourf(grid_x, grid_y, zz, contourlines)
 CS = axs[1, 1].contour(grid_x, grid_y, zz, contourlines, colors="black")
 axs[1, 1].clabel(CS, inline=1, colors="black")
 axs[1, 1].set_title("Model: Fraction of positions leading to a win")
 normalized_axis(axs[1, 1])
-
 
 # for draws
 xmin = -((2 * args.NormalizeToPawnValue) // 100 + 1) * 100
@@ -323,8 +294,8 @@ normalized_axis(axs[0, 2])
 
 # for wins, draws
 for i in range(0, len(xs)):
-    zs[i] = wdl(xs[i], ys[i], popt_as, popt_bs)[1] / 1000.0
-zz = griddata(points, zs, (grid_x, grid_y), method="linear")
+    zwins[i] = wdl(xs[i], ys[i], popt_as, popt_bs)[1] / 1000.0
+zz = griddata(points, zwins, (grid_x, grid_y), method="linear")
 cp = axs[1, 2].contourf(grid_x, grid_y, zz, contourlines)
 CS = axs[1, 2].contour(grid_x, grid_y, zz, contourlines, colors="black")
 axs[1, 2].clabel(CS, inline=1, colors="black")
@@ -334,7 +305,8 @@ normalized_axis(axs[1, 2])
 
 fig.align_labels()
 
-plt.savefig("WDL_model_summary.png", dpi=save_dpi)
+plt.savefig("WDL_model_summary.png", dpi=300)
 if args.show:
     plt.show()
 plt.close()
+print("Saved graphics to WDL_model_summary.png.")
