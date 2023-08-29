@@ -51,16 +51,11 @@ and `as[]`, `bs[]` in
   <img src="WDL_model_summary.png?raw=true" width="1200">
 </p>
 
-## Data visualization
+## Fitting options
 
-The script `scoreWDL.py` can be used in the following ways to visualize
-different WDL data:
-
-- `python scoreWDL.py` : apart from fitting and visualizing the WDL model,
-creates win-rate and draw-rate contour plots in the (score, move) plane
-- `python scoreWDL.py --no-fit` : only creates win-rate and draw-rate contour
-plots in the (score, move) plane
-- `python scoreWDL.py --no-fit --yData material` : creates win-rate and
-draw-rate contour plots in the (score, material) plane
+- `python scoreWDL.py --yDataTarget 30` : choose move 30 (rather than 32)
+as target move for the 100cp anchor
+- `python scoreWDL.py --yData material --yDataTarget 68` : base fitting on
+material (rather than move), with 100cp anchor a material count of 68
 ---
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)

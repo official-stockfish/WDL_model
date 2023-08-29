@@ -73,7 +73,7 @@ args = parser.parse_args()
 if args.yData == "material":
     # fix default values for material
     if args.yDataMax == 120 and args.yDataMin == 3:
-        args.yDataMin, args.yDataMax = 0, 78
+        args.yDataMin, args.yDataMax = 10, 78
 
 if args.fit:
     title = "Summary of win-draw-loss model analysis"
