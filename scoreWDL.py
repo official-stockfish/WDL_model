@@ -21,28 +21,40 @@ parser.add_argument(
     help="Value needed for converting the games' cp scores to the SF's internal score.",
 )
 parser.add_argument(
-    "--moveTarget",
-    type=int,
-    default=32,
-    help="Move at which new rescaled 100cp should correspond to 50:50 winning chances.",
-)
-parser.add_argument(
     "--moveMin",
     type=int,
-    default=3,
-    help="Minimum move number to consider for analysis.",
+    default=0,
+    help="Lower move number limit for filter applied to json data.",
 )
 parser.add_argument(
     "--moveMax",
     type=int,
     default=120,
-    help="Maximum move number to consider for analysis.",
+    help="Upper move number limit for filter applied to json data.",
 )
 parser.add_argument(
     "--yData",
     choices=["move", "material"],
     default="move",
     help="Select y-axis data used for plotting and fitting.",
+)
+parser.add_argument(
+    "--yDataMin",
+    type=int,
+    default=3,
+    help="Minimum value of yData to consider for plotting and fitting.",
+)
+parser.add_argument(
+    "--yDataMax",
+    type=int,
+    default=120,
+    help="Maximum value of yData to consider for plotting and fitting.",
+)
+parser.add_argument(
+    "--yDataTarget",
+    type=int,
+    default=32,
+    help="Value of yData at which new rescaled 100cp should correspond to 50:50 winning chances.",
 )
 parser.add_argument(
     "--fit",
@@ -58,10 +70,14 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
+if args.yData == "material":
+    # fix default values for material
+    if args.yDataMax == 120 and args.yDataMin == 3:
+        args.yDataMin, args.yDataMax = 0, 78
+
 if args.fit:
     title = "Summary of win-draw-loss model analysis"
     pgnName = "WDL_model_summary.png"
-    assert args.yData == "move", f"--yData {args.yData} not yet implemented."  #  TODO
 else:
     title = "Summary of win-draw-loss data"
     pgnName = f"WDL_data_{args.yData}.png"
@@ -81,8 +97,7 @@ win, draw, loss = Counter(), Counter(), Counter()
 # filter out (score, yData) WDL data (i.e. material or move summed out)
 for (result, move, material, score), v in inpdict.items():
     # exclude large scores and unwanted move numbers
-    ###if abs(score) > 400 or move < args.moveMin or move > args.moveMax: #TODO
-    if abs(score) > 400 or move < 0 or move > args.moveMax:
+    if abs(score) > 400 or move < args.moveMin or move > args.moveMax:
         continue
 
     # convert the cp score to the internal value
@@ -123,20 +138,22 @@ def winmodel(x, a, b):
 
 
 def poly3(x, a, b, c, d):
-    xnp = np.asarray(x) / args.moveTarget
+    xnp = np.asarray(x) / args.yDataTarget
     return ((a * xnp + b) * xnp + c) * xnp + d
 
 
 def poly3_str(coeffs):
     return (
         "((%5.3f * x / %d + %5.3f) * x / %d + %5.3f) * x / %d + %5.3f"
-        % tuple(val for pair in zip(coeffs, [args.moveTarget] * 4) for val in pair)[:-1]
+        % tuple(val for pair in zip(coeffs, [args.yDataTarget] * 4) for val in pair)[
+            :-1
+        ]
     )
 
 
-def wdl(score, move, popt_as, popt_bs):
-    a = poly3(move, *popt_as)
-    b = poly3(move, *popt_bs)
+def wdl(score, move_or_material, popt_as, popt_bs):
+    a = poly3(move_or_material, *popt_as)
+    b = poly3(move_or_material, *popt_bs)
     w = int(1000 * winmodel(score, a, b))
     l = int(1000 * winmodel(-score, a, b))
     d = 1000 - w - l
@@ -161,21 +178,22 @@ def normalized_axis(ax):
 
 
 if args.fit:
+    print(f"Fit WDL model based on {args.yData}.")
     #
     # convert to model, fit the winmodel a and b,
     # for a given value of the move counter
     #
-    scores, moves, winrate, drawrate, lossrate = xs, ys, zwins, zdraws, zlosses
+    scores, moms, winrate, drawrate, lossrate = xs, ys, zwins, zdraws, zlosses
 
     model_ms, model_as, model_bs = [], [], []
 
     grouping = 1
-    for m in range(args.moveMin, args.moveMax + 1, grouping):
-        mmin = m
-        mmax = m + grouping
+    # mom = move or material, depending on args.yData
+    for mom in range(args.yDataMin, args.yDataMax + 1, grouping):
+        mmin, mmax = mom, mom + grouping
         xdata, ywindata, ydrawdata, ylossdata = [], [], [], []
-        for i in range(0, len(moves)):
-            if moves[i] < mmin or moves[i] >= mmax:
+        for i in range(0, len(moms)):
+            if moms[i] < mmin or moms[i] >= mmax:
                 continue
             xdata.append(scores[i])
             ywindata.append(winrate[i])
@@ -192,12 +210,12 @@ if args.fit:
             ywindata,
             p0=[args.NormalizeToPawnValue, args.NormalizeToPawnValue / 6],
         )
-        model_ms.append(m)
+        model_ms.append(mom)
         model_as.append(popt[0])
         model_bs.append(popt[1])
 
-        # plot sample curve at moveTarget
-        if m == args.moveTarget:
+        # plot sample curve at yDataTarget
+        if mom == args.yDataTarget:
             axs[0, 0].plot(xdata, ywindata, "b.", label="Measured winrate")
             axs[0, 0].plot(xdata, ydrawdata, "g.", label="Measured drawrate")
             axs[0, 0].plot(xdata, ylossdata, "c.", label="Measured lossrate")
@@ -225,7 +243,7 @@ if args.fit:
             axs[0, 0].set_ylabel("outcome")
             axs[0, 0].legend(fontsize="small")
             axs[0, 0].set_title(
-                f"Comparison of model and measured data at move {args.moveTarget}"
+                f"Comparison of model and measured data at {args.yData} {args.yDataTarget}"
             )
             xmax = ((3 * args.NormalizeToPawnValue) // 100 + 1) * 100
             axs[0, 0].set_xlim([-xmax, xmax])
@@ -243,7 +261,7 @@ if args.fit:
 
     #
     # now we can define the conversion factor from internal score to centipawn such that
-    # an expected win score of 50% is for a score of 'a', we pick this value for the moveTarget
+    # an expected win score of 50% is for a score of 'a', we pick this value for the yDataTarget
     # (where the sum of the a coefs is equal to the interpolated a).
     fsum_a = sum(popt_as)
     fsum_b = sum(popt_bs)
@@ -251,7 +269,7 @@ if args.fit:
     print(f"Corresponding spread = {int(fsum_b)};")
     print(f"Corresponding normalized spread = {fsum_b / fsum_a};")
     print(
-        f"Draw rate at 0.0 eval at move {args.moveTarget} = {1 - 2 / (1 + np.exp(fsum_a / fsum_b))};"
+        f"Draw rate at 0.0 eval at move {args.yDataTarget} = {1 - 2 / (1 + np.exp(fsum_a / fsum_b))};"
     )
 
     print("Parameters in internal value units: ")
@@ -298,11 +316,9 @@ for i in [0, 1]:
 # for wins, plot between -1 and 3 pawns, using a 30x22 grid
 xmin = -((1 * args.NormalizeToPawnValue) // 100 + 1) * 100
 xmax = ((3 * args.NormalizeToPawnValue) // 100 + 1) * 100
+ymin, ymax = args.yDataMin, args.yDataMax
 if args.yData == "move":
-    ymin = max(10, args.moveMin)  #  hide ugly parts for now TODO
-    ymax = args.moveMax
-else:
-    ymin, ymax = 0, 78
+    ymin = max(10, args.yDataMin)  #  hide ugly parts for now TODO
 grid_x, grid_y = np.mgrid[xmin:xmax:30j, ymin:ymax:22j]
 points = np.array(list(zip(xs, ys)))
 
