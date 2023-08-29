@@ -59,19 +59,16 @@ parser.add_argument(
 args = parser.parse_args()
 
 if args.fit:
-    figRows, figCols = 2, 3
     title = "Summary of win-draw-loss model analysis"
     pgnName = "WDL_model_summary.png"
     assert args.yData == "move", f"--yData {args.yData} not yet implemented."  #  TODO
 else:
-    figRows, figCols = 1, 2
-    title = ""
+    title = "Summary of win-draw-loss data"
     pgnName = f"WDL_data_{args.yData}.png"
 
 fig, axs = plt.subplots(
-    figRows, figCols, figsize=(11.69 * 1.5, 8.27 * 1.5), constrained_layout=True
+    2, 3, figsize=(11.69 * 1.5, 8.27 * 1.5), constrained_layout=True
 )
-axs = axs.reshape(figRows, figCols)  # ensure axs is 2D array
 fig.suptitle(title, fontsize="x-large")
 
 print(f"Reading score stats from {args.filename}.")
@@ -84,8 +81,8 @@ win, draw, loss = Counter(), Counter(), Counter()
 # filter out (score, yData) WDL data (i.e. material or move summed out)
 for (result, move, material, score), v in inpdict.items():
     # exclude large scores and unwanted move numbers
+    ###if abs(score) > 400 or move < args.moveMin or move > args.moveMax: #TODO
     if abs(score) > 400 or move < 0 or move > args.moveMax:
-    ### if abs(score) > 400 or move < 0args.moveMin or move > args.moveMax: TODO
         continue
 
     # convert the cp score to the internal value
@@ -173,8 +170,8 @@ if args.fit:
     model_ms, model_as, model_bs = [], [], []
 
     grouping = 1
-    for m in range(args.moveMin, args.moveMax, grouping):
     ### for m in range(args.moveMin, args.moveMax + 1, grouping): TODO
+    for m in range(args.moveMin, args.moveMax, grouping):
         mmin = m
         mmax = m + grouping
         xdata, ywindata, ydrawdata, ylossdata = [], [], [], []
@@ -292,8 +289,8 @@ contourlines = [0, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.97, 1.0]
 
 print("Processing done, plotting 2D data.")
 ylabelStr = args.yData + " (1,3,3,5,9)" * bool(args.yData == "material")
-for i in range(0, figRows):
-    for j in range(figCols - 2, figCols):
+for i in [0, 1]:
+    for j in [1, 2]:
         axs[i, j].yaxis.grid(True)
         axs[i, j].xaxis.grid(True)
         axs[i, j].set_xlabel("Evaluation [lower: Internal Value units, upper: Pawns]")
@@ -303,20 +300,21 @@ for i in range(0, figRows):
 xmin = -((1 * args.NormalizeToPawnValue) // 100 + 1) * 100
 xmax = ((3 * args.NormalizeToPawnValue) // 100 + 1) * 100
 if args.yData == "move":
-    grid_x, grid_y = np.mgrid[xmin:xmax:30j, 10 : args.moveMax : 22j]
-    ### grid_x, grid_y = np.mgrid[xmin:xmax:30j, args.moveMin : args.moveMax : 22j] TODO
+    ymin = max(10, args.moveMin)  #  hide ugly parts for now TODO
+    ymax = args.moveMax
 else:
-    grid_x, grid_y = np.mgrid[xmin:xmax:30j, 0:78:22j]
+    ymin, ymax = 0, 78
+grid_x, grid_y = np.mgrid[xmin:xmax:30j, ymin:ymax:22j]
 points = np.array(list(zip(xs, ys)))
 
 # data
 zz = griddata(points, zwins, (grid_x, grid_y), method="linear")
-cp = axs[0, figCols - 2].contourf(grid_x, grid_y, zz, contourlines)
-fig.colorbar(cp, ax=axs[:, figCols - 1], shrink=0.618)
-CS = axs[0, figCols - 2].contour(grid_x, grid_y, zz, contourlines, colors="black")
-axs[0, figCols - 2].clabel(CS, inline=1, colors="black")
-axs[0, figCols - 2].set_title("Data: Fraction of positions leading to a win")
-normalized_axis(axs[0, figCols - 2])
+cp = axs[0, 1].contourf(grid_x, grid_y, zz, contourlines)
+fig.colorbar(cp, ax=axs[:, -1], shrink=0.618)
+CS = axs[0, 1].contour(grid_x, grid_y, zz, contourlines, colors="black")
+axs[0, 1].clabel(CS, inline=1, colors="black")
+axs[0, 1].set_title("Data: Fraction of positions leading to a win")
+normalized_axis(axs[0, 1])
 
 # model
 if args.fit:
@@ -332,20 +330,16 @@ if args.fit:
 # for draws, plot between -2 and 2 pawns, using a 30x22 grid
 xmin = -((2 * args.NormalizeToPawnValue) // 100 + 1) * 100
 xmax = ((2 * args.NormalizeToPawnValue) // 100 + 1) * 100
-if args.yData == "move":
-    grid_x, grid_y = np.mgrid[xmin:xmax:30j, 10 : args.moveMax : 22j]
-    ### grid_x, grid_y = np.mgrid[xmin:xmax:30j, args.moveMin : args.moveMax : 22j] TODO
-else:
-    grid_x, grid_y = np.mgrid[xmin:xmax:30j, 0:78:22j]
+grid_x, grid_y = np.mgrid[xmin:xmax:30j, ymin:ymax:22j]
 points = np.array(list(zip(xs, ys)))
 
 # data
 zz = griddata(points, zdraws, (grid_x, grid_y), method="linear")
-cp = axs[0, figCols - 1].contourf(grid_x, grid_y, zz, contourlines)
-CS = axs[0, figCols - 1].contour(grid_x, grid_y, zz, contourlines, colors="black")
-axs[0, figCols - 1].clabel(CS, inline=1, colors="black")
-axs[0, figCols - 1].set_title("Data: Fraction of positions leading to a draw")
-normalized_axis(axs[0, figCols - 1])
+cp = axs[0, 2].contourf(grid_x, grid_y, zz, contourlines)
+CS = axs[0, 2].contour(grid_x, grid_y, zz, contourlines, colors="black")
+axs[0, 2].clabel(CS, inline=1, colors="black")
+axs[0, 2].set_title("Data: Fraction of positions leading to a draw")
+normalized_axis(axs[0, 2])
 
 # model
 if args.fit:
