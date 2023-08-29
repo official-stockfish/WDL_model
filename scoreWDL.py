@@ -170,8 +170,7 @@ if args.fit:
     model_ms, model_as, model_bs = [], [], []
 
     grouping = 1
-    ### for m in range(args.moveMin, args.moveMax + 1, grouping): TODO
-    for m in range(args.moveMin, args.moveMax, grouping):
+    for m in range(args.moveMin, args.moveMax + 1, grouping):
         mmin = m
         mmax = m + grouping
         xdata, ywindata, ydrawdata, ylossdata = [], [], [], []
