@@ -10,9 +10,9 @@ parser = argparse.ArgumentParser(
 )
 parser.add_argument(
     "filename",
-    nargs="?",
-    help="json file with fishtest games' WDL statistics",
-    default="scoreWDLstat.json",
+    nargs="*",
+    help="json file(s) with fishtest games' WDL statistics",
+    default=["scoreWDLstat.json"],
 )
 parser.add_argument(
     "--NormalizeToPawnValue",
@@ -87,9 +87,13 @@ fig, axs = plt.subplots(
 )
 fig.suptitle(title, fontsize="x-large")
 
-print(f"Reading score stats from {args.filename}.")
-with open(args.filename) as infile:
-    inputdata = json.load(infile)
+inputdata = {}
+for filename in args.filename:
+    print(f"Reading score stats from {filename}.")
+    with open(filename) as infile:
+        data = json.load(infile)
+        for key, value in data.items():
+            inputdata[key] = inputdata.get(key, 0) + value
 
 print(f"Converting scores with NormalizeToPawnValue = {args.NormalizeToPawnValue}.")
 inpdict = {literal_eval(k): v for k, v in inputdata.items()}
