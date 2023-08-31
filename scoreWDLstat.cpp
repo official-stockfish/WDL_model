@@ -5,6 +5,7 @@
 #include <fstream>
 #include <iostream>
 #include <mutex>
+#include <regex>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -53,7 +54,7 @@ struct std::hash<Key> {
 // unordered map to count (outcome, move, material, score) tuples in pgns
 using map_t = std::unordered_map<Key, int>;
 
-std::atomic<std::size_t> total_chunks = 0;
+std::atomic<std::size_t> total_chunks = 1;
 
 namespace analysis {
 
@@ -104,12 +105,32 @@ float fast_stof(const char *str) {
 /// @brief Magic value for fishtest pgns, ~1.2 million keys
 static constexpr int map_size = 1200000;
 
-/// @brief Analyze a single game and update the position map
+/// @brief Analyze a single game and update the position map, apply filter if present
 /// @param pos_map
 /// @param game
-void ana_game(map_t &pos_map, const std::optional<Game> &game) {
+/// @param regex_str
+void ana_game(map_t &pos_map, const std::optional<Game> &game, const std::string &regex_str) {
     if (game.value().headers().find("Result") == game.value().headers().end()) {
         return;
+    }
+
+    Color filter_side = Color::NONE;
+    if (!regex_str.empty()) {
+        if (game.value().headers().find("White") == game.value().headers().end() ||
+            game.value().headers().find("Black") == game.value().headers().end()) {
+            return;
+        }
+        std::regex regex(regex_str);
+        if (std::regex_match(game.value().headers().at("White"), regex)) {
+            filter_side = Color::WHITE;
+        }
+        if (std::regex_match(game.value().headers().at("Black"), regex)) {
+            if (filter_side == Color::NONE) {
+                filter_side = Color::BLACK;
+            } else {
+                filter_side = Color::NONE;
+            }
+        }
     }
 
     const auto result = game.value().headers().at("Result");
@@ -152,26 +173,28 @@ void ana_game(map_t &pos_map, const std::optional<Game> &game) {
         Key key;
         key.score = 1002;
 
-        if (delimiter_pos != std::string::npos && move.comment != "book") {
-            const auto match_score = move.comment.substr(0, delimiter_pos);
+        if (filter_side == Color::NONE || filter_side == board.sideToMove()) {
+            if (delimiter_pos != std::string::npos && move.comment != "book") {
+                const auto match_score = move.comment.substr(0, delimiter_pos);
 
-            if (match_score[1] == 'M') {
-                if (match_score[0] == '+') {
-                    key.score = 1001;
+                if (match_score[1] == 'M') {
+                    if (match_score[0] == '+') {
+                        key.score = 1001;
+                    } else {
+                        key.score = -1001;
+                    }
+
                 } else {
-                    key.score = -1001;
+                    int score = 100 * fast_stof(match_score.c_str());
+
+                    if (score > 1000) {
+                        score = 1000;
+                    } else if (score < -1000) {
+                        score = -1000;
+                    }
+
+                    key.score = int(std::floor(score / 5.0)) * 5;  // reduce precision
                 }
-
-            } else {
-                int score = 100 * fast_stof(match_score.c_str());
-
-                if (score > 1000) {
-                    score = 1000;
-                } else if (score < -1000) {
-                    score = -1000;
-                }
-
-                key.score = int(std::floor(score / 5.0)) * 5;  // reduce precision
             }
         }
 
@@ -191,7 +214,7 @@ void ana_game(map_t &pos_map, const std::optional<Game> &game) {
     }
 }
 
-void ana_files(map_t &map, const std::vector<std::string> &files) {
+void ana_files(map_t &map, const std::vector<std::string> &files, const std::string &regex_str) {
     map.reserve(map_size);
 
     for (const auto &file : files) {
@@ -205,7 +228,7 @@ void ana_files(map_t &map, const std::vector<std::string> &files) {
                 break;
             }
 
-            ana_game(map, game);
+            ana_game(map, game, regex_str);
         }
 
         pgn_file.close();
@@ -252,7 +275,8 @@ void ana_files(map_t &map, const std::vector<std::string> &files) {
     return chunks;
 }
 
-void process(const std::vector<std::string> &files_pgn, map_t &pos_map) {
+void process(const std::vector<std::string> &files_pgn, map_t &pos_map,
+             const std::string &regex_str) {
     // Create more chunks than threads to prevent threads from idling.
     int target_chunks = 4 * std::max(1, int(std::thread::hardware_concurrency()));
 
@@ -271,9 +295,9 @@ void process(const std::vector<std::string> &files_pgn, map_t &pos_map) {
     std::cout << "\rProgress: " << total_chunks << "/" << files_chunked.size() << std::flush;
 
     for (const auto &files : files_chunked) {
-        pool.enqueue([&files, &map_mutex, &pos_map, &files_chunked]() {
+        pool.enqueue([&files, &regex_str, &map_mutex, &pos_map, &files_chunked]() {
             map_t map;
-            analysis::ana_files(map, files);
+            analysis::ana_files(map, files, regex_str);
 
             total_chunks++;
 
@@ -329,20 +353,21 @@ bool find_argument(const std::vector<std::string> &args,
 void print_usage(char const *program_name) {
     std::cout << "Usage: " << program_name << " [options]" << std::endl;
     std::cout << "Options:" << std::endl;
-    std::cout << "  --dir <path>  Path to directory containing pgns" << std::endl;
-    std::cout << "  --file <path> Path to pgn file" << std::endl;
-    std::cout << "  -o <path>     Path to output json file" << std::endl;
+    std::cout << "  --dir <path>          Path to directory containing pgns" << std::endl;
+    std::cout << "  --file <path>         Path to pgn file" << std::endl;
+    std::cout << "  --matchEngine <regex> Filter data based on engine name" << std::endl;
+    std::cout << "  -o <path>             Path to output json file" << std::endl;
 }
 
 /// @brief
 /// @param argc
-/// @param argv Possible ones are --dir, --file and -o
+/// @param argv Possible ones are --dir, --file, --matchEngine and -o
 /// @return
 int main(int argc, char const *argv[]) {
     const std::vector<std::string> args(argv + 1, argv + argc);
 
     std::vector<std::string> files_pgn;
-    std::string json_filename = "scoreWDLstat.json";
+    std::string regex_str, json_filename = "scoreWDLstat.json";
 
     std::vector<std::string>::const_iterator pos;
 
@@ -359,6 +384,10 @@ int main(int argc, char const *argv[]) {
         files_pgn = get_files();
     }
 
+    if (find_argument(args, pos, "--matchEngine")) {
+        regex_str = *std::next(pos);
+    }
+
     if (find_argument(args, pos, "-o")) {
         json_filename = *std::next(pos);
     }
@@ -368,7 +397,7 @@ int main(int argc, char const *argv[]) {
 
     const auto t0 = std::chrono::high_resolution_clock::now();
 
-    process(files_pgn, pos_map);
+    process(files_pgn, pos_map, regex_str);
 
     const auto t1 = std::chrono::high_resolution_clock::now();
 
