@@ -63,10 +63,10 @@ parser.add_argument(
     help="Fit WDL model or not. Data contour plots are always created.",
 )
 parser.add_argument(
-    "--show",
-    action=argparse.BooleanOptionalAction,
-    default=True,
-    help="Show graphics or not. An image is always saved. Useful for batch processing.",
+    "--plot",
+    choices=["save+show", "save", "no"],
+    default="save+show",
+    help="Save/show graphics or not. Useful for batch processing.",
 )
 args = parser.parse_args()
 
@@ -75,17 +75,18 @@ if args.yData == "material":
     if args.yDataMax == 120 and args.yDataMin == 3:
         args.yDataMin, args.yDataMax = 10, 78
 
-if args.fit:
-    title = "Summary of win-draw-loss model analysis"
-    pgnName = "WDL_model_summary.png"
-else:
-    title = "Summary of win-draw-loss data"
-    pgnName = f"WDL_data_{args.yData}.png"
+if args.plot != "no":
+    if args.fit:
+        title = "Summary of win-draw-loss model analysis"
+        pgnName = "WDL_model_summary.png"
+    else:
+        title = "Summary of win-draw-loss data"
+        pgnName = f"WDL_data_{args.yData}.png"
 
-fig, axs = plt.subplots(
-    2, 3, figsize=(11.69 * 1.5, 8.27 * 1.5), constrained_layout=True
-)
-fig.suptitle(title, fontsize="x-large")
+    fig, axs = plt.subplots(
+        2, 3, figsize=(11.69 * 1.5, 8.27 * 1.5), constrained_layout=True
+    )
+    fig.suptitle(title, fontsize="x-large")
 
 inputdata = {}
 for filename in args.filename:
@@ -219,7 +220,7 @@ if args.fit:
         model_bs.append(popt[1])
 
         # plot sample curve at yDataTarget
-        if mom == args.yDataTarget:
+        if args.plot != "no" and mom == args.yDataTarget:
             axs[0, 0].plot(xdata, ywindata, "b.", label="Measured winrate")
             axs[0, 0].plot(xdata, ydrawdata, "g.", label="Measured drawrate")
             axs[0, 0].plot(xdata, ylossdata, "c.", label="Measured lossrate")
@@ -290,91 +291,97 @@ if args.fit:
         % tuple(popt_bs)
     )
 
-    # graphs of a and b as a function of the move number
-    print("Plotting move dependence of model parameters.")
-    axs[1, 0].plot(model_ms, model_as, "b.", label="as")
-    axs[1, 0].plot(model_ms, poly3(model_ms, *popt_as), "r-", label="fit: " + label_as)
-    axs[1, 0].plot(model_ms, model_bs, "g.", label="bs")
-    axs[1, 0].plot(model_ms, poly3(model_ms, *popt_bs), "m-", label="fit: " + label_bs)
+    if args.plot != "no":
+        # graphs of a and b as a function of move/material
+        print("Plotting move/material dependence of model parameters.")
+        axs[1, 0].plot(model_ms, model_as, "b.", label="as")
+        axs[1, 0].plot(
+            model_ms, poly3(model_ms, *popt_as), "r-", label="fit: " + label_as
+        )
+        axs[1, 0].plot(model_ms, model_bs, "g.", label="bs")
+        axs[1, 0].plot(
+            model_ms, poly3(model_ms, *popt_bs), "m-", label="fit: " + label_bs
+        )
 
-    axs[1, 0].set_xlabel(args.yData)
-    axs[1, 0].set_ylabel("parameters (in internal value units)")
-    axs[1, 0].legend(fontsize="x-small")
-    axs[1, 0].set_title("Winrate model parameters")
-    axs[1, 0].set_ylim(bottom=0.0)
+        axs[1, 0].set_xlabel(args.yData)
+        axs[1, 0].set_ylabel("parameters (in internal value units)")
+        axs[1, 0].legend(fontsize="x-small")
+        axs[1, 0].set_title("Winrate model parameters")
+        axs[1, 0].set_ylim(bottom=0.0)
 
-#
-# now generate contour plots
-#
-contourlines = [0, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.97, 1.0]
+if args.plot != "no":
+    # now generate contour plots
+    contourlines = [0, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.97, 1.0]
 
-print("Processing done, plotting 2D data.")
-ylabelStr = args.yData + " (1,3,3,5,9)" * bool(args.yData == "material")
-for i in [0, 1]:
-    for j in [1, 2]:
-        axs[i, j].yaxis.grid(True)
-        axs[i, j].xaxis.grid(True)
-        axs[i, j].set_xlabel("Evaluation [lower: Internal Value units, upper: Pawns]")
-        axs[i, j].set_ylabel(ylabelStr)
+    print("Processing done, plotting 2D data.")
+    ylabelStr = args.yData + " (1,3,3,5,9)" * bool(args.yData == "material")
+    for i in [0, 1]:
+        for j in [1, 2]:
+            axs[i, j].yaxis.grid(True)
+            axs[i, j].xaxis.grid(True)
+            axs[i, j].set_xlabel(
+                "Evaluation [lower: Internal Value units, upper: Pawns]"
+            )
+            axs[i, j].set_ylabel(ylabelStr)
 
-# for wins, plot between -1 and 3 pawns, using a 30x22 grid
-xmin = -((1 * args.NormalizeToPawnValue) // 100 + 1) * 100
-xmax = ((3 * args.NormalizeToPawnValue) // 100 + 1) * 100
-ymin, ymax = args.yDataMin, args.yDataMax
-if args.yData == "move":
-    ymin = max(10, args.yDataMin)  #  hide ugly parts for now TODO
-grid_x, grid_y = np.mgrid[xmin:xmax:30j, ymin:ymax:22j]
-points = np.array(list(zip(xs, ys)))
+    # for wins, plot between -1 and 3 pawns, using a 30x22 grid
+    xmin = -((1 * args.NormalizeToPawnValue) // 100 + 1) * 100
+    xmax = ((3 * args.NormalizeToPawnValue) // 100 + 1) * 100
+    ymin, ymax = args.yDataMin, args.yDataMax
+    if args.yData == "move":
+        ymin = max(10, args.yDataMin)  #  hide ugly parts for now TODO
+    grid_x, grid_y = np.mgrid[xmin:xmax:30j, ymin:ymax:22j]
+    points = np.array(list(zip(xs, ys)))
 
-# data
-zz = griddata(points, zwins, (grid_x, grid_y), method="linear")
-cp = axs[0, 1].contourf(grid_x, grid_y, zz, contourlines)
-fig.colorbar(cp, ax=axs[:, -1], shrink=0.618)
-CS = axs[0, 1].contour(grid_x, grid_y, zz, contourlines, colors="black")
-axs[0, 1].clabel(CS, inline=1, colors="black")
-axs[0, 1].set_title("Data: Fraction of positions leading to a win")
-normalized_axis(axs[0, 1])
-
-# model
-if args.fit:
-    for i in range(0, len(xs)):
-        zwins[i] = wdl(xs[i], ys[i], popt_as, popt_bs)[0] / 1000.0
+    # data
     zz = griddata(points, zwins, (grid_x, grid_y), method="linear")
-    cp = axs[1, 1].contourf(grid_x, grid_y, zz, contourlines)
-    CS = axs[1, 1].contour(grid_x, grid_y, zz, contourlines, colors="black")
-    axs[1, 1].clabel(CS, inline=1, colors="black")
-    axs[1, 1].set_title("Model: Fraction of positions leading to a win")
-    normalized_axis(axs[1, 1])
+    cp = axs[0, 1].contourf(grid_x, grid_y, zz, contourlines)
+    fig.colorbar(cp, ax=axs[:, -1], shrink=0.618)
+    CS = axs[0, 1].contour(grid_x, grid_y, zz, contourlines, colors="black")
+    axs[0, 1].clabel(CS, inline=1, colors="black")
+    axs[0, 1].set_title("Data: Fraction of positions leading to a win")
+    normalized_axis(axs[0, 1])
 
-# for draws, plot between -2 and 2 pawns, using a 30x22 grid
-xmin = -((2 * args.NormalizeToPawnValue) // 100 + 1) * 100
-xmax = ((2 * args.NormalizeToPawnValue) // 100 + 1) * 100
-grid_x, grid_y = np.mgrid[xmin:xmax:30j, ymin:ymax:22j]
-points = np.array(list(zip(xs, ys)))
+    # model
+    if args.fit:
+        for i in range(0, len(xs)):
+            zwins[i] = wdl(xs[i], ys[i], popt_as, popt_bs)[0] / 1000.0
+        zz = griddata(points, zwins, (grid_x, grid_y), method="linear")
+        cp = axs[1, 1].contourf(grid_x, grid_y, zz, contourlines)
+        CS = axs[1, 1].contour(grid_x, grid_y, zz, contourlines, colors="black")
+        axs[1, 1].clabel(CS, inline=1, colors="black")
+        axs[1, 1].set_title("Model: Fraction of positions leading to a win")
+        normalized_axis(axs[1, 1])
 
-# data
-zz = griddata(points, zdraws, (grid_x, grid_y), method="linear")
-cp = axs[0, 2].contourf(grid_x, grid_y, zz, contourlines)
-CS = axs[0, 2].contour(grid_x, grid_y, zz, contourlines, colors="black")
-axs[0, 2].clabel(CS, inline=1, colors="black")
-axs[0, 2].set_title("Data: Fraction of positions leading to a draw")
-normalized_axis(axs[0, 2])
+    # for draws, plot between -2 and 2 pawns, using a 30x22 grid
+    xmin = -((2 * args.NormalizeToPawnValue) // 100 + 1) * 100
+    xmax = ((2 * args.NormalizeToPawnValue) // 100 + 1) * 100
+    grid_x, grid_y = np.mgrid[xmin:xmax:30j, ymin:ymax:22j]
+    points = np.array(list(zip(xs, ys)))
 
-# model
-if args.fit:
-    for i in range(0, len(xs)):
-        zwins[i] = wdl(xs[i], ys[i], popt_as, popt_bs)[1] / 1000.0
-    zz = griddata(points, zwins, (grid_x, grid_y), method="linear")
-    cp = axs[1, 2].contourf(grid_x, grid_y, zz, contourlines)
-    CS = axs[1, 2].contour(grid_x, grid_y, zz, contourlines, colors="black")
-    axs[1, 2].clabel(CS, inline=1, colors="black")
-    axs[1, 2].set_title("Model: Fraction of positions leading to a draw")
-    normalized_axis(axs[1, 2])
+    # data
+    zz = griddata(points, zdraws, (grid_x, grid_y), method="linear")
+    cp = axs[0, 2].contourf(grid_x, grid_y, zz, contourlines)
+    CS = axs[0, 2].contour(grid_x, grid_y, zz, contourlines, colors="black")
+    axs[0, 2].clabel(CS, inline=1, colors="black")
+    axs[0, 2].set_title("Data: Fraction of positions leading to a draw")
+    normalized_axis(axs[0, 2])
 
-fig.align_labels()
+    # model
+    if args.fit:
+        for i in range(0, len(xs)):
+            zwins[i] = wdl(xs[i], ys[i], popt_as, popt_bs)[1] / 1000.0
+        zz = griddata(points, zwins, (grid_x, grid_y), method="linear")
+        cp = axs[1, 2].contourf(grid_x, grid_y, zz, contourlines)
+        CS = axs[1, 2].contour(grid_x, grid_y, zz, contourlines, colors="black")
+        axs[1, 2].clabel(CS, inline=1, colors="black")
+        axs[1, 2].set_title("Model: Fraction of positions leading to a draw")
+        normalized_axis(axs[1, 2])
 
-plt.savefig(pgnName, dpi=300)
-if args.show:
-    plt.show()
-plt.close()
-print(f"Saved graphics to {pgnName}.")
+    fig.align_labels()
+
+    plt.savefig(pgnName, dpi=300)
+    if args.plot == "save+show":
+        plt.show()
+    plt.close()
+    print(f"Saved graphics to {pgnName}.")
