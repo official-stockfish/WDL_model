@@ -239,13 +239,19 @@ void ana_files(map_t &map, const std::vector<std::string> &files, const std::str
 
 /// @brief Get all files from a directory.
 /// @param path
+/// @param recursive
 /// @return
-[[nodiscard]] std::vector<std::string> get_files(std::string_view path = "./pgns") {
+[[nodiscard]] std::vector<std::string> get_files(const std::string &path, bool recursive = false) {
     std::vector<std::string> files;
 
     for (const auto &entry : fs::directory_iterator(path)) {
-        if (entry.path().extension() == ".pgn") {
-            files.push_back(entry.path().string());
+        if (fs::is_regular_file(entry)) {
+            if (entry.path().extension() == ".pgn") {
+                files.push_back(entry.path().string());
+            }
+        } else if (recursive && fs::is_directory(entry)) {
+            auto subdir_files = get_files(entry.path().string(), true);
+            files.insert(files.end(), subdir_files.begin(), subdir_files.end());
         }
     }
 
@@ -344,24 +350,27 @@ void save(const map_t &pos_map, const std::string &json_filename) {
 }
 
 bool find_argument(const std::vector<std::string> &args,
-                   std::vector<std::string>::const_iterator &pos, std::string_view arg) {
+                   std::vector<std::string>::const_iterator &pos, std::string_view arg,
+                   bool without_parameter = false) {
     pos = std::find(args.begin(), args.end(), arg);
 
-    return pos != args.end() && std::next(pos) != args.end();
+    return pos != args.end() && (without_parameter || std::next(pos) != args.end());
 }
 
 void print_usage(char const *program_name) {
     std::cout << "Usage: " << program_name << " [options]" << std::endl;
     std::cout << "Options:" << std::endl;
-    std::cout << "  --dir <path>          Path to directory containing pgns" << std::endl;
     std::cout << "  --file <path>         Path to pgn file" << std::endl;
+    std::cout << "  --dir <path>          Path to directory containing pgns" << std::endl;
+    std::cout << "  -r                    Search for pgns recursively in subdirectories"
+              << std::endl;
     std::cout << "  --matchEngine <regex> Filter data based on engine name" << std::endl;
     std::cout << "  -o <path>             Path to output json file" << std::endl;
 }
 
 /// @brief
 /// @param argc
-/// @param argv Possible ones are --dir, --file, --matchEngine and -o
+/// @param argv Possible ones are --file, --dir, -r, --matchEngine and -o
 /// @return
 int main(int argc, char const *argv[]) {
     const std::vector<std::string> args(argv + 1, argv + argc);
@@ -376,12 +385,18 @@ int main(int argc, char const *argv[]) {
         return 0;
     }
 
-    if (find_argument(args, pos, "--dir")) {
-        files_pgn = get_files(*std::next(pos));
-    } else if (find_argument(args, pos, "--file")) {
+    if (find_argument(args, pos, "--file")) {
         files_pgn = {*std::next(pos)};
     } else {
-        files_pgn = get_files();
+        std::string path = "./pgns";
+        if (find_argument(args, pos, "--dir")) {
+            path = *std::next(pos);
+        }
+        bool recursive = find_argument(args, pos, "-r", true);
+        std::cout << "Looking " << (recursive ? "(recursively) " : "") << "for pgn files in "
+                  << path << std::endl;
+
+        files_pgn = get_files(path, recursive);
     }
 
     if (find_argument(args, pos, "--matchEngine")) {
