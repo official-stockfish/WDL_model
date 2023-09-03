@@ -28,10 +28,8 @@ elif args.path[-1] != "/":
 if not os.path.exists(args.path):
     os.makedirs(args.path)
 
-# find the set of already downloaded Ids (looking in the full file tree)
-# a test is considered downloaded if at least one of its pgn was (partially) downloaded
-# TODO: we may want to download missing pgn's for partially downloaded tests in future
-p = re.compile("([a-z0-9]*)-[0-9]*.pgn")
+# find the set of fully downloaded Ids (looking in the full file tree)
+p = re.compile("([a-z0-9]*)-0.pgn")  # match only testId-0.pgn
 downloaded = set()
 
 for _, _, files in os.walk(args.path):
@@ -40,7 +38,7 @@ for _, _, files in os.walk(args.path):
         if m:
             downloaded.add(m.group(1))
 
-print(f"Found {len(downloaded)} downloaded tests in {args.path} already.")
+print(f"Found {len(downloaded)} fully downloaded tests in {args.path} already.")
 
 # fetch from desired page of finished LTC tests, parse and list new IDs
 url = f"https://tests.stockfishchess.org/tests/finished?ltc_only=1&page={args.page}"
@@ -73,18 +71,27 @@ for test, dateStr in ids:
         path = args.path
     print(f"""Downloading{"" if args.subdirs else f" {test}'s"} pgns to {path} ...""")
     url = "https://tests.stockfishchess.org/tests/tasks/" + test
-    p = re.compile("<a href=/api/pgn/([a-z0-9]*-[0-9]*.pgn)>")
+    p = re.compile("<a href=/api/pgn/([a-z0-9]*-[0-9]*).pgn>")
     response = urllib.request.urlopen(url)
     webContent = response.read().decode("utf-8").splitlines()
-    for line in webContent:
+    first = True
+    for line in reversed(webContent):  # download test-0.pgn last
         m = p.search(line)
         if m:
-            filename = m.group(1)
+            filename = m.group(1) + ".pgn"
+            if os.path.exists(path + filename):
+                continue
         else:
             continue
         time.sleep(0.1)  # be server friendly... wait a bit between requests
         url = "http://tests.stockfishchess.org/api/pgn/" + filename
         try:
-            urllib.request.urlretrieve(url, path + filename)
+            if first:
+                _, _, number = m.group(1).partition("-")
+                print(f"  Fetching {int(number)+1} missing pgn files ...")
+                first = False
+            tmpName = test + ".tmp"
+            urllib.request.urlretrieve(url, path + tmpName)
+            os.rename(path + tmpName, path + filename)
         except:
             continue
