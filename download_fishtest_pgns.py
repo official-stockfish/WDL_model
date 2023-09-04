@@ -1,7 +1,10 @@
 import urllib.request, urllib.error, urllib.parse
 import argparse, time, re, os
 
-parser = argparse.ArgumentParser()
+parser = argparse.ArgumentParser(
+    description="Download pgns from completed LTC tests on fishtest.",
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+)
 
 parser.add_argument(
     "--path",
@@ -18,6 +21,12 @@ parser.add_argument(
     type=int,
     default=1,
     help="page of LTC tests to download from",
+)
+parser.add_argument(
+    "--leniency",
+    type=int,
+    default=3,
+    help="one more consecutive HTTP error causes the download of a test to be stopped",
 )
 args = parser.parse_args()
 if args.path == "":
@@ -74,24 +83,33 @@ for test, dateStr in ids:
     p = re.compile("<a href=/api/pgn/([a-z0-9]*-[0-9]*).pgn>")
     response = urllib.request.urlopen(url)
     webContent = response.read().decode("utf-8").splitlines()
-    first = True
+    first, countErrors = True, 0
     for line in reversed(webContent):  # download test-0.pgn last
         m = p.search(line)
         if m:
             filename = m.group(1) + ".pgn"
             if os.path.exists(path + filename):
+                countErrors = 0
                 continue
         else:
             continue
         time.sleep(0.1)  # be server friendly... wait a bit between requests
         url = "http://tests.stockfishchess.org/api/pgn/" + filename
+        if first:
+            _, _, number = m.group(1).partition("-")
+            print(f"  Fetching {int(number)+1} missing pgns ...")
+            first = False
         try:
-            if first:
-                _, _, number = m.group(1).partition("-")
-                print(f"  Fetching {int(number)+1} missing pgn files ...")
-                first = False
             tmpName = test + ".tmp"
             urllib.request.urlretrieve(url, path + tmpName)
             os.rename(path + tmpName, path + filename)
-        except:
+            countErrors = 0
+        except urllib.error.HTTPError as error:
+            print(f"  HTTP Error {error.code} occurred for URL: {url}")
+            countErrors += 1
+            if countErrors > args.leniency:
+                print(f"  Skipping remaining pgns of test {test} ...")
+                break
+        except Exception as ex:
+            print(f'  error: caught exception "{ex}"')
             continue
