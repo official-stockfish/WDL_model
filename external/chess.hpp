@@ -25,7 +25,7 @@ Source: https://github.com/Disservin/chess-library
 */
 
 /*
-VERSION: 0.1.7
+VERSION: 0.1.10
 */
 
 #ifndef CHESS_HPP
@@ -353,7 +353,7 @@ class BitField16 {
 
    private:
     static constexpr uint16_t group_size_ = 4;  // size of each group
-    uint16_t value_;
+    uint16_t value_                       = 0;
 };
 
 class CastlingRights {
@@ -426,7 +426,7 @@ class CastlingRights {
      bq   bk   wq   wk
      3    2    1    0    // group index
      */
-    BitField16 castling_rights_;
+    BitField16 castling_rights_ = {};
 };
 
 struct State {
@@ -690,6 +690,7 @@ static inline void trim(std::string &s) {
 }
 
 [[nodiscard]] constexpr PieceType typeOfPiece(Piece piece) {
+    if (piece == Piece::NONE) return PieceType::NONE;
     return static_cast<PieceType>(static_cast<int>(piece) % 6);
 }
 
@@ -1438,7 +1439,7 @@ class Board {
     [[nodiscard]] Square enpassantSq() const { return enpassant_sq_; }
     [[nodiscard]] CastlingRights castlingRights() const { return castling_rights_; }
     [[nodiscard]] int halfMoveClock() const { return half_moves_; }
-    [[nodiscard]] int fullMoveNumber() const { return full_moves_; }
+    [[nodiscard]] int fullMoveNumber() const { return 1 + plies_played_ / 2; }
 
     void set960(bool is960) {
         chess960_ = is960;
@@ -1495,16 +1496,14 @@ class Board {
 
     std::vector<State> prev_states_;
 
-    U64 pieces_bb_[2][6]{};
-
-    std::array<Piece, 64> board_{};
+    U64 pieces_bb_[2][6]         = {};
+    std::array<Piece, 64> board_ = {};
 
     U64 hash_key_ = 0ULL;
+    U64 occ_all_  = 0ULL;
 
-    U64 occ_all_ = 0ULL;
-
-    CastlingRights castling_rights_;
-    uint16_t full_moves_ = 1;
+    CastlingRights castling_rights_ = {};
+    uint16_t plies_played_          = 0;
 
     Color side_to_move_  = Color::WHITE;
     Square enpassant_sq_ = Square::NO_SQ;
@@ -1544,9 +1543,13 @@ inline void Board::setFenInternal(std::string fen) {
     const std::string &en_passant = params[3];
 
     half_moves_ = std::stoi(params.size() > 4 ? params[4] : "0");
-    full_moves_ = std::stoi(params.size() > 4 ? params[5] : "1") * 2;
+    plies_played_ = std::stoi(params.size() > 5 ? params[5] : "1") * 2 - 2;
 
     side_to_move_ = (move_right == "w") ? Color::WHITE : Color::BLACK;
+
+    if (side_to_move_ == Color::BLACK) {
+        plies_played_++;
+    }
 
     auto square = Square(56);
     for (char curr : position) {
@@ -1702,7 +1705,7 @@ inline void Board::setFen(const std::string &fen) { setFenInternal(fen); }
     else
         ss << " " << squareToString[enpassant_sq_] << " ";
 
-    ss << int(half_moves_) << " " << int(full_moves_ / 2);
+    ss << halfMoveClock() << " " << fullMoveNumber();
 
     // Return the resulting FEN string
     return ss.str();
@@ -1747,8 +1750,8 @@ inline std::ostream &operator<<(std::ostream &os, const Board &b) {
     os << "\n\n";
     os << "Side to move: " << static_cast<int>(b.side_to_move_) << "\n";
     os << "Castling rights: " << b.getCastleString() << "\n";
-    os << "Halfmoves: " << static_cast<int>(b.half_moves_) << "\n";
-    os << "Fullmoves: " << static_cast<int>(b.full_moves_) / 2 << "\n";
+    os << "Halfmoves: " << b.halfMoveClock() << "\n";
+    os << "Fullmoves: " << b.fullMoveNumber() << "\n";
     os << "EP: " << static_cast<int>(b.enpassant_sq_) << "\n";
     os << "Hash: " << b.hash_key_ << "\n";
 
@@ -1893,7 +1896,7 @@ inline void Board::makeMove(const Move &move) {
     prev_states_.emplace_back(hash_key_, castling_rights_, enpassant_sq_, half_moves_, captured);
 
     half_moves_++;
-    full_moves_++;
+    plies_played_++;
 
     if (enpassant_sq_ != NO_SQ) hash_key_ ^= zobrist::enpassant(utils::squareFile(enpassant_sq_));
     enpassant_sq_ = NO_SQ;
@@ -2018,7 +2021,7 @@ inline void Board::unmakeMove(const Move &move) {
     castling_rights_ = prev.castling;
     half_moves_      = prev.half_moves;
 
-    full_moves_--;
+    plies_played_--;
 
     side_to_move_ = ~side_to_move_;
 
@@ -2098,7 +2101,7 @@ inline void Board::makeNullMove() {
 
     side_to_move_ = ~side_to_move_;
 
-    full_moves_++;
+    plies_played_++;
 }
 
 inline void Board::unmakeNullMove() {
@@ -2109,7 +2112,7 @@ inline void Board::unmakeNullMove() {
     half_moves_      = prev.half_moves;
     hash_key_        = prev.hash;
 
-    full_moves_--;
+    plies_played_--;
 
     side_to_move_ = ~side_to_move_;
 
