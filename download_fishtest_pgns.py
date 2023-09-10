@@ -14,7 +14,7 @@ parser.add_argument(
 parser.add_argument(
     "--subdirs",
     action="store_true",
-    help="use PATH/date/test-id/ (sub)directory structure",
+    help="use PATH/variant/date/test-id/ (sub)directory structure",
 )
 parser.add_argument(
     "--page",
