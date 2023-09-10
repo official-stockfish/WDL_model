@@ -76,7 +76,7 @@ for test, dateStr in ids:
     webContent = response.read().decode("utf-8").splitlines()
     meta = {}
     keyStrs = [
-        "adjudication",
+        "adjudication",  # first the keywords that have the value on next but one line
         "base_net",
         "base_options",
         "book",
@@ -87,18 +87,24 @@ for test, dateStr in ids:
         "sprt",
         "tc",
         "threads",
+        "start time",  # then the keywords that appear on the same line as the value
+        "last updated",
     ]
+    p = re.compile("<td>([0-9 :\-]*)</td>")
     for i, line in enumerate(webContent):
         if i < 2:
             continue
-        for keyStr in keyStrs:
+        for keyStr in keyStrs[:-2]:
             if webContent[i - 2].endswith(f"<td>{keyStr}</td>"):
                 meta[keyStr] = line.strip()
+        for keyStr in keyStrs[-2:]:
+            if keyStr in line:
+                meta[keyStr] = p.search(line).group(1)
     for keyStr in keyStrs:
         if keyStr not in meta:
             print(f"Could not find {keyStr} information at {url}.")
     with open(path + test + ".json", "w") as jsonFile:
-        json.dump(meta, jsonFile, indent=4)
+        json.dump(meta, jsonFile, indent=4, sort_keys=True)
 
     print(f"Downloading pgns to {path} ...")
     url = "https://tests.stockfishchess.org/tests/tasks/" + test
