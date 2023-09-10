@@ -84,6 +84,7 @@ for test, dateStr in ids:
         "new_net",
         "new_options",
         "new_tc",
+        "sprt",
         "tc",
         "threads",
     ]
