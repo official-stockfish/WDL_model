@@ -34,8 +34,13 @@ if args.path == "":
 elif args.path[-1] != "/":
     args.path += "/"
 
-if not os.path.exists(args.path):
-    os.makedirs(args.path)
+paths = [args.path]
+if args.subdirs:
+    paths += [args.path + "classical", args.path + "frc", args.path + "dfrc"]
+
+for p in paths:
+    if not os.path.exists(p):
+        os.makedirs(p)
 
 # find the set of fully downloaded Ids (looking in the full file tree)
 p = re.compile("([a-z0-9]*)-0.pgn")  # match only testId-0.pgn
@@ -71,7 +76,27 @@ for line in webContent:
 # download all pgns...
 for test, dateStr in ids:
     if args.subdirs:
-        path = args.path + dateStr + "/" + test + "/"
+        # first check what chess variant was played, based on book name
+        variant = ""
+        url = "https://tests.stockfishchess.org/tests/view/" + test
+        response = urllib.request.urlopen(url)
+        webContent = response.read().decode("utf-8").splitlines()
+        for i, line in enumerate(webContent):
+            if (
+                i >= 2
+                and webContent[i - 2].endswith("<td>book</td>")
+                and (line.endswith(".epd") or line.endswith(".pgn"))
+            ):
+                for v in ["dfrc", "frc"]:
+                    if v in line.lower():
+                        variant = v
+                        break
+                variant = "classical"
+                break
+        if variant == "":
+            variant = "classical"
+            print("Could not find book information, assume classical chess.")
+        path = args.path + variant + "/" + dateStr + "/" + test + "/"
         if not os.path.exists(args.path + dateStr):
             os.makedirs(args.path + dateStr)
         if not os.path.exists(path):
