@@ -1,5 +1,5 @@
 import urllib.request, urllib.error, urllib.parse
-import argparse, time, re, os
+import argparse, time, re, os, json
 
 parser = argparse.ArgumentParser(
     description="Download pgns from completed LTC tests on fishtest.",
@@ -63,13 +63,43 @@ for line in webContent:
             dateStr = line.strip()
         nextlineDate = line.endswith('"run-date">')
 
-# download all pgns...
+# download all pgns, together with some of the tests' meta data...
 for test, dateStr in ids:
     path = args.path + dateStr + "/" + test + "/"
     if not os.path.exists(args.path + dateStr):
         os.makedirs(args.path + dateStr)
     if not os.path.exists(path):
         os.makedirs(path)
+    print(f"Collecting meta data for test {test} ...")
+    url = "https://tests.stockfishchess.org/tests/view/" + test
+    response = urllib.request.urlopen(url)
+    webContent = response.read().decode("utf-8").splitlines()
+    meta = {}
+    keyStrs = [
+        "adjudication",
+        "base_net",
+        "base_options",
+        "book",
+        "book_depth",
+        "new_net",
+        "new_options",
+        "new_tc",
+        "sprt",
+        "tc",
+        "threads",
+    ]
+    for i, line in enumerate(webContent):
+        if i < 2:
+            continue
+        for keyStr in keyStrs:
+            if webContent[i - 2].endswith(f"<td>{keyStr}</td>"):
+                meta[keyStr] = line.strip()
+    for keyStr in keyStrs:
+        if keyStr not in meta:
+            print(f"Could not find {keyStr} information at {url}.")
+    with open(path + test + ".json", "w") as jsonFile:
+        json.dump(meta, jsonFile, indent=4)
+
     print(f"Downloading pgns to {path} ...")
     url = "https://tests.stockfishchess.org/tests/tasks/" + test
     p = re.compile("<a href=/api/pgn/([a-z0-9]*-[0-9]*).pgn>")
