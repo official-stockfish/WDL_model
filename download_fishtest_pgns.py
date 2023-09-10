@@ -82,10 +82,12 @@ for test, dateStr in ids:
         "adjudication",  # first the keywords that have the value on next but one line
         "base_net",
         "base_options",
+        "base_tag",
         "book",
         "book_depth",
         "new_net",
         "new_options",
+        "new_tag",
         "new_tc",
         "sprt",
         "tc",
