@@ -22,12 +22,12 @@ To update Stockfish's internal WDL model, the following steps are needed:
 1. Obtain a large collection of engine-vs-engine games 
 (at fishtest LTC time control) in pgn format and
 save the pgn files in the `pgns` folder. This can, for example, be achieved
-by running `python download_fishtest_pgns.py --path pgns` once a day.
+by running `python download_fishtest_pgns.py` once a day.
 
 2. Use `make` to compile `scoreWDLstat.cpp`, which will produce an executable
 named `scoreWDLstat`.
 
-3. Run `scoreWDLstat` to parse the pgn files in the `pgns` folder. A different
+3. Run `scoreWDLstat -r` to parse the pgn files in the `pgns` folder. A different
 directory can be specified with `scoreWDLstat --dir <path-to-dir>`. The
 computed WDL statistics will be stored in a file called `scoreWDLstat.json`.
 The file will have entries of the form `"('D', 1, 78, 35)": 668132`, meaning

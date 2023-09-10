@@ -8,25 +8,20 @@ parser = argparse.ArgumentParser(
 
 parser.add_argument(
     "--path",
-    default="./",
-    help="path to directory in which to store downloaded pgns",
-)
-parser.add_argument(
-    "--subdirs",
-    action="store_true",
-    help="use PATH/date/test-id/ (sub)directory structure",
+    default="./pgns",
+    help="Downloaded pgns will be stored in PATH/date/test-id/.",
 )
 parser.add_argument(
     "--page",
     type=int,
     default=1,
-    help="page of LTC tests to download from",
+    help="Page of completed LTC tests to download from.",
 )
 parser.add_argument(
     "--leniency",
     type=int,
     default=3,
-    help="one more consecutive HTTP error causes the download of a test to be stopped",
+    help="One more consecutive HTTP error causes the download of a test to be stopped.",
 )
 args = parser.parse_args()
 if args.path == "":
@@ -70,15 +65,12 @@ for line in webContent:
 
 # download all pgns...
 for test, dateStr in ids:
-    if args.subdirs:
-        path = args.path + dateStr + "/" + test + "/"
-        if not os.path.exists(args.path + dateStr):
-            os.makedirs(args.path + dateStr)
-        if not os.path.exists(path):
-            os.makedirs(path)
-    else:
-        path = args.path
-    print(f"""Downloading{"" if args.subdirs else f" {test}'s"} pgns to {path} ...""")
+    path = args.path + dateStr + "/" + test + "/"
+    if not os.path.exists(args.path + dateStr):
+        os.makedirs(args.path + dateStr)
+    if not os.path.exists(path):
+        os.makedirs(path)
+    print(f"Downloading pgns to {path} ...")
     url = "https://tests.stockfishchess.org/tests/tasks/" + test
     p = re.compile("<a href=/api/pgn/([a-z0-9]*-[0-9]*).pgn>")
     response = urllib.request.urlopen(url)
