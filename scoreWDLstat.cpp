@@ -161,10 +161,8 @@ void ana_game(map_t &pos_map, const std::optional<Game> &game, const std::string
         board.set960(true);
     }
 
-    int ply = 0;
-
     for (const auto &move : game.value().moves()) {
-        if (++ply > 400) {
+        if (board.fullMoveNumber() > 200) {
             break;
         }
 
@@ -200,7 +198,7 @@ void ana_game(map_t &pos_map, const std::optional<Game> &game, const std::string
 
         if (key.score != 1002) {  // a score was found
             key.outcome = board.sideToMove() == Color::WHITE ? resultkey.white : resultkey.black;
-            key.move    = (ply + 1) / 2;  // move number
+            key.move    = board.fullMoveNumber();
             const auto knights = builtin::popcount(board.pieces(PieceType::KNIGHT));
             const auto bishops = builtin::popcount(board.pieces(PieceType::BISHOP));
             const auto rooks   = builtin::popcount(board.pieces(PieceType::ROOK));
