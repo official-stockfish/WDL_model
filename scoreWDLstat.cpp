@@ -54,7 +54,7 @@ struct std::hash<Key> {
 // unordered map to count (outcome, move, material, score) tuples in pgns
 using map_t = std::unordered_map<Key, int>;
 
-std::atomic<std::size_t> total_chunks = 1;
+std::atomic<std::size_t> total_chunks = 0;
 
 namespace analysis {
 
