@@ -65,15 +65,18 @@ for line in webContent:
 
 # download all pgns, together with some of the tests' meta data...
 for test, dateStr in ids:
+    url = "https://tests.stockfishchess.org/tests/view/" + test
+    response = urllib.request.urlopen(url)
+    webContent = response.read().decode("utf-8").splitlines()
+    if "<td>spsa</td>" in "".join(webContent):
+        print(f"Skipping SPSA test {test} ...")
+        continue
     path = args.path + dateStr + "/" + test + "/"
     if not os.path.exists(args.path + dateStr):
         os.makedirs(args.path + dateStr)
     if not os.path.exists(path):
         os.makedirs(path)
     print(f"Collecting meta data for test {test} ...")
-    url = "https://tests.stockfishchess.org/tests/view/" + test
-    response = urllib.request.urlopen(url)
-    webContent = response.read().decode("utf-8").splitlines()
     meta = {}
     keyStrs = [
         "adjudication",  # first the keywords that have the value on next but one line
