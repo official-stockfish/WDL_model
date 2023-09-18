@@ -10,6 +10,10 @@ class WdlPlot:
         self.title = title
         self.pgnName = pgnName
 
+        self.fig = None
+        self.axs = None
+
+    def create_fig(self):
         self.fig, self.axs = plt.subplots(
             2, 3, figsize=(11.69 * 1.5, 8.27 * 1.5), constrained_layout=True
         )
@@ -66,7 +70,7 @@ class DataLoader:
         )
         return win, draw, loss
 
-    def convert_to_model(self, win, draw, loss):
+    def get_raw_model_data(self, win, draw, loss):
         coords = sorted(set(list(win.keys()) + list(draw.keys()) + list(loss.keys())))
         xs, ys, zwins, zdraws, zlosses = [], [], [], [], []
         for x, y in coords:
@@ -76,7 +80,13 @@ class DataLoader:
             zwins.append(win[x, y] / total)
             zdraws.append(draw[x, y] / total)
             zlosses.append(loss[x, y] / total)
-        return xs, ys, zwins, zdraws, zlosses
+        return {
+            "xs": xs,
+            "ys": ys,
+            "zwins": zwins,
+            "zdraws": zdraws,
+            "zlosses": zlosses,
+        }
 
 
 #
@@ -92,6 +102,22 @@ class ModelFit:
 
     def winmodel(x, a, b):
         return 1.0 / (1.0 + np.exp(-(x - a) / b))
+
+    def normalized_axis(ax, normalize_to_pawn_value):
+        ax2 = ax.twiny()
+        tickmin = int(np.ceil(ax.get_xlim()[0] / normalize_to_pawn_value)) * 2
+        tickmax = int(np.floor(ax.get_xlim()[1] / normalize_to_pawn_value)) * 2 + 1
+        new_tick_locations = np.array(
+            [x / 2 * normalize_to_pawn_value for x in range(tickmin, tickmax)]
+        )
+
+        def tick_function(X):
+            V = X / normalize_to_pawn_value
+            return [(f"{z:.0f}" if z % 1 < 0.1 else "") for z in V]
+
+        ax2.set_xlim(ax.get_xlim())
+        ax2.set_xticks(new_tick_locations)
+        ax2.set_xticklabels(tick_function(new_tick_locations))
 
     def poly3(self, x, a, b, c, d):
         xnp = np.asarray(x) / self.y_data_target
@@ -113,41 +139,59 @@ class ModelFit:
         d = 1000 - w - l
         return w, d, l
 
-    def normalized_axis(self, ax):
-        ax2 = ax.twiny()
-        tickmin = int(np.ceil(ax.get_xlim()[0] / self.normalize_to_pawn_value)) * 2
-        tickmax = int(np.floor(ax.get_xlim()[1] / self.normalize_to_pawn_value)) * 2 + 1
-        new_tick_locations = np.array(
-            [x / 2 * self.normalize_to_pawn_value for x in range(tickmin, tickmax)]
-        )
-
-        def tick_function(X):
-            V = X / self.normalize_to_pawn_value
-            return [(f"{z:.0f}" if z % 1 < 0.1 else "") for z in V]
-
-        ax2.set_xlim(ax.get_xlim())
-        ax2.set_xticks(new_tick_locations)
-        ax2.set_xticklabels(tick_function(new_tick_locations))
-
 
 class WdlModel:
     def __init__(self, args, plot):
         self.args = args
         self.plot = plot
 
-    def fit_model(self, xs, ys, zwins, zdraws, zlosses):
-        print(f"Fit WDL model based on {self.args.yData}.")
-        #
-        # convert to model, fit the winmodel a and b,
-        # for a given value of the move/material counter
-        #
+        if self.args.plot != "no":
+            self.plot.create_fig()
+
+    def sample_curve_y(self, xdata, ywindata, ydrawdata, ylossdata, popt):
+        # plot sample curve at yDataTarget
+        self.plot.axs[0, 0].plot(xdata, ywindata, "b.", label="Measured winrate")
+        self.plot.axs[0, 0].plot(xdata, ydrawdata, "g.", label="Measured drawrate")
+        self.plot.axs[0, 0].plot(xdata, ylossdata, "c.", label="Measured lossrate")
+
+        ymodel = []
+        for x in xdata:
+            ymodel.append(ModelFit.winmodel(x, popt[0], popt[1]))
+        self.plot.axs[0, 0].plot(xdata, ymodel, "r-", label="Model")
+
+        ymodel = []
+        for x in xdata:
+            ymodel.append(ModelFit.winmodel(-x, popt[0], popt[1]))
+        self.plot.axs[0, 0].plot(xdata, ymodel, "r-")
+
+        ymodel = []
+        for x in xdata:
+            ymodel.append(
+                1
+                - ModelFit.winmodel(x, popt[0], popt[1])
+                - ModelFit.winmodel(-x, popt[0], popt[1])
+            )
+        self.plot.axs[0, 0].plot(xdata, ymodel, "r-")
+
+        self.plot.axs[0, 0].set_xlabel(
+            "Evaluation [lower: Internal Value units, upper: Pawns]"
+        )
+        self.plot.axs[0, 0].set_ylabel("outcome")
+        self.plot.axs[0, 0].legend(fontsize="small")
+        self.plot.axs[0, 0].set_title(
+            f"Comparison of model and measured data at {self.args.yData} {self.args.yDataTarget}"
+        )
+        xmax = ((3 * self.args.NormalizeToPawnValue) // 100 + 1) * 100
+        self.plot.axs[0, 0].set_xlim([-xmax, xmax])
+
+        ModelFit.normalized_axis(self.plot.axs[0, 0], self.args.NormalizeToPawnValue)
+
+    def extract_model_data(self, xs, ys, zwins, zdraws, zlosses, func):
         scores, moms, winrate, drawrate, lossrate = xs, ys, zwins, zdraws, zlosses
 
         model_ms, model_as, model_bs = [], [], []
 
         grouping = 1
-
-        fit = ModelFit(args.yDataTarget, self.args.NormalizeToPawnValue)
 
         # mom = move or material, depending on self.args.yData
         for mom in range(self.args.yDataMin, self.args.yDataMax + 1, grouping):
@@ -175,49 +219,23 @@ class WdlModel:
             model_as.append(popt[0])
             model_bs.append(popt[1])
 
-            # plot sample curve at yDataTarget
-            if self.args.plot != "no" and mom == self.args.yDataTarget:
-                self.plot.axs[0, 0].plot(
-                    xdata, ywindata, "b.", label="Measured winrate"
-                )
-                self.plot.axs[0, 0].plot(
-                    xdata, ydrawdata, "g.", label="Measured drawrate"
-                )
-                self.plot.axs[0, 0].plot(
-                    xdata, ylossdata, "c.", label="Measured lossrate"
-                )
+            if self.args.plot != "no" and mom == self.args.yDataTarget and func != None:
+                func(xdata, ywindata, ydrawdata, ylossdata, popt)
 
-                ymodel = []
-                for x in xdata:
-                    ymodel.append(ModelFit.winmodel(x, popt[0], popt[1]))
-                self.plot.axs[0, 0].plot(xdata, ymodel, "r-", label="Model")
+        return model_as, model_bs, model_ms
 
-                ymodel = []
-                for x in xdata:
-                    ymodel.append(ModelFit.winmodel(-x, popt[0], popt[1]))
-                self.plot.axs[0, 0].plot(xdata, ymodel, "r-")
+    def fit_model(self, xs, ys, zwins, zdraws, zlosses):
+        print(f"Fit WDL model based on {self.args.yData}.")
+        #
+        # convert to model, fit the winmodel a and b,
+        # for a given value of the move/material counter
+        #
 
-                ymodel = []
-                for x in xdata:
-                    ymodel.append(
-                        1
-                        - ModelFit.winmodel(x, popt[0], popt[1])
-                        - ModelFit.winmodel(-x, popt[0], popt[1])
-                    )
-                self.plot.axs[0, 0].plot(xdata, ymodel, "r-")
+        fit = ModelFit(self.args.yDataTarget, self.args.NormalizeToPawnValue)
 
-                self.plot.axs[0, 0].set_xlabel(
-                    "Evaluation [lower: Internal Value units, upper: Pawns]"
-                )
-                self.plot.axs[0, 0].set_ylabel("outcome")
-                self.plot.axs[0, 0].legend(fontsize="small")
-                self.plot.axs[0, 0].set_title(
-                    f"Comparison of model and measured data at {self.args.yData} {self.args.yDataTarget}"
-                )
-                xmax = ((3 * self.args.NormalizeToPawnValue) // 100 + 1) * 100
-                self.plot.axs[0, 0].set_xlim([-xmax, xmax])
-
-                fit.normalized_axis(self.plot.axs[0, 0])
+        model_as, model_bs, model_ms = self.extract_model_data(
+            xs, ys, zwins, zdraws, zlosses, self.sample_curve_y
+        )
 
         #
         # now capture the functional behavior of a and b as a function of the move counter
@@ -258,41 +276,43 @@ class WdlModel:
             % tuple(popt_bs)
         )
 
-        if self.args.plot != "no":
-            # graphs of a and b as a function of move/material
-            print("Plotting move/material dependence of model parameters.")
-            self.plot.axs[1, 0].plot(model_ms, model_as, "b.", label="as")
-            self.plot.axs[1, 0].plot(
-                model_ms,
-                fit.poly3(model_ms, *popt_as),
-                "r-",
-                label="fit: " + label_as,
-            )
-            self.plot.axs[1, 0].plot(model_ms, model_bs, "g.", label="bs")
-            self.plot.axs[1, 0].plot(
-                model_ms,
-                fit.poly3(model_ms, *popt_bs),
-                "m-",
-                label="fit: " + label_bs,
-            )
+        return {
+            "popt_as": popt_as,
+            "popt_bs": popt_bs,
+            "model_ms": model_ms,
+            "model_as": model_as,
+            "model_bs": model_bs,
+            "label_as": label_as,
+            "label_bs": label_bs,
+        }
 
-            self.plot.axs[1, 0].set_xlabel(self.args.yData)
-            self.plot.axs[1, 0].set_ylabel("parameters (in internal value units)")
-            self.plot.axs[1, 0].legend(fontsize="x-small")
-            self.plot.axs[1, 0].set_title("Winrate model parameters")
-            self.plot.axs[1, 0].set_ylim(bottom=0.0)
+    def create_plot(self, raw_model_data, model):
+        # graphs of a and b as a function of move/material
+        print("Plotting move/material dependence of model parameters.")
 
-        return popt_as, popt_bs
+        fit = ModelFit(self.args.yDataTarget, self.args.NormalizeToPawnValue)
 
-    def create_plot(
-        self,
-        popt_as,
-        popt_bs,
-        xs,
-        ys,
-        zwins,
-        zdraws,
-    ):
+        self.plot.axs[1, 0].plot(model["model_ms"], model["model_as"], "b.", label="as")
+        self.plot.axs[1, 0].plot(
+            model["model_ms"],
+            fit.poly3(model["model_ms"], *model["popt_as"]),
+            "r-",
+            label="fit: " + model["label_as"],
+        )
+        self.plot.axs[1, 0].plot(model["model_ms"], model["model_bs"], "g.", label="bs")
+        self.plot.axs[1, 0].plot(
+            model["model_ms"],
+            fit.poly3(model["model_ms"], *model["popt_bs"]),
+            "m-",
+            label="fit: " + model["label_bs"],
+        )
+
+        self.plot.axs[1, 0].set_xlabel(self.args.yData)
+        self.plot.axs[1, 0].set_ylabel("parameters (in internal value units)")
+        self.plot.axs[1, 0].legend(fontsize="x-small")
+        self.plot.axs[1, 0].set_title("Winrate model parameters")
+        self.plot.axs[1, 0].set_ylim(bottom=0.0)
+
         # now generate contour plots
         contourlines = [0, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.97, 1.0]
 
@@ -314,10 +334,12 @@ class WdlModel:
         xmax = ((3 * self.args.NormalizeToPawnValue) // 100 + 1) * 100
         ymin, ymax = self.args.yPlotMin, self.args.yDataMax
         grid_x, grid_y = np.mgrid[xmin:xmax:30j, ymin:ymax:22j]
-        points = np.array(list(zip(xs, ys)))
+        points = np.array(list(zip(raw_model_data["xs"], raw_model_data["ys"])))
 
         # data
-        zz = griddata(points, zwins, (grid_x, grid_y), method="linear")
+        zz = griddata(
+            points, raw_model_data["zwins"], (grid_x, grid_y), method="linear"
+        )
         cp = self.plot.axs[0, 1].contourf(grid_x, grid_y, zz, contourlines)
         self.plot.fig.colorbar(cp, ax=self.plot.axs[:, -1], shrink=0.618)
         CS = self.plot.axs[0, 1].contour(
@@ -326,14 +348,21 @@ class WdlModel:
         self.plot.axs[0, 1].clabel(CS, inline=1, colors="black")
         self.plot.axs[0, 1].set_title("Data: Fraction of positions leading to a win")
 
-        fit = ModelFit(args.yDataTarget, self.args.NormalizeToPawnValue)
-
-        fit.normalized_axis(self.plot.axs[0, 1])
+        ModelFit.normalized_axis(self.plot.axs[0, 1], self.args.NormalizeToPawnValue)
 
         # model
         if self.args.fit:
-            for i in range(0, len(xs)):
-                zwins[i] = fit.wdl(xs[i], ys[i], popt_as, popt_bs)[0] / 1000.0
+            zwins = []
+            for i in range(0, len(raw_model_data["xs"])):
+                zwins.append(
+                    fit.wdl(
+                        raw_model_data["xs"][i],
+                        raw_model_data["ys"][i],
+                        model["popt_as"],
+                        model["popt_bs"],
+                    )[0]
+                    / 1000.0
+                )
             zz = griddata(points, zwins, (grid_x, grid_y), method="linear")
             cp = self.plot.axs[1, 1].contourf(grid_x, grid_y, zz, contourlines)
             CS = self.plot.axs[1, 1].contour(
@@ -343,28 +372,41 @@ class WdlModel:
             self.plot.axs[1, 1].set_title(
                 "Model: Fraction of positions leading to a win"
             )
-            fit.normalized_axis(self.plot.axs[1, 1])
+            ModelFit.normalized_axis(
+                self.plot.axs[1, 1], self.args.NormalizeToPawnValue
+            )
 
         # for draws, plot between -2 and 2 pawns, using a 30x22 grid
         xmin = -((2 * self.args.NormalizeToPawnValue) // 100 + 1) * 100
         xmax = ((2 * self.args.NormalizeToPawnValue) // 100 + 1) * 100
         grid_x, grid_y = np.mgrid[xmin:xmax:30j, ymin:ymax:22j]
-        points = np.array(list(zip(xs, ys)))
+        points = np.array(list(zip(raw_model_data["xs"], raw_model_data["ys"])))
 
         # data
-        zz = griddata(points, zdraws, (grid_x, grid_y), method="linear")
+        zz = griddata(
+            points, raw_model_data["zdraws"], (grid_x, grid_y), method="linear"
+        )
         cp = self.plot.axs[0, 2].contourf(grid_x, grid_y, zz, contourlines)
         CS = self.plot.axs[0, 2].contour(
             grid_x, grid_y, zz, contourlines, colors="black"
         )
         self.plot.axs[0, 2].clabel(CS, inline=1, colors="black")
         self.plot.axs[0, 2].set_title("Data: Fraction of positions leading to a draw")
-        fit.normalized_axis(self.plot.axs[0, 2])
+        ModelFit.normalized_axis(self.plot.axs[0, 2], self.args.NormalizeToPawnValue)
 
         # model
         if self.args.fit:
-            for i in range(0, len(xs)):
-                zwins[i] = fit.wdl(xs[i], ys[i], popt_as, popt_bs)[1] / 1000.0
+            zwins = []
+            for i in range(0, len(raw_model_data["xs"])):
+                zwins.append(
+                    fit.wdl(
+                        raw_model_data["xs"][i],
+                        raw_model_data["ys"][i],
+                        model["popt_as"],
+                        model["popt_bs"],
+                    )[1]
+                    / 1000.0
+                )
             zz = griddata(points, zwins, (grid_x, grid_y), method="linear")
             cp = self.plot.axs[1, 2].contourf(grid_x, grid_y, zz, contourlines)
             CS = self.plot.axs[1, 2].contour(
@@ -374,7 +416,9 @@ class WdlModel:
             self.plot.axs[1, 2].set_title(
                 "Model: Fraction of positions leading to a draw"
             )
-            fit.normalized_axis(self.plot.axs[1, 2])
+            ModelFit.normalized_axis(
+                self.plot.axs[1, 2], self.args.NormalizeToPawnValue
+            )
 
         self.plot.fig.align_labels()
 
@@ -454,7 +498,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    plot = None
     if args.yData == "material":
         # fix default values for material
         if args.yDataMax == 120 and args.yDataMin == 3:
@@ -465,16 +508,6 @@ if __name__ == "__main__":
         args.yPlotMin = (
             max(10, args.yDataMin) if args.yData == "move" else args.yDataMin
         )
-
-    if args.plot != "no":
-        if args.fit:
-            title = "Summary of win-draw-loss model analysis"
-            pgnName = "WDL_model_summary.png"
-        else:
-            title = "Summary of win-draw-loss data"
-            pgnName = f"WDL_data_{args.yData}.png"
-
-        plot = WdlPlot(title, pgnName)
 
     data_loader = DataLoader(args.filename)
 
@@ -488,15 +521,21 @@ if __name__ == "__main__":
         args.yData,
     )
 
-    xs, ys, zwins, zdraws, zlosses = data_loader.convert_to_model(win, draw, loss)
+    if args.fit:
+        title = "Summary of win-draw-loss model analysis"
+        pgnName = "WDL_model_summary.png"
+    else:
+        title = "Summary of win-draw-loss data"
+        pgnName = f"WDL_data_{args.yData}.png"
 
-    wdl_model = WdlModel(args, plot)
+    wdl_model = WdlModel(args, WdlPlot(title, pgnName))
 
-    popt_as, popt_bs = (
-        wdl_model.fit_model(xs, ys, zwins, zdraws, zlosses)
-        if args.fit
-        else (None, None)
-    )
+    raw_model_data = data_loader.get_raw_model_data(win, draw, loss)
+
+    model = wdl_model.fit_model(**raw_model_data) if args.fit else (None, None)
 
     if args.plot != "no":
-        wdl_model.create_plot(popt_as, popt_bs, xs, ys, zwins, zdraws)
+        wdl_model.create_plot(
+            raw_model_data,
+            model,
+        )
