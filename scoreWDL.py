@@ -451,6 +451,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    plot = None
     if args.yData == "material":
         # fix default values for material
         if args.yDataMax == 120 and args.yDataMin == 3:
