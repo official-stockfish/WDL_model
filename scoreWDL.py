@@ -139,7 +139,7 @@ class WdlModel:
         print(f"Fit WDL model based on {self.args.yData}.")
         #
         # convert to model, fit the winmodel a and b,
-        # for a given value of the move counter
+        # for a given value of the move/material counter
         #
         scores, moms, winrate, drawrate, lossrate = xs, ys, zwins, zdraws, zlosses
 
@@ -464,9 +464,7 @@ if __name__ == "__main__":
             title = "Summary of win-draw-loss data"
             pgnName = f"WDL_data_{args.yData}.png"
 
-        plot = WdlPlot(
-            "Summary of win-draw-loss model analysis", "WDL_model_summary.png"
-        )
+        plot = WdlPlot(title, pgnName)
 
     data_loader = DataLoader(args.filename)
 
