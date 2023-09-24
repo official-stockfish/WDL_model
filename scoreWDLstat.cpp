@@ -114,8 +114,9 @@ void ana_game(map_t &pos_map, const std::optional<Game> &game, const std::string
         return;
     }
 
+    bool do_filter    = !regex_str.empty();
     Color filter_side = Color::NONE;
-    if (!regex_str.empty()) {
+    if (do_filter) {
         if (game.value().headers().find("White") == game.value().headers().end() ||
             game.value().headers().find("Black") == game.value().headers().end()) {
             return;
@@ -128,7 +129,7 @@ void ana_game(map_t &pos_map, const std::optional<Game> &game, const std::string
             if (filter_side == Color::NONE) {
                 filter_side = Color::BLACK;
             } else {
-                filter_side = Color::NONE;
+                do_filter = false;
             }
         }
     }
@@ -171,7 +172,7 @@ void ana_game(map_t &pos_map, const std::optional<Game> &game, const std::string
         Key key;
         key.score = 1002;
 
-        if (filter_side == Color::NONE || filter_side == board.sideToMove()) {
+        if (!do_filter || filter_side == board.sideToMove()) {
             if (delimiter_pos != std::string::npos && move.comment != "book") {
                 const auto match_score = move.comment.substr(0, delimiter_pos);
 
