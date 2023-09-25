@@ -15,6 +15,7 @@
 #include "external/threadpool.hpp"
 
 namespace fs = std::filesystem;
+using json   = nlohmann::json;
 
 using namespace chess;
 
@@ -108,20 +109,20 @@ static constexpr int map_size = 1200000;
 /// @brief Analyze a single game and update the position map, apply filter if present
 /// @param pos_map
 /// @param game
-/// @param regex_str
-void ana_game(map_t &pos_map, const std::optional<Game> &game, const std::string &regex_str) {
+/// @param regex_engine
+void ana_game(map_t &pos_map, const std::optional<Game> &game, const std::string &regex_engine) {
     if (game.value().headers().find("Result") == game.value().headers().end()) {
         return;
     }
 
-    bool do_filter    = !regex_str.empty();
+    bool do_filter    = !regex_engine.empty();
     Color filter_side = Color::NONE;
     if (do_filter) {
         if (game.value().headers().find("White") == game.value().headers().end() ||
             game.value().headers().find("Black") == game.value().headers().end()) {
             return;
         }
-        std::regex regex(regex_str);
+        std::regex regex(regex_engine);
         if (std::regex_match(game.value().headers().at("White"), regex)) {
             filter_side = Color::WHITE;
         }
@@ -213,7 +214,7 @@ void ana_game(map_t &pos_map, const std::optional<Game> &game, const std::string
     }
 }
 
-void ana_files(map_t &map, const std::vector<std::string> &files, const std::string &regex_str) {
+void ana_files(map_t &map, const std::vector<std::string> &files, const std::string &regex_engine) {
     map.reserve(map_size);
 
     for (const auto &file : files) {
@@ -227,7 +228,7 @@ void ana_files(map_t &map, const std::vector<std::string> &files, const std::str
                 break;
             }
 
-            ana_game(map, game, regex_str);
+            ana_game(map, game, regex_engine);
         }
 
         pgn_file.close();
@@ -257,6 +258,37 @@ void ana_files(map_t &map, const std::vector<std::string> &files, const std::str
     return files;
 }
 
+bool is_matching_book(const std::string &json_filename, const std::regex &regex) {
+    std::ifstream json_file(json_filename);
+    if (!json_file.is_open()) {
+        return false;
+    }
+
+    json metadata;
+    json_file >> metadata;
+    json_file.close();
+
+    if (metadata.find("book") != metadata.end()) {
+        std::string book = metadata["book"];
+        return std::regex_match(book, regex);
+    }
+
+    return false;
+}
+
+void filter_files(std::vector<std::string> &file_list, const std::regex &regex, bool invert) {
+    file_list.erase(std::remove_if(file_list.begin(), file_list.end(),
+                                   [&regex, invert](const std::string &pgn_filename) {
+                                       std::string json_filename =
+                                           pgn_filename.substr(0, pgn_filename.find_last_of('-')) +
+                                           ".json";
+
+                                       bool match = is_matching_book(json_filename, regex);
+                                       return invert ? match : !match;
+                                   }),
+                    file_list.end());
+}
+
 /// @brief Split into successive n-sized chunks from pgns.
 /// @param pgns
 /// @param target_chunks
@@ -281,7 +313,7 @@ void ana_files(map_t &map, const std::vector<std::string> &files, const std::str
 }
 
 void process(const std::vector<std::string> &files_pgn, map_t &pos_map,
-             const std::string &regex_str) {
+             const std::string &regex_engine) {
     // Create more chunks than threads to prevent threads from idling.
     int target_chunks = 4 * std::max(1, int(std::thread::hardware_concurrency()));
 
@@ -300,9 +332,9 @@ void process(const std::vector<std::string> &files_pgn, map_t &pos_map,
     std::cout << "\rProgress: " << total_chunks << "/" << files_chunked.size() << std::flush;
 
     for (const auto &files : files_chunked) {
-        pool.enqueue([&files, &regex_str, &map_mutex, &pos_map, &files_chunked]() {
+        pool.enqueue([&files, &regex_engine, &map_mutex, &pos_map, &files_chunked]() {
             map_t map;
-            analysis::ana_files(map, files, regex_str);
+            analysis::ana_files(map, files, regex_engine);
 
             total_chunks++;
 
@@ -331,7 +363,7 @@ void process(const std::vector<std::string> &files_pgn, map_t &pos_map,
 void save(const map_t &pos_map, const std::string &json_filename) {
     std::uint64_t total = 0;
 
-    nlohmann::json j;
+    json j;
 
     for (const auto &pair : pos_map) {
         const auto map_key_t = static_cast<std::string>(pair.first);
@@ -364,18 +396,21 @@ void print_usage(char const *program_name) {
     std::cout << "  -r                    Search for pgns recursively in subdirectories"
               << std::endl;
     std::cout << "  --matchEngine <regex> Filter data based on engine name" << std::endl;
+    std::cout << "  --matchBook <regex>   Filter data based on book name" << std::endl;
+    std::cout << "  --matchBookInvert     Invert the filter" << std::endl;
     std::cout << "  -o <path>             Path to output json file" << std::endl;
 }
 
 /// @brief
 /// @param argc
-/// @param argv Possible ones are --file, --dir, -r, --matchEngine and -o
+/// @param argv Possible ones are --file, --dir, -r, --matchEngine, --matchBook, --matchBookInvert
+/// and -o
 /// @return
 int main(int argc, char const *argv[]) {
     const std::vector<std::string> args(argv + 1, argv + argc);
 
     std::vector<std::string> files_pgn;
-    std::string regex_str, json_filename = "scoreWDLstat.json";
+    std::string regex_engine, regex_book, json_filename = "scoreWDLstat.json";
 
     std::vector<std::string>::const_iterator pos;
 
@@ -398,8 +433,19 @@ int main(int argc, char const *argv[]) {
         files_pgn = get_files(path, recursive);
     }
 
+    if (find_argument(args, pos, "--matchBook")) {
+        regex_book = *std::next(pos);
+        if (!regex_book.empty()) {
+            bool invert = find_argument(args, pos, "--matchBookInvert", true);
+            std::cout << "Filtering pgn files " << (invert ? "not " : "")
+                      << "matching the book name " << regex_book << std::endl;
+            std::regex regex(regex_book);
+            filter_files(files_pgn, regex, invert);
+        }
+    }
+
     if (find_argument(args, pos, "--matchEngine")) {
-        regex_str = *std::next(pos);
+        regex_engine = *std::next(pos);
     }
 
     if (find_argument(args, pos, "-o")) {
@@ -411,7 +457,7 @@ int main(int argc, char const *argv[]) {
 
     const auto t0 = std::chrono::high_resolution_clock::now();
 
-    process(files_pgn, pos_map, regex_str);
+    process(files_pgn, pos_map, regex_engine);
 
     const auto t1 = std::chrono::high_resolution_clock::now();
 
