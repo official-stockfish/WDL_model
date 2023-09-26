@@ -312,9 +312,7 @@ class WdlModel:
         # for wins, plot between -1 and 3 pawns, using a 30x22 grid
         xmin = -((1 * self.args.NormalizeToPawnValue) // 100 + 1) * 100
         xmax = ((3 * self.args.NormalizeToPawnValue) // 100 + 1) * 100
-        ymin, ymax = self.args.yDataMin, self.args.yDataMax
-        if self.args.yData == "move":
-            ymin = max(10, self.args.yDataMin)  #  hide ugly parts for now TODO
+        ymin, ymax = self.args.yPlotMin, self.args.yDataMax
         grid_x, grid_y = np.mgrid[xmin:xmax:30j, ymin:ymax:22j]
         points = np.array(list(zip(xs, ys)))
 
@@ -437,6 +435,11 @@ if __name__ == "__main__":
         help="Value of yData at which new rescaled 100cp should correspond to 50:50 winning chances.",
     )
     parser.add_argument(
+        "--yPlotMin",
+        type=int,
+        help="Overrides --yDataMin for plotting.",
+    )
+    parser.add_argument(
         "--fit",
         action=argparse.BooleanOptionalAction,
         default=True,
@@ -456,6 +459,12 @@ if __name__ == "__main__":
         # fix default values for material
         if args.yDataMax == 120 and args.yDataMin == 3:
             args.yDataMin, args.yDataMax = 10, 78
+
+    if args.yPlotMin is None:
+        # hide ugly parts for now TODO
+        args.yPlotMin = (
+            max(10, args.yDataMin) if args.yData == "move" else args.yDataMin
+        )
 
     if args.plot != "no":
         if args.fit:
