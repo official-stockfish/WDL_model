@@ -18,9 +18,17 @@ ifeq ($(uname_S), Darwin)
 	NATIVE =	
 endif
 
-all:
-	$(CXX) $(CXXFLAGS) $(NATIVE) -o scoreWDLstat scoreWDLstat.cpp
+SRC_FILE = scoreWDLstat.cpp
+EXE_FILE = scoreWDLstat
+HEADERS = external/chess.hpp external/json.hpp external/threadpool.hpp
+
+all: $(EXE_FILE)
+
+$(EXE_FILE): $(SRC_FILE) $(HEADERS)
+	$(CXX) $(CXXFLAGS) $(NATIVE) -o $(EXE_FILE) $(SRC_FILE)
+
 format:
-	clang-format -i scoreWDLstat.cpp
+	clang-format -i $(SRC_FILE)
+
 clean:
-	rm -f scoreWDLstat scoreWDLstat.exe
+	rm -f $(EXE_FILE) $(EXE_FILE).exe
