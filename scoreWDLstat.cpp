@@ -278,11 +278,12 @@ using map_meta = std::map<std::string, json>;
             test_map[test_id] = test_filename;
         } else if (test_map[test_id] != test_filename) {
             if (test_warned.find(test_filename) == test_warned.end()) {
-                std::cout << "Warning, detected a duplicate of test " << test_id << " in directory "
+                std::cout << (allow_duplicates ? "Warning," : "Error:")
+                          << " detected a duplicate of test " << test_id << " in directory "
                           << directory << std::endl;
                 test_warned.insert(test_filename);
                 if (!allow_duplicates) {
-                    std::cout << "Use --allowDuplicates to ignore this warning." << std::endl;
+                    std::cout << "Use --allowDuplicates to continue nonetheless." << std::endl;
                     std::exit(1);
                 }
             }
