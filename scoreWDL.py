@@ -537,7 +537,17 @@ if __name__ == "__main__":
 
     raw_model_data = data_loader.get_raw_model_data(win, draw, loss)
 
-    model = wdl_model.fit_model(**raw_model_data) if args.fit else (None, None)
+    model = (
+        wdl_model.fit_model(
+            raw_model_data.xs,
+            raw_model_data.ys,
+            raw_model_data.zwins,
+            raw_model_data.zdraws,
+            raw_model_data.zlosses,
+        )
+        if args.fit
+        else (None, None)
+    )
 
     if args.plot != "no":
         wdl_model.create_plot(
