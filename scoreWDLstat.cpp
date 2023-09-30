@@ -57,7 +57,7 @@ struct std::hash<Key> {
 using map_t = std::unordered_map<Key, int>;
 
 // map to collect metadata for tests
-using map_meta = std::map<std::string, json>;
+using map_meta = std::unordered_map<std::string, json>;
 
 std::atomic<std::size_t> total_chunks = 0;
 
@@ -302,7 +302,7 @@ void ana_files(map_t &map, const std::vector<std::string> &files, const std::str
 [[nodiscard]] map_meta get_metadata(const std::vector<std::string> &file_list,
                                     bool allow_duplicates) {
     map_meta meta_map;
-    std::map<std::string, std::string> test_map;  // map to check for duplicate tests
+    std::unordered_map<std::string, std::string> test_map;  // map to check for duplicate tests
     std::set<std::string> test_warned;
     for (const auto &pathname : file_list) {
         fs::path path(pathname);
