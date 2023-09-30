@@ -3,6 +3,7 @@ from collections import Counter
 from ast import literal_eval
 from scipy.interpolate import griddata
 from scipy.optimize import curve_fit
+from dataclasses import dataclass
 
 
 class WdlPlot:
@@ -80,13 +81,7 @@ class DataLoader:
             zwins.append(win[x, y] / total)
             zdraws.append(draw[x, y] / total)
             zlosses.append(loss[x, y] / total)
-        return {
-            "xs": xs,
-            "ys": ys,
-            "zwins": zwins,
-            "zdraws": zdraws,
-            "zlosses": zlosses,
-        }
+        return RawModelData(xs, ys, zwins, zdraws, zlosses)
 
 
 #
@@ -138,6 +133,26 @@ class ModelFit:
         l = int(1000 * ModelFit.winmodel(-score, a, b))
         d = 1000 - w - l
         return w, d, l
+
+
+@dataclass
+class RawModelData:
+    xs: list
+    ys: list
+    zwins: list
+    zdraws: list
+    zlosses: list
+
+
+@dataclass
+class ModelData:
+    popt_as: list
+    popt_bs: list
+    model_ms: list
+    model_as: list
+    model_bs: list
+    label_as: str
+    label_bs: str
 
 
 class WdlModel:
@@ -276,17 +291,11 @@ class WdlModel:
             % tuple(popt_bs)
         )
 
-        return {
-            "popt_as": popt_as,
-            "popt_bs": popt_bs,
-            "model_ms": model_ms,
-            "model_as": model_as,
-            "model_bs": model_bs,
-            "label_as": label_as,
-            "label_bs": label_bs,
-        }
+        return ModelData(
+            popt_as, popt_bs, model_ms, model_as, model_bs, label_as, label_bs
+        )
 
-    def create_plot(self, raw_model_data, model):
+    def create_plot(self, raw_model_data: RawModelData, model):
         # graphs of a and b as a function of move/material
         print("Plotting move/material dependence of model parameters.")
 
@@ -334,12 +343,10 @@ class WdlModel:
         xmax = ((3 * self.args.NormalizeToPawnValue) // 100 + 1) * 100
         ymin, ymax = self.args.yPlotMin, self.args.yDataMax
         grid_x, grid_y = np.mgrid[xmin:xmax:30j, ymin:ymax:22j]
-        points = np.array(list(zip(raw_model_data["xs"], raw_model_data["ys"])))
+        points = np.array(list(zip(raw_model_data.xs, raw_model_data.xs)))
 
         # data
-        zz = griddata(
-            points, raw_model_data["zwins"], (grid_x, grid_y), method="linear"
-        )
+        zz = griddata(points, raw_model_data.zwins, (grid_x, grid_y), method="linear")
         cp = self.plot.axs[0, 1].contourf(grid_x, grid_y, zz, contourlines)
         self.plot.fig.colorbar(cp, ax=self.plot.axs[:, -1], shrink=0.618)
         CS = self.plot.axs[0, 1].contour(
@@ -353,13 +360,13 @@ class WdlModel:
         # model
         if self.args.fit:
             zwins = []
-            for i in range(0, len(raw_model_data["xs"])):
+            for i in range(0, len(raw_model_data.xs)):
                 zwins.append(
                     fit.wdl(
-                        raw_model_data["xs"][i],
-                        raw_model_data["ys"][i],
-                        model["popt_as"],
-                        model["popt_bs"],
+                        raw_model_data.xs[i],
+                        raw_model_data.ys[i],
+                        model.popt_as,
+                        model.popt_bs,
                     )[0]
                     / 1000.0
                 )
@@ -380,12 +387,10 @@ class WdlModel:
         xmin = -((2 * self.args.NormalizeToPawnValue) // 100 + 1) * 100
         xmax = ((2 * self.args.NormalizeToPawnValue) // 100 + 1) * 100
         grid_x, grid_y = np.mgrid[xmin:xmax:30j, ymin:ymax:22j]
-        points = np.array(list(zip(raw_model_data["xs"], raw_model_data["ys"])))
+        points = np.array(list(zip(raw_model_data.xs, raw_model_data.ys)))
 
         # data
-        zz = griddata(
-            points, raw_model_data["zdraws"], (grid_x, grid_y), method="linear"
-        )
+        zz = griddata(points, raw_model_data.zdraws, (grid_x, grid_y), method="linear")
         cp = self.plot.axs[0, 2].contourf(grid_x, grid_y, zz, contourlines)
         CS = self.plot.axs[0, 2].contour(
             grid_x, grid_y, zz, contourlines, colors="black"
@@ -397,13 +402,13 @@ class WdlModel:
         # model
         if self.args.fit:
             zwins = []
-            for i in range(0, len(raw_model_data["xs"])):
+            for i in range(0, len(raw_model_data.xs)):
                 zwins.append(
                     fit.wdl(
-                        raw_model_data["xs"][i],
-                        raw_model_data["ys"][i],
-                        model["popt_as"],
-                        model["popt_bs"],
+                        raw_model_data.xs[i],
+                        raw_model_data.ys[i],
+                        model.popt_as,
+                        model.popt_bs,
                     )[1]
                     / 1000.0
                 )
