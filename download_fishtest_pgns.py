@@ -23,6 +23,13 @@ parser.add_argument(
     default=3,
     help="One more consecutive HTTP error causes the download of a test to be stopped.",
 )
+parser.add_argument(
+    "-v",
+    "--verbose",
+    action="count",
+    default=0,
+    help="Increase output with e.g. -v or -vv.",
+)
 args = parser.parse_args()
 if args.path == "":
     args.path = "./"
@@ -69,14 +76,16 @@ for test, dateStr in ids:
     response = urllib.request.urlopen(url)
     webContent = response.read().decode("utf-8").splitlines()
     if "<td>spsa</td>" in "".join(webContent):
-        print(f"Skipping SPSA test {test} ...")
+        if args.verbose >= 1:
+            print(f"Skipping SPSA test {test} ...")
         continue
     path = args.path + dateStr + "/" + test + "/"
     if not os.path.exists(args.path + dateStr):
         os.makedirs(args.path + dateStr)
     if not os.path.exists(path):
         os.makedirs(path)
-    print(f"Collecting meta data for test {test} ...")
+    if args.verbose >= 1:
+        print(f"Collecting meta data for test {test} ...")
     meta = {}
     keyStrs = [
         "adjudication",  # first the keywords that have the value on next but one line
@@ -107,7 +116,8 @@ for test, dateStr in ids:
                 meta[keyStr] = p.search(line).group(1)
     for keyStr in keyStrs:
         if keyStr not in meta:
-            print(f"Could not find {keyStr} information at {url}.")
+            if args.verbose >= 2:
+                print(f"Could not find {keyStr} information at {url}.")
     with open(path + test + ".json", "w") as jsonFile:
         json.dump(meta, jsonFile, indent=4, sort_keys=True)
 
@@ -130,7 +140,8 @@ for test, dateStr in ids:
         url = "http://tests.stockfishchess.org/api/pgn/" + filename
         if first:
             _, _, number = m.group(1).partition("-")
-            print(f"  Fetching {int(number)+1} missing pgns ...")
+            if args.verbose >= 1:
+                print(f"  Fetching {int(number)+1} missing pgns ...")
             first = False
         try:
             tmpName = test + ".tmp"
@@ -138,11 +149,14 @@ for test, dateStr in ids:
             os.rename(path + tmpName, path + filename)
             countErrors = 0
         except urllib.error.HTTPError as error:
-            print(f"  HTTP Error {error.code} occurred for URL: {url}")
+            if args.verbose >= 2:
+                print(f"  HTTP Error {error.code} occurred for URL: {url}")
             countErrors += 1
             if countErrors > args.leniency:
-                print(f"  Skipping remaining pgns of test {test} ...")
+                if args.verbose >= 2:
+                    print(f"  Skipping remaining pgns of test {test} ...")
                 break
         except Exception as ex:
-            print(f'  error: caught exception "{ex}"')
+            if args.verbose >= 2:
+                print(f'  error: caught exception "{ex}"')
             continue
