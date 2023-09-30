@@ -295,25 +295,25 @@ class WdlModel:
             popt_as, popt_bs, model_ms, model_as, model_bs, label_as, label_bs
         )
 
-    def create_plot(self, raw_model_data: RawModelData, model):
+    def create_plot(self, raw_model_data: RawModelData, model: ModelData):
         # graphs of a and b as a function of move/material
         print("Plotting move/material dependence of model parameters.")
 
         fit = ModelFit(self.args.yDataTarget, self.args.NormalizeToPawnValue)
 
-        self.plot.axs[1, 0].plot(model["model_ms"], model["model_as"], "b.", label="as")
+        self.plot.axs[1, 0].plot(model.model_ms, model.model_as, "b.", label="as")
         self.plot.axs[1, 0].plot(
-            model["model_ms"],
-            fit.poly3(model["model_ms"], *model["popt_as"]),
+            model.model_ms,
+            fit.poly3(model.model_ms, *model.popt_as),
             "r-",
-            label="fit: " + model["label_as"],
+            label="fit: " + model.label_as,
         )
-        self.plot.axs[1, 0].plot(model["model_ms"], model["model_bs"], "g.", label="bs")
+        self.plot.axs[1, 0].plot(model.model_ms, model.model_bs, "g.", label="bs")
         self.plot.axs[1, 0].plot(
-            model["model_ms"],
-            fit.poly3(model["model_ms"], *model["popt_bs"]),
+            model.model_ms,
+            fit.poly3(model.model_ms, *model.popt_bs),
             "m-",
-            label="fit: " + model["label_bs"],
+            label="fit: " + model.label_bs,
         )
 
         self.plot.axs[1, 0].set_xlabel(self.args.yData)
