@@ -6,6 +6,7 @@
 #include <iostream>
 #include <mutex>
 #include <regex>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -258,33 +259,85 @@ void ana_files(map_t &map, const std::vector<std::string> &files, const std::str
     return files;
 }
 
-bool is_matching_book(const std::string &json_filename, const std::regex &regex) {
-    std::ifstream json_file(json_filename);
-    if (!json_file.is_open()) {
-        return false;
+// map to collect metadata for tests
+using map_meta = std::map<std::string, json>;
+
+[[nodiscard]] map_meta get_metadata(const std::vector<std::string> &file_list,
+                                    bool allow_duplicates) {
+    map_meta meta_map;
+    std::map<std::string, std::string> test_map;  // map to check for duplicate tests
+    std::set<std::string> test_warned;
+    for (const auto &pathname : file_list) {
+        fs::path path(pathname);
+        std::string directory     = path.parent_path().string();
+        std::string filename      = path.filename().string();
+        std::string test_id       = filename.substr(0, filename.find_last_of('-'));
+        std::string test_filename = pathname.substr(0, pathname.find_last_of('-'));
+
+        if (test_map.find(test_id) == test_map.end()) {
+            test_map[test_id] = test_filename;
+        } else if (test_map[test_id] != test_filename) {
+            if (test_warned.find(test_filename) == test_warned.end()) {
+                std::cout << (allow_duplicates ? "Warning" : "Error")
+                          << ": Detected a duplicate of test " << test_id << " in directory "
+                          << directory << std::endl;
+                test_warned.insert(test_filename);
+                if (!allow_duplicates) {
+                    std::cout << "Use --allowDuplicates to continue nonetheless." << std::endl;
+                    std::exit(1);
+                }
+            }
+        }
+
+        // load the JSON data from disk, only once for each test
+        if (meta_map.find(test_filename) == meta_map.end()) {
+            std::ifstream json_file(test_filename + ".json");
+            if (json_file.is_open()) {
+                json metadata;
+                json_file >> metadata;
+                json_file.close();
+                meta_map[test_filename] = metadata;
+            }
+        }
     }
-
-    json metadata;
-    json_file >> metadata;
-    json_file.close();
-
-    if (metadata.find("book") != metadata.end()) {
-        std::string book = metadata["book"];
-        return std::regex_match(book, regex);
-    }
-
-    return false;
+    return meta_map;
 }
 
-void filter_files(std::vector<std::string> &file_list, const std::regex &regex, bool invert) {
+void filter_files_book(std::vector<std::string> &file_list, const map_meta &meta_map,
+                       const std::regex &regex_book, bool invert) {
     file_list.erase(std::remove_if(file_list.begin(), file_list.end(),
-                                   [&regex, invert](const std::string &pgn_filename) {
-                                       std::string json_filename =
-                                           pgn_filename.substr(0, pgn_filename.find_last_of('-')) +
-                                           ".json";
+                                   [&regex_book, invert, &meta_map](const std::string &pathname) {
+                                       std::string test_filename =
+                                           pathname.substr(0, pathname.find_last_of('-'));
 
-                                       bool match = is_matching_book(json_filename, regex);
-                                       return invert ? match : !match;
+                                       // check if metadata and "book" entry exist
+                                       if (meta_map.find(test_filename) != meta_map.end() &&
+                                           meta_map.at(test_filename).find("book") !=
+                                               meta_map.at(test_filename).end()) {
+                                           std::string book = meta_map.at(test_filename)["book"];
+                                           bool match       = std::regex_match(book, regex_book);
+                                           return invert ? match : !match;
+                                       }
+
+                                       // missing metadata or "book" entry can never match
+                                       return true;
+                                   }),
+                    file_list.end());
+}
+
+void filter_files_sprt(std::vector<std::string> &file_list, const map_meta &meta_map) {
+    file_list.erase(std::remove_if(file_list.begin(), file_list.end(),
+                                   [&meta_map](const std::string &pathname) {
+                                       std::string test_filename =
+                                           pathname.substr(0, pathname.find_last_of('-'));
+
+                                       // check if metadata and "sprt" entry exist
+                                       if (meta_map.find(test_filename) != meta_map.end() &&
+                                           meta_map.at(test_filename).find("sprt") !=
+                                               meta_map.at(test_filename).end()) {
+                                           return false;
+                                       }
+                                       return true;
                                    }),
                     file_list.end());
 }
@@ -395,16 +448,17 @@ void print_usage(char const *program_name) {
     std::cout << "  --dir <path>          Path to directory containing pgns" << std::endl;
     std::cout << "  -r                    Search for pgns recursively in subdirectories"
               << std::endl;
+    std::cout << "  --allowDuplicates     Allow duplicate directories for test pgns" << std::endl;
     std::cout << "  --matchEngine <regex> Filter data based on engine name" << std::endl;
     std::cout << "  --matchBook <regex>   Filter data based on book name" << std::endl;
     std::cout << "  --matchBookInvert     Invert the filter" << std::endl;
+    std::cout << "  --SPRTonly            Analyse only pgns from SPRT tests" << std::endl;
     std::cout << "  -o <path>             Path to output json file" << std::endl;
 }
 
 /// @brief
 /// @param argc
-/// @param argv Possible ones are --file, --dir, -r, --matchEngine, --matchBook, --matchBookInvert
-/// and -o
+/// @param argv See print_usage() for possible arguments
 /// @return
 int main(int argc, char const *argv[]) {
     const std::vector<std::string> args(argv + 1, argv + argc);
@@ -433,6 +487,13 @@ int main(int argc, char const *argv[]) {
         files_pgn = get_files(path, recursive);
     }
 
+    bool allow_duplicates = find_argument(args, pos, "--allowDuplicates", true);
+    auto meta_map         = get_metadata(files_pgn, allow_duplicates);
+
+    if (find_argument(args, pos, "--SPRTonly", true)) {
+        filter_files_sprt(files_pgn, meta_map);
+    }
+
     if (find_argument(args, pos, "--matchBook")) {
         regex_book = *std::next(pos);
         if (!regex_book.empty()) {
@@ -440,7 +501,7 @@ int main(int argc, char const *argv[]) {
             std::cout << "Filtering pgn files " << (invert ? "not " : "")
                       << "matching the book name " << regex_book << std::endl;
             std::regex regex(regex_book);
-            filter_files(files_pgn, regex, invert);
+            filter_files_book(files_pgn, meta_map, regex, invert);
         }
     }
 
