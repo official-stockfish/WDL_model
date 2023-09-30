@@ -56,6 +56,9 @@ struct std::hash<Key> {
 // unordered map to count (outcome, move, material, score) tuples in pgns
 using map_t = std::unordered_map<Key, int>;
 
+// map to collect metadata for tests
+using map_meta = std::unordered_map<std::string, json>;
+
 std::atomic<std::size_t> total_chunks = 0;
 
 namespace analysis {
@@ -111,7 +114,9 @@ static constexpr int map_size = 1200000;
 /// @param pos_map
 /// @param game
 /// @param regex_engine
-void ana_game(map_t &pos_map, const std::optional<Game> &game, const std::string &regex_engine) {
+/// @param move_counter
+void ana_game(map_t &pos_map, const std::optional<Game> &game, const std::string &regex_engine,
+              const std::string &move_counter) {
     if (game.value().headers().find("Result") == game.value().headers().end()) {
         return;
     }
@@ -156,7 +161,15 @@ void ana_game(map_t &pos_map, const std::optional<Game> &game, const std::string
     Board board = Board();
 
     if (game.value().headers().find("FEN") != game.value().headers().end()) {
-        board.setFen(game.value().headers().at("FEN"));
+        std::string fen = game.value().headers().at("FEN");
+        if (!move_counter.empty()) {
+            // revert change by cutechess-cli of move counters in .epd books to "0 1"
+            std::regex p("0 1$");
+            if (std::regex_search(fen, p)) {
+                fen = std::regex_replace(fen, p, "0 " + move_counter);
+            }
+        }
+        board.setFen(fen);
     }
 
     if (game.value().headers().find("Variant") != game.value().headers().end() &&
@@ -215,12 +228,39 @@ void ana_game(map_t &pos_map, const std::optional<Game> &game, const std::string
     }
 }
 
-void ana_files(map_t &map, const std::vector<std::string> &files, const std::string &regex_engine) {
+void ana_files(map_t &map, const std::vector<std::string> &files, const std::string &regex_engine,
+               const map_meta &meta_map, bool fix_fens) {
     map.reserve(map_size);
 
     for (const auto &file : files) {
         std::ifstream pgn_file(file);
-        std::string line;
+        std::string move_counter;
+
+        if (fix_fens) {
+            std::string test_filename = file.substr(0, file.find_last_of('-'));
+            if (meta_map.find(test_filename) == meta_map.end()) {
+                std::cout << "Error: No metadata for test " << test_filename << std::endl;
+                std::exit(1);
+            }
+            if (meta_map.at(test_filename).find("book_depth") != meta_map.at(test_filename).end()) {
+                std::string book_depth = meta_map.at(test_filename)["book_depth"];
+                move_counter           = std::to_string(std::stoi(book_depth) + 1);
+            } else {
+                if (meta_map.at(test_filename).find("book") == meta_map.at(test_filename).end()) {
+                    std::cout << "Error: Missing \"book\" key in metadata for test "
+                              << test_filename << std::endl;
+                    std::exit(1);
+                }
+                std::string book = meta_map.at(test_filename)["book"];
+                std::regex p(".epd");
+                if (std::regex_search(book, p)) {
+                    std::cout
+                        << "Error: Missing \"book_depth\" key in metadata for .epd book for test "
+                        << test_filename << std::endl;
+                    std::exit(1);
+                }
+            }
+        }
 
         while (true) {
             auto game = pgn::readGame(pgn_file);
@@ -229,7 +269,7 @@ void ana_files(map_t &map, const std::vector<std::string> &files, const std::str
                 break;
             }
 
-            ana_game(map, game, regex_engine);
+            ana_game(map, game, regex_engine, move_counter);
         }
 
         pgn_file.close();
@@ -259,13 +299,10 @@ void ana_files(map_t &map, const std::vector<std::string> &files, const std::str
     return files;
 }
 
-// map to collect metadata for tests
-using map_meta = std::map<std::string, json>;
-
 [[nodiscard]] map_meta get_metadata(const std::vector<std::string> &file_list,
                                     bool allow_duplicates) {
     map_meta meta_map;
-    std::map<std::string, std::string> test_map;  // map to check for duplicate tests
+    std::unordered_map<std::string, std::string> test_map;  // map to check for duplicate tests
     std::set<std::string> test_warned;
     for (const auto &pathname : file_list) {
         fs::path path(pathname);
@@ -366,7 +403,7 @@ void filter_files_sprt(std::vector<std::string> &file_list, const map_meta &meta
 }
 
 void process(const std::vector<std::string> &files_pgn, map_t &pos_map,
-             const std::string &regex_engine) {
+             const std::string &regex_engine, const map_meta &meta_map, bool fix_fens) {
     // Create more chunks than threads to prevent threads from idling.
     int target_chunks = 4 * std::max(1, int(std::thread::hardware_concurrency()));
 
@@ -385,25 +422,26 @@ void process(const std::vector<std::string> &files_pgn, map_t &pos_map,
     std::cout << "\rProgress: " << total_chunks << "/" << files_chunked.size() << std::flush;
 
     for (const auto &files : files_chunked) {
-        pool.enqueue([&files, &regex_engine, &map_mutex, &pos_map, &files_chunked]() {
-            map_t map;
-            analysis::ana_files(map, files, regex_engine);
+        pool.enqueue(
+            [&files, &regex_engine, &meta_map, &fix_fens, &map_mutex, &pos_map, &files_chunked]() {
+                map_t map;
+                analysis::ana_files(map, files, regex_engine, meta_map, fix_fens);
 
-            total_chunks++;
+                total_chunks++;
 
-            // Limit the scope of the lock
-            {
-                const std::lock_guard<std::mutex> lock(map_mutex);
+                // Limit the scope of the lock
+                {
+                    const std::lock_guard<std::mutex> lock(map_mutex);
 
-                for (const auto &pair : map) {
-                    pos_map[pair.first] += pair.second;
+                    for (const auto &pair : map) {
+                        pos_map[pair.first] += pair.second;
+                    }
+
+                    // Print progress
+                    std::cout << "\rProgress: " << total_chunks << "/" << files_chunked.size()
+                              << std::flush;
                 }
-
-                // Print progress
-                std::cout << "\rProgress: " << total_chunks << "/" << files_chunked.size()
-                          << std::flush;
-            }
-        });
+            });
     }
 
     // Wait for all threads to finish
@@ -453,6 +491,7 @@ void print_usage(char const *program_name) {
     std::cout << "  --matchBook <regex>   Filter data based on book name" << std::endl;
     std::cout << "  --matchBookInvert     Invert the filter" << std::endl;
     std::cout << "  --SPRTonly            Analyse only pgns from SPRT tests" << std::endl;
+    std::cout << "  --fixFEN              Patch move counters lost by cutechess-cli" << std::endl;
     std::cout << "  -o <path>             Path to output json file" << std::endl;
 }
 
@@ -505,6 +544,8 @@ int main(int argc, char const *argv[]) {
         }
     }
 
+    bool fix_fens = find_argument(args, pos, "--fixFEN", true);
+
     if (find_argument(args, pos, "--matchEngine")) {
         regex_engine = *std::next(pos);
     }
@@ -518,7 +559,7 @@ int main(int argc, char const *argv[]) {
 
     const auto t0 = std::chrono::high_resolution_clock::now();
 
-    process(files_pgn, pos_map, regex_engine);
+    process(files_pgn, pos_map, regex_engine, meta_map, fix_fens);
 
     const auto t1 = std::chrono::high_resolution_clock::now();
 
