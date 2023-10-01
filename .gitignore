@@ -1,7 +1,9 @@
 *.png
 *.json
 *.pgn
+*.log
 
 pgns*
 scoreWDLstat
 scoreWDLstat.exe
+Stockfish
