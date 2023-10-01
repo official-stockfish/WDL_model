@@ -343,7 +343,7 @@ class WdlModel:
         xmax = ((3 * self.args.NormalizeToPawnValue) // 100 + 1) * 100
         ymin, ymax = self.args.yPlotMin, self.args.yDataMax
         grid_x, grid_y = np.mgrid[xmin:xmax:30j, ymin:ymax:22j]
-        points = np.array(list(zip(raw_model_data.xs, raw_model_data.xs)))
+        points = np.array(list(zip(raw_model_data.xs, raw_model_data.ys)))
 
         # data
         zz = griddata(points, raw_model_data.zwins, (grid_x, grid_y), method="linear")
