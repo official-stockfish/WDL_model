@@ -128,10 +128,13 @@ void ana_game(map_t &pos_map, const std::optional<Game> &game, const std::string
             game.value().headers().find("Black") == game.value().headers().end()) {
             return;
         }
+
         std::regex regex(regex_engine);
+
         if (std::regex_match(game.value().headers().at("White"), regex)) {
             filter_side = Color::WHITE;
         }
+
         if (std::regex_match(game.value().headers().at("Black"), regex)) {
             if (filter_side == Color::NONE) {
                 filter_side = Color::BLACK;
@@ -162,6 +165,7 @@ void ana_game(map_t &pos_map, const std::optional<Game> &game, const std::string
 
     if (game.value().headers().find("FEN") != game.value().headers().end()) {
         std::string fen = game.value().headers().at("FEN");
+
         if (!move_counter.empty()) {
             // revert change by cutechess-cli of move counters in .epd books to "0 1"
             std::regex p("0 1$");
@@ -169,6 +173,7 @@ void ana_game(map_t &pos_map, const std::optional<Game> &game, const std::string
                 fen = std::regex_replace(fen, p, "0 " + move_counter);
             }
         }
+
         board.setFen(fen);
     }
 
@@ -238,10 +243,12 @@ void ana_files(map_t &map, const std::vector<std::string> &files, const std::str
 
         if (fix_fens) {
             std::string test_filename = file.substr(0, file.find_last_of('-'));
+
             if (meta_map.find(test_filename) == meta_map.end()) {
                 std::cout << "Error: No metadata for test " << test_filename << std::endl;
                 std::exit(1);
             }
+
             if (meta_map.at(test_filename).find("book_depth") != meta_map.at(test_filename).end()) {
                 std::string book_depth = meta_map.at(test_filename)["book_depth"];
                 move_counter           = std::to_string(std::stoi(book_depth) + 1);
@@ -253,6 +260,7 @@ void ana_files(map_t &map, const std::vector<std::string> &files, const std::str
                 }
                 std::string book = meta_map.at(test_filename)["book"];
                 std::regex p(".epd");
+
                 if (std::regex_search(book, p)) {
                     std::cout
                         << "Error: Missing \"book_depth\" key in metadata for .epd book for test "
@@ -319,6 +327,7 @@ void ana_files(map_t &map, const std::vector<std::string> &files, const std::str
                           << ": Detected a duplicate of test " << test_id << " in directory "
                           << directory << std::endl;
                 test_warned.insert(test_filename);
+
                 if (!allow_duplicates) {
                     std::cout << "Use --allowDuplicates to continue nonetheless." << std::endl;
                     std::exit(1);
@@ -329,6 +338,7 @@ void ana_files(map_t &map, const std::vector<std::string> &files, const std::str
         // load the JSON data from disk, only once for each test
         if (meta_map.find(test_filename) == meta_map.end()) {
             std::ifstream json_file(test_filename + ".json");
+
             if (json_file.is_open()) {
                 json metadata;
                 json_file >> metadata;
@@ -342,41 +352,38 @@ void ana_files(map_t &map, const std::vector<std::string> &files, const std::str
 
 void filter_files_book(std::vector<std::string> &file_list, const map_meta &meta_map,
                        const std::regex &regex_book, bool invert) {
-    file_list.erase(std::remove_if(file_list.begin(), file_list.end(),
-                                   [&regex_book, invert, &meta_map](const std::string &pathname) {
-                                       std::string test_filename =
-                                           pathname.substr(0, pathname.find_last_of('-'));
+    const auto pred = [&regex_book, invert, &meta_map](const std::string &pathname) {
+        std::string test_filename = pathname.substr(0, pathname.find_last_of('-'));
 
-                                       // check if metadata and "book" entry exist
-                                       if (meta_map.find(test_filename) != meta_map.end() &&
-                                           meta_map.at(test_filename).find("book") !=
-                                               meta_map.at(test_filename).end()) {
-                                           std::string book = meta_map.at(test_filename)["book"];
-                                           bool match       = std::regex_match(book, regex_book);
-                                           return invert ? match : !match;
-                                       }
+        // check if metadata and "book" entry exist
+        if (meta_map.find(test_filename) != meta_map.end() &&
+            meta_map.at(test_filename).find("book") != meta_map.at(test_filename).end()) {
+            std::string book = meta_map.at(test_filename)["book"];
+            bool match       = std::regex_match(book, regex_book);
+            return invert ? match : !match;
+        }
 
-                                       // missing metadata or "book" entry can never match
-                                       return true;
-                                   }),
-                    file_list.end());
+        // missing metadata or "book" entry can never match
+        return true;
+    };
+
+    file_list.erase(std::remove_if(file_list.begin(), file_list.end(), pred), file_list.end());
 }
 
 void filter_files_sprt(std::vector<std::string> &file_list, const map_meta &meta_map) {
-    file_list.erase(std::remove_if(file_list.begin(), file_list.end(),
-                                   [&meta_map](const std::string &pathname) {
-                                       std::string test_filename =
-                                           pathname.substr(0, pathname.find_last_of('-'));
+    const auto pred = [&meta_map](const std::string &pathname) {
+        std::string test_filename = pathname.substr(0, pathname.find_last_of('-'));
 
-                                       // check if metadata and "sprt" entry exist
-                                       if (meta_map.find(test_filename) != meta_map.end() &&
-                                           meta_map.at(test_filename).find("sprt") !=
-                                               meta_map.at(test_filename).end()) {
-                                           return false;
-                                       }
-                                       return true;
-                                   }),
-                    file_list.end());
+        // check if metadata and "sprt" entry exist
+        if (meta_map.find(test_filename) != meta_map.end() &&
+            meta_map.at(test_filename).find("sprt") != meta_map.at(test_filename).end()) {
+            return false;
+        }
+
+        return true;
+    };
+
+    file_list.erase(std::remove_if(file_list.begin(), file_list.end(), pred), file_list.end());
 }
 
 /// @brief Split into successive n-sized chunks from pgns.
@@ -516,9 +523,11 @@ int main(int argc, char const *argv[]) {
         files_pgn = {*std::next(pos)};
     } else {
         std::string path = "./pgns";
+
         if (find_argument(args, pos, "--dir")) {
             path = *std::next(pos);
         }
+
         bool recursive = find_argument(args, pos, "-r", true);
         std::cout << "Looking " << (recursive ? "(recursively) " : "") << "for pgn files in "
                   << path << std::endl;
@@ -535,6 +544,7 @@ int main(int argc, char const *argv[]) {
 
     if (find_argument(args, pos, "--matchBook")) {
         regex_book = *std::next(pos);
+
         if (!regex_book.empty()) {
             bool invert = find_argument(args, pos, "--matchBookInvert", true);
             std::cout << "Filtering pgn files " << (invert ? "not " : "")
