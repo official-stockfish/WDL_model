@@ -490,7 +490,8 @@ void print_usage(char const *program_name) {
     std::cout << "Usage: " << program_name << " [options]" << std::endl;
     std::cout << "Options:" << std::endl;
     std::cout << "  --file <path>         Path to pgn file" << std::endl;
-    std::cout << "  --dir <path>          Path to directory containing pgns" << std::endl;
+    std::cout << "  --dir <path>          Path to directory containing pgns (default: pgns)"
+              << std::endl;
     std::cout << "  -r                    Search for pgns recursively in subdirectories"
               << std::endl;
     std::cout << "  --allowDuplicates     Allow duplicate directories for test pgns" << std::endl;
@@ -499,7 +500,8 @@ void print_usage(char const *program_name) {
     std::cout << "  --matchBookInvert     Invert the filter" << std::endl;
     std::cout << "  --SPRTonly            Analyse only pgns from SPRT tests" << std::endl;
     std::cout << "  --fixFEN              Patch move counters lost by cutechess-cli" << std::endl;
-    std::cout << "  -o <path>             Path to output json file" << std::endl;
+    std::cout << "  -o <path>             Path to output json file (default: scoreWDLstat.json)"
+              << std::endl;
 }
 
 /// @brief

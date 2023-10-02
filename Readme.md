@@ -19,31 +19,35 @@ pip install -r requirements.txt
 
 To update Stockfish's internal WDL model, the following steps are needed:
 
-1. Obtain a large collection of engine-vs-engine games 
-(at fishtest LTC time control) in pgn format and
-save the pgn files in the `pgns` folder. This can, for example, be achieved
-by running `python download_fishtest_pgns.py` once a day.
+1. Obtain a large collection of engine-vs-engine games (at fishtest LTC 
+time control) by regularly running `python download_fishtest_pgns.py` 
+over a period of time. The script will download the necessary pgn files
+and metadata describing the test conditions from 
+[fishtest](https://tests.stockfishchess.org/).
 
-2. Use `make` to compile `scoreWDLstat.cpp`, which will produce an executable
-named `scoreWDLstat`.
+2. Run the script `updateWDL.sh`, which will automatically perform these
+steps:
 
-3. Run `scoreWDLstat -r` to parse the pgn files in the `pgns` folder. A different
-directory can be specified with `scoreWDLstat --dir <path-to-dir>`. The
-computed WDL statistics will be stored in a file called `scoreWDLstat.json`.
-The file will have entries of the form `"('D', 1, 78, 35)": 668132`, meaning
-this tuple for `(outcome, move, material, eval)` was seen a total of 668132
-times in the processed pgn files.
+    - Run `make` to compile `scoreWDLstat.cpp`, producing the executable 
+      `scoreWDLstat`.
 
-4. Run `python scoreWDL.py` to compute the WDL model parameters from the
-data stored in `scoreWDLstat.json`. The script needs as input the value
-`--NormalizeToPawnValue` from within Stockfish's
-[`uci.h`](https://github.com/official-stockfish/Stockfish/blob/master/src/uci.h),
-to be able to correctly convert the centipawn values from the pgn files to
-the unit internally used by the engine. The script will output the new
-values for `NormalizeToPawnValue` in
-[`uci.h`](https://github.com/official-stockfish/Stockfish/blob/master/src/uci.h)
-and `as[]`, `bs[]` in
-[`uci.cpp`](https://github.com/official-stockfish/Stockfish/blob/master/src/uci.cpp). See e.g. https://github.com/official-stockfish/Stockfish/pull/4373
+    - Run `scoreWDLstat` with some custom parameters to parse the downloaded
+      pgn files. The computed WDL statistics will be stored in a file called 
+      `updateWDL.json`. The file will have entries of the form 
+      `"('D', 1, 78, 35)": 668132`, meaning this tuple for 
+      `(outcome, move, material, eval)` was seen a total of 668132 times in 
+      the processed pgn files.
+
+    - Run `python scoreWDL.py` with some custom parameters to compute the WDL 
+      model parameters from the data stored in `updateWDL.json`. The script's
+      output will be stored in `scoreWDL.log` and will contain the new
+      values for `NormalizeToPawnValue` in Stockfish's
+      [`uci.h`](https://github.com/official-stockfish/Stockfish/blob/master/src/uci.h)
+      and `as[]`, `bs[]` in
+      [`uci.cpp`](https://github.com/official-stockfish/Stockfish/blob/master/src/uci.cpp). See e.g. https://github.com/official-stockfish/Stockfish/pull/4373.
+      In addition, the script will produce a graphical illustration of the 
+      analysed data and the fitted WDL model in the file
+      `WDL_model_summary.png`, as displayed below.
 
 ## Results
 
@@ -51,11 +55,17 @@ and `as[]`, `bs[]` in
   <img src="WDL_model_summary.png?raw=true" width="1200">
 </p>
 
-## Fitting options
+## Help and other options
 
-- `python scoreWDL.py --yDataTarget 30` : choose move 30 (rather than 32)
-as target move for the 100cp anchor
-- `python scoreWDL.py --yData material --yDataTarget 68` : base fitting on
-material (rather than move), with 100cp anchor a material count of 68
+Running `scoreWDLstat --help` and `python scoreWDL.py --help`, respectively,
+will provide a description of possible command line options for the two
+programs. For example:
+
+- `scoreWDLstat --matchEngine <regex>` : extracts WDL data only from the
+   engine matching the regex
+- `python scoreWDL.py --yDataTarget 30` : chooses move 30 (rather than 32)
+  as target move for the 100cp anchor
+- `python scoreWDL.py --yData material --yDataTarget 68` : bases the fitting
+  on material (rather than move), with 100cp anchor a material count of 68
 ---
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
