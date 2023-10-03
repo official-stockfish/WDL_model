@@ -4,10 +4,11 @@ from ast import literal_eval
 from scipy.interpolate import griddata
 from scipy.optimize import curve_fit
 from dataclasses import dataclass
+from typing import Literal, List, Dict, Tuple
 
 
 class WdlPlot:
-    def __init__(self, title, pgnName):
+    def __init__(self, title: str, pgnName: str):
         self.title = title
         self.pgnName = pgnName
 
@@ -20,7 +21,7 @@ class WdlPlot:
         )
         self.fig.suptitle(self.title, fontsize="x-large")
 
-    def save(self, plot_setting):
+    def save(self, plot_setting: Literal["save+show", "save", "no"]):
         plt.savefig(self.pgnName, dpi=300)
         if plot_setting == "save+show":
             plt.show()
@@ -28,11 +29,20 @@ class WdlPlot:
         print(f"Saved graphics to {self.pgnName}.")
 
 
+@dataclass
+class RawModelData:
+    xs: List[float]
+    ys: List[float]
+    zwins: List[float]
+    zdraws: List[float]
+    zlosses: List[float]
+
+
 class DataLoader:
-    def __init__(self, filenames):
+    def __init__(self, filenames: List[str]):
         self.filenames = filenames
 
-    def load_json(self):
+    def load_json(self) -> Dict[str, int]:
         inputdata = {}
         for filename in self.filenames:
             print(f"Reading score stats from {filename}.")
@@ -44,8 +54,17 @@ class DataLoader:
         return inputdata
 
     def extract_wdl(
-        self, inputdata, moveMin, moveMax, NormalizeToPawnValue, yDataFormat
-    ):
+        self,
+        inputdata: Dict[str, int],
+        moveMin: int,
+        moveMax: int,
+        NormalizeToPawnValue: int,
+        yDataFormat: Literal["move", "material"],
+    ) -> tuple[
+        Counter[Tuple[float, int]],
+        Counter[Tuple[float, int]],
+        Counter[Tuple[float, int]],
+    ]:
         inpdict = {literal_eval(k): v for k, v in inputdata.items()}
         win, draw, loss = Counter(), Counter(), Counter()
         # filter out (score, yData) WDL data (i.e. material or move summed out)
@@ -71,7 +90,12 @@ class DataLoader:
         )
         return win, draw, loss
 
-    def get_raw_model_data(self, win, draw, loss):
+    def get_raw_model_data(
+        self,
+        win: Counter[Tuple[float, int]],
+        draw: Counter[Tuple[float, int]],
+        loss: Counter[Tuple[float, int]],
+    ) -> RawModelData:
         coords = sorted(set(list(win.keys()) + list(draw.keys()) + list(loss.keys())))
         xs, ys, zwins, zdraws, zlosses = [], [], [], [], []
         for x, y in coords:
@@ -91,14 +115,14 @@ class DataLoader:
 
 
 class ModelFit:
-    def __init__(self, y_data_target, normalize_to_pawn_value):
+    def __init__(self, y_data_target: int, normalize_to_pawn_value: int):
         self.y_data_target = y_data_target
         self.normalize_to_pawn_value = normalize_to_pawn_value
 
-    def winmodel(x, a, b):
+    def winmodel(x: int, a: int, b: int) -> float:
         return 1.0 / (1.0 + np.exp(-(x - a) / b))
 
-    def normalized_axis(ax, normalize_to_pawn_value):
+    def normalized_axis(ax, normalize_to_pawn_value: int):
         ax2 = ax.twiny()
         tickmin = int(np.ceil(ax.get_xlim()[0] / normalize_to_pawn_value)) * 2
         tickmax = int(np.floor(ax.get_xlim()[1] / normalize_to_pawn_value)) * 2 + 1
@@ -114,11 +138,11 @@ class ModelFit:
         ax2.set_xticks(new_tick_locations)
         ax2.set_xticklabels(tick_function(new_tick_locations))
 
-    def poly3(self, x, a, b, c, d):
+    def poly3(self, x: int, a, b, c, d) -> float:
         xnp = np.asarray(x) / self.y_data_target
         return ((a * xnp + b) * xnp + c) * xnp + d
 
-    def poly3_str(self, coeffs):
+    def poly3_str(self, coeffs) -> str:
         return (
             "((%5.3f * x / %d + %5.3f) * x / %d + %5.3f) * x / %d + %5.3f"
             % tuple(
@@ -126,7 +150,13 @@ class ModelFit:
             )[:-1]
         )
 
-    def wdl(self, score, move_or_material, popt_as, popt_bs):
+    def wdl(
+        self,
+        score: float,
+        move_or_material: int,
+        popt_as: List[float],
+        popt_bs: List[float],
+    ) -> tuple[int, int, int]:
         a = self.poly3(move_or_material, *popt_as)
         b = self.poly3(move_or_material, *popt_bs)
         w = int(1000 * ModelFit.winmodel(score, a, b))
@@ -136,34 +166,32 @@ class ModelFit:
 
 
 @dataclass
-class RawModelData:
-    xs: list
-    ys: list
-    zwins: list
-    zdraws: list
-    zlosses: list
-
-
-@dataclass
 class ModelData:
-    popt_as: list
-    popt_bs: list
-    model_ms: list
-    model_as: list
-    model_bs: list
+    popt_as: List[float]
+    popt_bs: List[float]
+    model_ms: List[float]
+    model_as: List[float]
+    model_bs: List[float]
     label_as: str
     label_bs: str
 
 
 class WdlModel:
-    def __init__(self, args, plot):
+    def __init__(self, args, plot: WdlPlot):
         self.args = args
         self.plot = plot
 
         if self.args.plot != "no":
             self.plot.create_fig()
 
-    def sample_curve_y(self, xdata, ywindata, ydrawdata, ylossdata, popt):
+    def sample_curve_y(
+        self,
+        xdata: List[float],
+        ywindata: List[float],
+        ydrawdata: List[float],
+        ylossdata: List[float],
+        popt,
+    ):
         # plot sample curve at yDataTarget
         self.plot.axs[0, 0].plot(xdata, ywindata, "b.", label="Measured winrate")
         self.plot.axs[0, 0].plot(xdata, ydrawdata, "g.", label="Measured drawrate")
@@ -201,7 +229,15 @@ class WdlModel:
 
         ModelFit.normalized_axis(self.plot.axs[0, 0], self.args.NormalizeToPawnValue)
 
-    def extract_model_data(self, xs, ys, zwins, zdraws, zlosses, func):
+    def extract_model_data(
+        self,
+        xs: List[float],
+        ys: List[float],
+        zwins: List[float],
+        zdraws: List[float],
+        zlosses: List[float],
+        func,
+    ) -> tuple[List[float], List[float], List[float]]:
         scores, moms, winrate, drawrate, lossrate = xs, ys, zwins, zdraws, zlosses
 
         model_ms, model_as, model_bs = [], [], []
@@ -239,7 +275,14 @@ class WdlModel:
 
         return model_as, model_bs, model_ms
 
-    def fit_model(self, xs, ys, zwins, zdraws, zlosses):
+    def fit_model(
+        self,
+        xs: List[float],
+        ys: List[float],
+        zwins: List[float],
+        zdraws: List[float],
+        zlosses: List[float],
+    ) -> ModelData:
         print(f"Fit WDL model based on {self.args.yData}.")
         #
         # convert to model, fit the winmodel a and b,
