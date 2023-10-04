@@ -4,7 +4,7 @@ from ast import literal_eval
 from scipy.interpolate import griddata
 from scipy.optimize import curve_fit
 from dataclasses import dataclass
-from typing import Literal, List, Dict, Tuple
+from typing import Literal, Callable, Any
 
 
 class WdlPlot:
@@ -31,18 +31,18 @@ class WdlPlot:
 
 @dataclass
 class RawModelData:
-    xs: List[float]
-    ys: List[float]
-    zwins: List[float]
-    zdraws: List[float]
-    zlosses: List[float]
+    xs: list[float]
+    ys: list[float]
+    zwins: list[float]
+    zdraws: list[float]
+    zlosses: list[float]
 
 
 class DataLoader:
-    def __init__(self, filenames: List[str]):
+    def __init__(self, filenames: list[str]):
         self.filenames = filenames
 
-    def load_json(self) -> Dict[str, int]:
+    def load_json(self) -> dict[str, int]:
         inputdata = {}
         for filename in self.filenames:
             print(f"Reading score stats from {filename}.")
@@ -55,15 +55,15 @@ class DataLoader:
 
     def extract_wdl(
         self,
-        inputdata: Dict[str, int],
+        inputdata: dict[str, int],
         moveMin: int,
         moveMax: int,
         NormalizeToPawnValue: int,
         yDataFormat: Literal["move", "material"],
     ) -> tuple[
-        Counter[Tuple[float, int]],
-        Counter[Tuple[float, int]],
-        Counter[Tuple[float, int]],
+        Counter[tuple[float, int]],
+        Counter[tuple[float, int]],
+        Counter[tuple[float, int]],
     ]:
         inpdict = {literal_eval(k): v for k, v in inputdata.items()}
         win, draw, loss = Counter(), Counter(), Counter()
@@ -92,9 +92,9 @@ class DataLoader:
 
     def get_raw_model_data(
         self,
-        win: Counter[Tuple[float, int]],
-        draw: Counter[Tuple[float, int]],
-        loss: Counter[Tuple[float, int]],
+        win: Counter[tuple[float, int]],
+        draw: Counter[tuple[float, int]],
+        loss: Counter[tuple[float, int]],
     ) -> RawModelData:
         coords = sorted(set(list(win.keys()) + list(draw.keys()) + list(loss.keys())))
         xs, ys, zwins, zdraws, zlosses = [], [], [], [], []
@@ -154,8 +154,8 @@ class ModelFit:
         self,
         score: float,
         move_or_material: int,
-        popt_as: List[float],
-        popt_bs: List[float],
+        popt_as: list[float],
+        popt_bs: list[float],
     ) -> tuple[int, int, int]:
         a = self.poly3(move_or_material, *popt_as)
         b = self.poly3(move_or_material, *popt_bs)
@@ -167,11 +167,11 @@ class ModelFit:
 
 @dataclass
 class ModelData:
-    popt_as: List[float]
-    popt_bs: List[float]
-    model_ms: List[float]
-    model_as: List[float]
-    model_bs: List[float]
+    popt_as: list[float]
+    popt_bs: list[float]
+    model_ms: list[float]
+    model_as: list[float]
+    model_bs: list[float]
     label_as: str
     label_bs: str
 
@@ -186,10 +186,10 @@ class WdlModel:
 
     def sample_curve_y(
         self,
-        xdata: List[float],
-        ywindata: List[float],
-        ydrawdata: List[float],
-        ylossdata: List[float],
+        xdata: list[float],
+        ywindata: list[float],
+        ydrawdata: list[float],
+        ylossdata: list[float],
         popt,
     ):
         # plot sample curve at yDataTarget
@@ -231,13 +231,13 @@ class WdlModel:
 
     def extract_model_data(
         self,
-        xs: List[float],
-        ys: List[float],
-        zwins: List[float],
-        zdraws: List[float],
-        zlosses: List[float],
-        func,
-    ) -> tuple[List[float], List[float], List[float]]:
+        xs: list[float],
+        ys: list[float],
+        zwins: list[float],
+        zdraws: list[float],
+        zlosses: list[float],
+        func: Callable[[list[float], list[float], list[float], list[float], Any], None],
+    ) -> tuple[list[float], list[float], list[float]]:
         scores, moms, winrate, drawrate, lossrate = xs, ys, zwins, zdraws, zlosses
 
         model_ms, model_as, model_bs = [], [], []
@@ -277,11 +277,11 @@ class WdlModel:
 
     def fit_model(
         self,
-        xs: List[float],
-        ys: List[float],
-        zwins: List[float],
-        zdraws: List[float],
-        zlosses: List[float],
+        xs: list[float],
+        ys: list[float],
+        zwins: list[float],
+        zdraws: list[float],
+        zlosses: list[float],
     ) -> ModelData:
         print(f"Fit WDL model based on {self.args.yData}.")
         #
