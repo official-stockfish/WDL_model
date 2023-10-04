@@ -20,7 +20,7 @@ endif
 
 SRC_FILE = scoreWDLstat.cpp
 EXE_FILE = scoreWDLstat
-HEADERS = external/chess.hpp external/json.hpp external/threadpool.hpp
+HEADERS = external/chess.hpp external/json.hpp external/threadpool.hpp scoreWDLstat.hpp
 
 all: $(EXE_FILE)
 
