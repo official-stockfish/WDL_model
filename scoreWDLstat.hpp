@@ -1,9 +1,12 @@
 #include <algorithm>
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
+
+#include "external/json.hpp"
 
 enum class Result { WIN = 'W', DRAW = 'D', LOSS = 'L' };
 
@@ -57,7 +60,7 @@ struct TestMetaData {
     std::optional<bool> adjudication;
 };
 
-std::optional<std::string> get_optional(const json &j, const char *name) {
+std::optional<std::string> get_optional(const nlohmann::json &j, const char *name) {
     const auto it = j.find(name);
     if (it != j.end()) {
         return std::optional<std::string>(j[name]);
@@ -66,7 +69,7 @@ std::optional<std::string> get_optional(const json &j, const char *name) {
     }
 }
 
-void from_json(const json &nlohmann_json_j, TestMetaData &nlohmann_json_t) {
+void from_json(const nlohmann::json &nlohmann_json_j, TestMetaData &nlohmann_json_t) {
     nlohmann_json_t.adjudication =
         get_optional(nlohmann_json_j, "adjudication").value_or("False") == "True";
 

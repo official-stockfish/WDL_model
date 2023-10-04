@@ -15,7 +15,6 @@
 #include <vector>
 
 #include "external/chess.hpp"
-#include "external/json.hpp"
 #include "external/threadpool.hpp"
 
 namespace fs = std::filesystem;
