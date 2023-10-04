@@ -11,6 +11,9 @@ from a WDL model that can be generated from fishtest data with the help of
 the scripts in this repository.
 
 ## Install
+
+Python 3.9 or higher is required.
+
 ```
 pip install -r requirements.txt
 ```
