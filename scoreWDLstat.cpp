@@ -7,6 +7,7 @@
 #include <mutex>
 #include <regex>
 #include <set>
+#include <sstream>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -487,21 +488,36 @@ bool find_argument(const std::vector<std::string> &args,
 }
 
 void print_usage(char const *program_name) {
-    std::cout << "Usage: " << program_name << " [options]" << std::endl;
-    std::cout << "Options:" << std::endl;
-    std::cout << "  --file <path>         Path to pgn file" << std::endl;
-    std::cout << "  --dir <path>          Path to directory containing pgns (default: pgns)"
-              << std::endl;
-    std::cout << "  -r                    Search for pgns recursively in subdirectories"
-              << std::endl;
-    std::cout << "  --allowDuplicates     Allow duplicate directories for test pgns" << std::endl;
-    std::cout << "  --matchEngine <regex> Filter data based on engine name" << std::endl;
-    std::cout << "  --matchBook <regex>   Filter data based on book name" << std::endl;
-    std::cout << "  --matchBookInvert     Invert the filter" << std::endl;
-    std::cout << "  --SPRTonly            Analyse only pgns from SPRT tests" << std::endl;
-    std::cout << "  --fixFEN              Patch move counters lost by cutechess-cli" << std::endl;
-    std::cout << "  -o <path>             Path to output json file (default: scoreWDLstat.json)"
-              << std::endl;
+    std::stringstream ss;
+
+    ss << "Usage: " << program_name << " [options]"
+       << "\n";
+    ss << "Options:"
+       << "\n";
+    ss << "  --file <path>         Path to pgn file"
+       << "\n";
+    ss << "  --dir <path>          Path to directory containing pgns (default: pgns)"
+       << "\n";
+    ss << "  -r                    Search for pgns recursively in subdirectories"
+       << "\n";
+    ss << "  --allowDuplicates     Allow duplicate directories for test pgns"
+       << "\n";
+    ss << "  --matchEngine <regex> Filter data based on engine name"
+       << "\n";
+    ss << "  --matchBook <regex>   Filter data based on book name"
+       << "\n";
+    ss << "  --matchBookInvert     Invert the filter"
+       << "\n";
+    ss << "  --SPRTonly            Analyse only pgns from SPRT tests"
+       << "\n";
+    ss << "  --fixFEN              Patch move counters lost by cutechess-cli"
+       << "\n";
+    ss << "  -o <path>             Path to output json file (default: scoreWDLstat.json)"
+       << "\n";
+    ss << "  --help                Print this help message"
+       << "\n";
+
+    std::cout << ss.str();
 }
 
 /// @brief
