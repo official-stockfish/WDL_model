@@ -27,7 +27,7 @@ using namespace chess;
 using map_t = std::unordered_map<Key, int>;
 
 // map to collect metadata for tests
-using map_meta = std::unordered_map<std::string, json>;
+using map_meta = std::unordered_map<std::string, TestMetaData>;
 
 std::atomic<std::size_t> total_chunks = 0;
 
@@ -175,16 +175,17 @@ void ana_files(map_t &map, const std::vector<std::string> &files, const std::str
                 std::exit(1);
             }
 
-            if (meta_map.at(test_filename).find("book_depth") != meta_map.at(test_filename).end()) {
-                std::string book_depth = meta_map.at(test_filename)["book_depth"];
-                move_counter           = std::to_string(std::stoi(book_depth) + 1);
+            if (meta_map.at(test_filename).book_depth.has_value()) {
+                auto book_depth = meta_map.at(test_filename).book_depth.value();
+                move_counter    = std::to_string(book_depth + 1);
             } else {
-                if (meta_map.at(test_filename).find("book") == meta_map.at(test_filename).end()) {
+                if (meta_map.at(test_filename).book.has_value()) {
                     std::cout << "Error: Missing \"book\" key in metadata for test "
                               << test_filename << std::endl;
                     std::exit(1);
                 }
-                std::string book = meta_map.at(test_filename)["book"];
+
+                auto book = meta_map.at(test_filename).book.value();
                 std::regex p(".epd");
 
                 if (std::regex_search(book, p)) {
@@ -244,12 +245,11 @@ void ana_files(map_t &map, const std::vector<std::string> &files, const std::str
         if (meta_map.find(test_filename) == meta_map.end()) {
             std::ifstream json_file(test_filename + ".json");
 
-            if (json_file.is_open()) {
-                json metadata;
-                json_file >> metadata;
-                json_file.close();
-                meta_map[test_filename] = metadata;
-            }
+            if (!json_file.is_open()) continue;
+
+            json metadata = json::parse(json_file);
+
+            meta_map[test_filename] = metadata.get<TestMetaData>();
         }
     }
     return meta_map;
@@ -262,9 +262,9 @@ void filter_files_book(std::vector<std::string> &file_list, const map_meta &meta
 
         // check if metadata and "book" entry exist
         if (meta_map.find(test_filename) != meta_map.end() &&
-            meta_map.at(test_filename).find("book") != meta_map.at(test_filename).end()) {
-            std::string book = meta_map.at(test_filename)["book"];
-            bool match       = std::regex_match(book, regex_book);
+            !meta_map.at(test_filename).book.has_value()) {
+            auto book  = meta_map.at(test_filename).book.value();
+            bool match = std::regex_match(book, regex_book);
             return invert ? match : !match;
         }
 
@@ -281,7 +281,7 @@ void filter_files_sprt(std::vector<std::string> &file_list, const map_meta &meta
 
         // check if metadata and "sprt" entry exist
         if (meta_map.find(test_filename) != meta_map.end() &&
-            meta_map.at(test_filename).find("sprt") != meta_map.at(test_filename).end()) {
+            !meta_map.at(test_filename).sprt.has_value()) {
             return false;
         }
 
