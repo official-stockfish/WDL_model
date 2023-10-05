@@ -59,6 +59,7 @@ echo "Look recursively in directory $pgnpath for games from SPRT tests using"\
 ./scoreWDLstat --dir $pgnpath -r --matchEngine $regex_pattern --matchBook "$bookname" --fixFEN --SPRTonly -o updateWDL.json >& scoreWDLstat.log
 
 # fit the new WDL model, keeping anchor at move 32
+# we ignore the first 2 full moves out of book for fitting (11=8+1+2), and the first 9 for (contour) plotting (18=8+1+9)
 python scoreWDL.py updateWDL.json --plot save --yDataTarget 32 --yDataMin 11 --yDataMax 120 --yPlotMin 18 --NormalizeToPawnValue $oldpawn >& scoreWDL.log
 
 # extract the total number of positions, and the new NormalizeToPawnValue
