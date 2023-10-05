@@ -175,8 +175,7 @@ void ana_files(map_t &map, const std::vector<std::string> &files, const std::str
             }
 
             if (meta_map.at(test_filename).book_depth.has_value()) {
-                auto book_depth = meta_map.at(test_filename).book_depth.value();
-                move_counter    = std::to_string(book_depth + 1);
+                move_counter = std::to_string(meta_map.at(test_filename).book_depth.value() + 1);
             } else {
                 if (!meta_map.at(test_filename).book.has_value()) {
                     std::cout << "Error: Missing \"book\" key in metadata for test "
