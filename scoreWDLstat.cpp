@@ -178,7 +178,7 @@ void ana_files(map_t &map, const std::vector<std::string> &files, const std::str
                 auto book_depth = meta_map.at(test_filename).book_depth.value();
                 move_counter    = std::to_string(book_depth + 1);
             } else {
-                if (meta_map.at(test_filename).book.has_value()) {
+                if (!meta_map.at(test_filename).book.has_value()) {
                     std::cout << "Error: Missing \"book\" key in metadata for test "
                               << test_filename << std::endl;
                     std::exit(1);
@@ -261,7 +261,7 @@ void filter_files_book(std::vector<std::string> &file_list, const map_meta &meta
 
         // check if metadata and "book" entry exist
         if (meta_map.find(test_filename) != meta_map.end() &&
-            !meta_map.at(test_filename).book.has_value()) {
+            meta_map.at(test_filename).book.has_value()) {
             auto book  = meta_map.at(test_filename).book.value();
             bool match = std::regex_match(book, regex_book);
             return invert ? match : !match;
@@ -280,7 +280,7 @@ void filter_files_sprt(std::vector<std::string> &file_list, const map_meta &meta
 
         // check if metadata and "sprt" entry exist
         if (meta_map.find(test_filename) != meta_map.end() &&
-            !meta_map.at(test_filename).sprt.has_value()) {
+            meta_map.at(test_filename).sprt.has_value()) {
             return false;
         }
 
