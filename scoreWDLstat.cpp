@@ -183,10 +183,9 @@ void ana_files(map_t &map, const std::vector<std::string> &files, const std::str
                     std::exit(1);
                 }
 
-                auto book = meta_map.at(test_filename).book.value();
                 std::regex p(".epd");
 
-                if (std::regex_search(book, p)) {
+                if (std::regex_search(meta_map.at(test_filename).book.value(), p)) {
                     std::cout
                         << "Error: Missing \"book_depth\" key in metadata for .epd book for test "
                         << test_filename << std::endl;
@@ -261,8 +260,7 @@ void filter_files_book(std::vector<std::string> &file_list, const map_meta &meta
         // check if metadata and "book" entry exist
         if (meta_map.find(test_filename) != meta_map.end() &&
             meta_map.at(test_filename).book.has_value()) {
-            auto book  = meta_map.at(test_filename).book.value();
-            bool match = std::regex_match(book, regex_book);
+            bool match = std::regex_match(meta_map.at(test_filename).book.value(), regex_book);
             return invert ? match : !match;
         }
 
