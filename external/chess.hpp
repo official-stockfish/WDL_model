@@ -25,7 +25,7 @@ Source: https://github.com/Disservin/chess-library
 */
 
 /*
-VERSION: 0.1.10
+VERSION: 0.3.1
 */
 
 #ifndef CHESS_HPP
@@ -1461,8 +1461,26 @@ class Board {
     [[nodiscard]] bool isRepetition(int count = 2) const;
 
     /// @brief Checks if the current position is a draw by 50 move rule.
+    /// Keep in mind that by the rules of chess, if the position has 50 half moves
+    /// it's not necessarily a draw, since checkmate has higher priority, call getHalfMoveDrawType,
+    /// to determine whether the position is a draw or checkmate.
     /// @return
     [[nodiscard]] bool isHalfMoveDraw() const { return half_moves_ >= 100; }
+
+    /// @brief Only call this function if isHalfMoveDraw() returns true.
+    /// @return
+    [[nodiscard]] std::pair<GameResultReason, GameResult> getHalfMoveDrawType() const {
+        const Board &board = *this;
+
+        Movelist movelist;
+        movegen::legalmoves<MoveGenType::ALL>(movelist, board);
+
+        if (movelist.empty() && inCheck()) {
+            return {GameResultReason::CHECKMATE, GameResult::LOSE};
+        }
+
+        return {GameResultReason::FIFTY_MOVE_RULE, GameResult::DRAW};
+    }
 
     /// @brief Checks if the current position is a draw by insufficient material.
     /// @return
@@ -1483,6 +1501,10 @@ class Board {
     /// @brief Checks if the current side to move is in check
     /// @return
     [[nodiscard]] bool inCheck() const;
+
+    /// @brief Checks if the given color has at least 1 piece thats not pawn and not king
+    /// @return
+    [[nodiscard]] bool hasNonPawnMaterial(Color color) const;
 
     /// @brief Regenerates the zobrist hash key
     /// @return
@@ -1542,7 +1564,7 @@ inline void Board::setFenInternal(std::string fen) {
     const std::string &castling   = params[2];
     const std::string &en_passant = params[3];
 
-    half_moves_ = std::stoi(params.size() > 4 ? params[4] : "0");
+    half_moves_   = std::stoi(params.size() > 4 ? params[4] : "0");
     plies_played_ = std::stoi(params.size() > 5 ? params[5] : "1") * 2 - 2;
 
     side_to_move_ = (move_right == "w") ? Color::WHITE : Color::BLACK;
@@ -1822,16 +1844,7 @@ inline bool Board::isInsufficientMaterial() const {
 
 inline std::pair<GameResultReason, GameResult> Board::isGameOver() const {
     if (isHalfMoveDraw()) {
-        const Board &board = *this;
-
-        Movelist movelist;
-        movegen::legalmoves<MoveGenType::ALL>(movelist, board);
-
-        if (movelist.empty() && inCheck()) {
-            return {GameResultReason::CHECKMATE, GameResult::LOSE};
-        }
-
-        return {GameResultReason::FIFTY_MOVE_RULE, GameResult::DRAW};
+        return getHalfMoveDrawType();
     }
 
     if (isInsufficientMaterial())
@@ -1867,6 +1880,11 @@ inline bool Board::isAttacked(Square square, Color color) const {
 }
 
 inline bool Board::inCheck() const { return isAttacked(kingSq(side_to_move_), ~side_to_move_); }
+
+inline bool Board::hasNonPawnMaterial(Color color) const {
+    return pieces(PieceType::KNIGHT, color) | pieces(PieceType::BISHOP, color) |
+           pieces(PieceType::ROOK, color) | pieces(PieceType::QUEEN, color);
+}
 
 inline void Board::placePiece(Piece piece, Square sq) {
     assert(board_[sq] == Piece::NONE);
@@ -3410,7 +3428,7 @@ inline void extractMoves(Board &board, std::vector<PgnMove> &moves, std::string_
 /// @brief Read the next game from a file
 /// @param file
 /// @return
-inline std::optional<Game> readGame(std::ifstream &file) {
+inline std::optional<Game> readGame(std::istream &file) {
     Board board = Board();
 
     Game game;
