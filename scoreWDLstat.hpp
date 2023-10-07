@@ -1,9 +1,12 @@
 #include <algorithm>
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
+
+#include "external/json.hpp"
 
 enum class Result { WIN = 'W', DRAW = 'D', LOSS = 'L' };
 
@@ -37,6 +40,62 @@ template <>
 struct std::hash<Key> {
     std::size_t operator()(const Key &k) const { return static_cast<std::size_t>(k); }
 };
+
+struct TestMetaData {
+    std::optional<std::string> base_net;
+    std::optional<std::string> base_options;
+    std::optional<std::string> base_tag;
+    std::optional<std::string> book;
+    std::optional<std::string> last_updated;
+    std::optional<std::string> new_net;
+    std::optional<std::string> new_options;
+    std::optional<std::string> new_tag;
+    std::optional<std::string> new_tc;
+    std::optional<std::string> sprt;
+    std::optional<std::string> start_time;
+    std::optional<std::string> tc;
+
+    std::optional<int> threads;
+    std::optional<int> book_depth;
+    std::optional<bool> adjudication;
+};
+
+std::optional<std::string> get_optional(const nlohmann::json &j, const char *name) {
+    const auto it = j.find(name);
+    if (it != j.end()) {
+        return std::optional<std::string>(j[name]);
+    } else {
+        return std::nullopt;
+    }
+}
+
+void from_json(const nlohmann::json &nlohmann_json_j, TestMetaData &nlohmann_json_t) {
+    nlohmann_json_t.adjudication =
+        get_optional(nlohmann_json_j, "adjudication").value_or("False") == "True";
+
+    nlohmann_json_t.book_depth =
+        get_optional(nlohmann_json_j, "book_depth").has_value()
+            ? std::optional<int>(std::stoi(get_optional(nlohmann_json_j, "book_depth").value()))
+            : std::nullopt;
+
+    nlohmann_json_t.threads =
+        get_optional(nlohmann_json_j, "threads").has_value()
+            ? std::optional<int>(std::stoi(get_optional(nlohmann_json_j, "threads").value()))
+            : std::nullopt;
+
+    nlohmann_json_t.base_net     = get_optional(nlohmann_json_j, "base_net");
+    nlohmann_json_t.base_options = get_optional(nlohmann_json_j, "base_options");
+    nlohmann_json_t.base_tag     = get_optional(nlohmann_json_j, "base_tag");
+    nlohmann_json_t.book         = get_optional(nlohmann_json_j, "book");
+    nlohmann_json_t.last_updated = get_optional(nlohmann_json_j, "last updated");
+    nlohmann_json_t.new_net      = get_optional(nlohmann_json_j, "new_net");
+    nlohmann_json_t.new_options  = get_optional(nlohmann_json_j, "new_options");
+    nlohmann_json_t.new_tag      = get_optional(nlohmann_json_j, "new_tag");
+    nlohmann_json_t.new_tc       = get_optional(nlohmann_json_j, "new_tc");
+    nlohmann_json_t.sprt         = get_optional(nlohmann_json_j, "sprt");
+    nlohmann_json_t.start_time   = get_optional(nlohmann_json_j, "start time");
+    nlohmann_json_t.tc           = get_optional(nlohmann_json_j, "tc");
+}
 
 /// @brief Custom stof implementation to avoid locale issues, once clang supports std::from_chars
 /// for floats this can be removed
