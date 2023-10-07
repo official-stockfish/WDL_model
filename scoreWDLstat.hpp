@@ -60,41 +60,62 @@ struct TestMetaData {
     std::optional<bool> adjudication;
 };
 
-std::optional<std::string> get_optional(const nlohmann::json &j, const char *name) {
+template <typename T = std::string>
+std::optional<T> get_optional(const nlohmann::json &j, const char *name) {
     const auto it = j.find(name);
     if (it != j.end()) {
-        return std::optional<std::string>(j[name]);
+        return std::optional<T>(j[name]);
     } else {
         return std::nullopt;
     }
 }
 
 void from_json(const nlohmann::json &nlohmann_json_j, TestMetaData &nlohmann_json_t) {
-    nlohmann_json_t.adjudication =
-        get_optional(nlohmann_json_j, "adjudication").value_or("False") == "True";
+    auto j = nlohmann_json_j;
 
-    nlohmann_json_t.book_depth =
-        get_optional(nlohmann_json_j, "book_depth").has_value()
-            ? std::optional<int>(std::stoi(get_optional(nlohmann_json_j, "book_depth").value()))
-            : std::nullopt;
+    // Check if args key is present, if so we are using metadata from the fishtest api
+    if (j.find("args") != j.end()) {
+        nlohmann_json_t.start_time   = get_optional(nlohmann_json_j, "start_time");
+        nlohmann_json_t.last_updated = get_optional(nlohmann_json_j, "last_updated");
 
-    nlohmann_json_t.threads =
-        get_optional(nlohmann_json_j, "threads").has_value()
-            ? std::optional<int>(std::stoi(get_optional(nlohmann_json_j, "threads").value()))
-            : std::nullopt;
+        j = j["args"];
 
-    nlohmann_json_t.base_net     = get_optional(nlohmann_json_j, "base_net");
-    nlohmann_json_t.base_options = get_optional(nlohmann_json_j, "base_options");
-    nlohmann_json_t.base_tag     = get_optional(nlohmann_json_j, "base_tag");
-    nlohmann_json_t.book         = get_optional(nlohmann_json_j, "book");
-    nlohmann_json_t.last_updated = get_optional(nlohmann_json_j, "last updated");
-    nlohmann_json_t.new_net      = get_optional(nlohmann_json_j, "new_net");
-    nlohmann_json_t.new_options  = get_optional(nlohmann_json_j, "new_options");
-    nlohmann_json_t.new_tag      = get_optional(nlohmann_json_j, "new_tag");
-    nlohmann_json_t.new_tc       = get_optional(nlohmann_json_j, "new_tc");
-    nlohmann_json_t.sprt         = get_optional(nlohmann_json_j, "sprt");
-    nlohmann_json_t.start_time   = get_optional(nlohmann_json_j, "start time");
-    nlohmann_json_t.tc           = get_optional(nlohmann_json_j, "tc");
+        nlohmann_json_t.adjudication = get_optional<bool>(j, "adjudication");
+
+        nlohmann_json_t.threads = get_optional<int>(j, "threads");
+
+        nlohmann_json_t.book_depth =
+            get_optional(j, "book_depth").has_value()
+                ? std::optional<int>(std::stoi(get_optional(j, "book_depth").value()))
+                : std::nullopt;
+
+    } else {
+        nlohmann_json_t.start_time = get_optional(nlohmann_json_j, "start time");
+
+        nlohmann_json_t.last_updated = get_optional(nlohmann_json_j, "last updated");
+
+        nlohmann_json_t.adjudication = get_optional(j, "adjudication").value_or("False") == "True";
+
+        nlohmann_json_t.book_depth =
+            get_optional(j, "book_depth").has_value()
+                ? std::optional<int>(std::stoi(get_optional(j, "book_depth").value()))
+                : std::nullopt;
+
+        nlohmann_json_t.threads =
+            get_optional(j, "threads").has_value()
+                ? std::optional<int>(std::stoi(get_optional(j, "threads").value()))
+                : std::nullopt;
+    }
+
+    nlohmann_json_t.tc           = get_optional(j, "tc");
+    nlohmann_json_t.base_net     = get_optional(j, "base_net");
+    nlohmann_json_t.base_options = get_optional(j, "base_options");
+    nlohmann_json_t.base_tag     = get_optional(j, "base_tag");
+    nlohmann_json_t.book         = get_optional(j, "book");
+    nlohmann_json_t.new_net      = get_optional(j, "new_net");
+    nlohmann_json_t.new_options  = get_optional(j, "new_options");
+    nlohmann_json_t.new_tag      = get_optional(j, "new_tag");
+    nlohmann_json_t.new_tc       = get_optional(j, "new_tc");
 }
 
 /// @brief Custom stof implementation to avoid locale issues, once clang supports std::from_chars
@@ -151,7 +172,7 @@ inline float fast_stof(const char *str) {
 
     for (const auto &entry : std::filesystem::directory_iterator(path)) {
         if (std::filesystem::is_regular_file(entry)) {
-            std::string stem = entry.path().stem().string();
+            std::string stem      = entry.path().stem().string();
             std::string extension = entry.path().extension().string();
             if (extension == ".gz") {
                 if (stem.size() >= 4 && stem.substr(stem.size() - 4) == ".pgn") {
