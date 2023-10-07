@@ -1,31 +1,21 @@
-import urllib.request, urllib.error, urllib.parse
+import urllib.request, urllib.error, urllib.parse, tarfile
 import argparse, time, re, os, json
 
-def is_gz_file(filename):
-    with open(filename, 'rb') as f:
-        return f.read(2) == b'\x1f\x8b' 
-
 parser = argparse.ArgumentParser(
-    description="Download pgns from completed LTC tests on fishtest.",
+    description="Bulk-download .pgn.gz files from completed LTC tests on fishtest.",
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
 )
 
 parser.add_argument(
     "--path",
     default="./pgns",
-    help="Downloaded pgns will be stored in PATH/date/test-id/.",
+    help="Downloaded .pgn.gz files will be stored in PATH/date/test-id/.",
 )
 parser.add_argument(
     "--page",
     type=int,
     default=1,
     help="Page of completed LTC tests to download from.",
-)
-parser.add_argument(
-    "--leniency",
-    type=int,
-    default=3,
-    help="One more consecutive HTTP error causes the download of a test to be stopped.",
 )
 parser.add_argument(
     "-v",
@@ -44,7 +34,7 @@ if not os.path.exists(args.path):
     os.makedirs(args.path)
 
 # find the set of fully downloaded Ids (looking in the full file tree)
-p = re.compile("([a-z0-9]*)-0.pgn(|.gz)")  # match only testId-0.pgn(.gz)
+p = re.compile("([a-z0-9]*)-[0-9]*.pgn(|.gz)")  # match any testId-runId.pgn(.gz)
 downloaded = set()
 
 for _, _, files in os.walk(args.path):
@@ -53,7 +43,7 @@ for _, _, files in os.walk(args.path):
         if m:
             downloaded.add(m.group(1))
 
-print(f"Found {len(downloaded)} fully downloaded tests in {args.path} already.")
+print(f"Found {len(downloaded)} downloaded tests in {args.path} already.")
 
 # fetch from desired page of finished LTC tests, parse and list new IDs
 url = f"https://tests.stockfishchess.org/tests/finished?ltc_only=1&page={args.page}"
@@ -125,44 +115,17 @@ for test, dateStr in ids:
     with open(path + test + ".json", "w") as jsonFile:
         json.dump(meta, jsonFile, indent=4, sort_keys=True)
 
-    print(f"Downloading pgns to {path} ...")
-    url = "https://tests.stockfishchess.org/tests/tasks/" + test
-    p = re.compile("<a href=/api/pgn/([a-z0-9]*-[0-9]*).pgn>")
-    response = urllib.request.urlopen(url)
-    webContent = response.read().decode("utf-8").splitlines()
-    first, countErrors = True, 0
-    for line in reversed(webContent):  # download test-0.pgn last
-        m = p.search(line)
-        if m:
-            filename = m.group(1) + ".pgn"
-            if os.path.exists(path + filename) or os.path.exists(path + filename + ".gz"):
-                countErrors = 0
-                continue
-        else:
-            continue
-        time.sleep(0.1)  # be server friendly... wait a bit between requests
-        url = "http://tests.stockfishchess.org/api/pgn/" + filename
-        if first:
-            _, _, number = m.group(1).partition("-")
-            if args.verbose >= 1:
-                print(f"  Fetching {int(number)+1} missing pgns ...")
-            first = False
-        try:
-            tmpName = path + test + ".tmp"
-            urllib.request.urlretrieve(url, tmpName)
-            if is_gz_file(tmpName):
-                filename += ".gz"
-            os.rename(tmpName, path + filename)
-            countErrors = 0
-        except urllib.error.HTTPError as error:
-            if args.verbose >= 2:
-                print(f"  HTTP Error {error.code} occurred for URL: {url}")
-            countErrors += 1
-            if countErrors > args.leniency:
-                if args.verbose >= 2:
-                    print(f"  Skipping remaining pgns of test {test} ...")
-                break
-        except Exception as ex:
-            if args.verbose >= 2:
-                print(f'  error: caught exception "{ex}"')
-            continue
+    print(f"Downloading {test}.pgns.tar to {path} ...")
+    url = "https://tests.stockfishchess.org/api/run_pgns/" + test + ".pgns.tar"
+    try:
+        tmpName = path + test + ".tmp"
+        urllib.request.urlretrieve(url, tmpName)
+        if args.verbose >= 2:
+            print("Extracting the tar file ...")
+        with tarfile.open(tmpName, "r") as tar:
+            tar.extractall(path)
+        os.remove(tmpName)
+    except Exception as ex:
+        if args.verbose >= 2:
+            print(f'  error: caught exception "{ex}"')
+        continue
