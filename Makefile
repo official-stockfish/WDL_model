@@ -25,7 +25,7 @@ HEADERS = external/chess.hpp external/json.hpp external/threadpool.hpp scoreWDLs
 all: $(EXE_FILE)
 
 $(EXE_FILE): $(SRC_FILE) $(HEADERS)
-	$(CXX) $(CXXFLAGS) $(NATIVE) -o $(EXE_FILE) $(SRC_FILE)
+	$(CXX) $(CXXFLAGS) $(NATIVE) -o $(EXE_FILE) $(SRC_FILE) -lz
 
 format:
 	clang-format -i $(SRC_FILE)

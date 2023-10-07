@@ -1,5 +1,7 @@
 #include "scoreWDLstat.hpp"
 
+#include <zlib.h>
+
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -159,12 +161,24 @@ void ana_game(map_t &pos_map, const std::optional<Game> &game, const std::string
     }
 }
 
+void gzip_uncompress(std::string &out, const std::string &compressed_file_path) {
+    char outbuffer[1024 * 16];
+    gzFile infile = (gzFile)gzopen(compressed_file_path.c_str(), "rb");
+    gzrewind(infile);
+
+    while (!gzeof(infile)) {
+        int len = gzread(infile, outbuffer, sizeof(outbuffer));
+        out.append(outbuffer, len);
+    }
+
+    gzclose(infile);
+}
+
 void ana_files(map_t &map, const std::vector<std::string> &files, const std::string &regex_engine,
                const map_meta &meta_map, bool fix_fens) {
     map.reserve(map_size);
 
     for (const auto &file : files) {
-        std::ifstream pgn_file(file);
         std::string move_counter;
 
         if (fix_fens) {
@@ -196,17 +210,29 @@ void ana_files(map_t &map, const std::vector<std::string> &files, const std::str
             }
         }
 
-        while (true) {
-            auto game = pgn::readGame(pgn_file);
+        const auto pgn_iterator = [&](std::istream &iss) {
+            while (true) {
+                auto game = pgn::readGame(iss);
 
-            if (!game.has_value()) {
-                break;
+                if (!game.has_value()) {
+                    break;
+                }
+
+                ana_game(map, game, regex_engine, move_counter);
             }
+        };
 
-            ana_game(map, game, regex_engine, move_counter);
+        if (file.size() >= 3 && file.substr(file.size() - 3) == ".gz") {
+            std::string file_content;
+            gzip_uncompress(file_content, file);
+
+            std::istringstream iss(file_content);
+            pgn_iterator(iss);
+        } else {
+            std::ifstream pgn_stream(file);
+            pgn_iterator(pgn_stream);
+            pgn_stream.close();
         }
-
-        pgn_file.close();
     }
 }
 
@@ -298,8 +324,8 @@ void process(const std::vector<std::string> &files_pgn, map_t &pos_map,
 
     auto files_chunked = split_chunks(files_pgn, target_chunks);
 
-    std::cout << "Found " << files_pgn.size() << " pgn files, creating " << files_chunked.size()
-              << " chunks for processing." << std::endl;
+    std::cout << "Found " << files_pgn.size() << " .pgn(.gz) files, creating "
+              << files_chunked.size() << " chunks for processing." << std::endl;
 
     // Mutex for pos_map access
     std::mutex map_mutex;
@@ -366,9 +392,9 @@ void print_usage(char const *program_name) {
     // clang-format off
     ss << "Usage: " << program_name << " [options]" << "\n";
     ss << "Options:" << "\n";
-    ss << "  --file <path>         Path to pgn file" << "\n";
-    ss << "  --dir <path>          Path to directory containing pgns (default: pgns)" << "\n";
-    ss << "  -r                    Search for pgns recursively in subdirectories" << "\n";
+    ss << "  --file <path>         Path to .pgn(.gz) file" << "\n";
+    ss << "  --dir <path>          Path to directory containing .pgn(.gz) files (default: pgns)" << "\n";
+    ss << "  -r                    Search for .pgn(.gz) files recursively in subdirectories" << "\n";
     ss << "  --allowDuplicates     Allow duplicate directories for test pgns" << "\n";
     ss << "  --matchEngine <regex> Filter data based on engine name" << "\n";
     ss << "  --matchBook <regex>   Filter data based on book name" << "\n";
@@ -413,6 +439,17 @@ int main(int argc, char const *argv[]) {
                   << path << std::endl;
 
         files_pgn = get_files(path, recursive);
+    }
+
+    // sort to easily check for "duplicate" files, i.e. "foo.pgn.gz" and "foo.pgn"
+    std::sort(files_pgn.begin(), files_pgn.end());
+
+    for (size_t i = 1; i < files_pgn.size(); ++i) {
+        if (files_pgn[i].find(files_pgn[i - 1]) == 0) {
+            std::cout << "Error: \"Duplicate\" files: " << files_pgn[i - 1] << " and "
+                      << files_pgn[i] << std::endl;
+            std::exit(1);
+        }
     }
 
     bool allow_duplicates = find_argument(args, pos, "--allowDuplicates", true);

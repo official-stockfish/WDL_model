@@ -40,7 +40,7 @@ if not os.path.exists(args.path):
     os.makedirs(args.path)
 
 # find the set of fully downloaded Ids (looking in the full file tree)
-p = re.compile("([a-z0-9]*)-0.pgn")  # match only testId-0.pgn
+p = re.compile("([a-z0-9]*)-0.pgn(|.gz)")  # match only testId-0.pgn(.gz)
 downloaded = set()
 
 for _, _, files in os.walk(args.path):
@@ -131,7 +131,7 @@ for test, dateStr in ids:
         m = p.search(line)
         if m:
             filename = m.group(1) + ".pgn"
-            if os.path.exists(path + filename):
+            if os.path.exists(path + filename) or os.path.exists(path + filename + ".gz"):
                 countErrors = 0
                 continue
         else:

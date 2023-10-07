@@ -92,7 +92,13 @@ inline float fast_stof(const char *str) {
 
     for (const auto &entry : std::filesystem::directory_iterator(path)) {
         if (std::filesystem::is_regular_file(entry)) {
-            if (entry.path().extension() == ".pgn") {
+            std::string stem = entry.path().stem().string();
+            std::string extension = entry.path().extension().string();
+            if (extension == ".gz") {
+                if (stem.size() >= 4 && stem.substr(stem.size() - 4) == ".pgn") {
+                    files.push_back(entry.path().string());
+                }
+            } else if (extension == ".pgn") {
                 files.push_back(entry.path().string());
             }
         } else if (recursive && std::filesystem::is_directory(entry)) {
