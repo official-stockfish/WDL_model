@@ -18,7 +18,16 @@ Python 3.9 or higher is required.
 pip install -r requirements.txt
 ```
 
+C++17 compatible compiler is required and `zlib` needs to be present.
+```
+sudo apt-get install zlib1g-dev
+````
+
 ## Usage
+_To allow for efficient analysis multiple pgn files are analysed in parallel.
+Analysis of a single pgn file is not parallelized. Files can either be in `.pgn`
+or `.pgn.gz` format. The script will automatically detect the file format and
+decompress `.pgn.gz` files on the fly._
 
 To update Stockfish's internal WDL model, the following steps are needed:
 
@@ -27,6 +36,7 @@ time control) by regularly running `python download_fishtest_pgns.py`
 over a period of time. The script will download the necessary pgn files
 and metadata describing the test conditions from 
 [fishtest](https://tests.stockfishchess.org/).
+
 
 2. Run the script `updateWDL.sh`, which will automatically perform these
 steps:
