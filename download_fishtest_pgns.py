@@ -1,6 +1,10 @@
 import urllib.request, urllib.error, urllib.parse
 import argparse, time, re, os, json
 
+def is_gz_file(filename):
+    with open(filename, 'rb') as f:
+        return f.read(2) == b'\x1f\x8b' 
+
 parser = argparse.ArgumentParser(
     description="Download pgns from completed LTC tests on fishtest.",
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -144,9 +148,11 @@ for test, dateStr in ids:
                 print(f"  Fetching {int(number)+1} missing pgns ...")
             first = False
         try:
-            tmpName = test + ".tmp"
-            urllib.request.urlretrieve(url, path + tmpName)
-            os.rename(path + tmpName, path + filename)
+            tmpName = path + test + ".tmp"
+            urllib.request.urlretrieve(url, tmpName)
+            if is_gz_file(tmpName):
+                filename += ".gz"
+            os.rename(tmpName, path + filename)
             countErrors = 0
         except urllib.error.HTTPError as error:
             if args.verbose >= 2:
