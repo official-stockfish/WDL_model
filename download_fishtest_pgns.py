@@ -78,12 +78,12 @@ for test, dateStr in ids:
     try:
         response = requests.get(url)
         meta = response.json()
-        with open(path + test + ".json", "w") as jsonFile:
-            json.dump(meta, jsonFile, indent=4, sort_keys=True)
         if "spsa" in meta.get("args", {}):
             if args.verbose >= 1:
                 print(f"Skipping SPSA test {test} ...")
             continue
+        with open(path + test + ".json", "w") as jsonFile:
+            json.dump(meta, jsonFile, indent=4, sort_keys=True)
     except Exception as ex:
         if args.verbose >= 2:
             print(f'  error: caught exception "{ex}"')
