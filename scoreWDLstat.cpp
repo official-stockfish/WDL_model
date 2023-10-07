@@ -48,6 +48,13 @@ void ana_game(map_t &pos_map, const std::optional<Game> &game, const std::string
         return;
     }
 
+    if (game.value().headers().find("Termination") != game.value().headers().end()) {
+        std::string term = game.value().headers().at("Termination");
+        if (term == "time forfeit" || term == "abandoned") {
+            return;
+        }
+    }
+
     bool do_filter    = !regex_engine.empty();
     Color filter_side = Color::NONE;
     if (do_filter) {
