@@ -80,7 +80,7 @@ for test, dateStr in ids:
         meta = response.json()
         with open(path + test + ".json", "w") as jsonFile:
             json.dump(meta, jsonFile, indent=4, sort_keys=True)
-        if "spsa" in meta:
+        if "spsa" in meta.get("args", {}):
             if args.verbose >= 1:
                 print(f"Skipping SPSA test {test} ...")
             continue
