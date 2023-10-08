@@ -1,5 +1,4 @@
-import urllib.request, urllib.error, urllib.parse, requests, tarfile
-import argparse, time, re, os, json
+import argparse, json, os, re, requests, tarfile, time, urllib.request
 
 parser = argparse.ArgumentParser(
     description="Bulk-download .pgn.gz files from completed LTC tests on fishtest.",
@@ -76,8 +75,7 @@ for test, dateStr in ids:
         print(f"Collecting meta data for test {test} ...")
     url = "https://tests.stockfishchess.org/api/get_run/" + test
     try:
-        response = requests.get(url)
-        meta = response.json()
+        meta = requests.get(url).json()
         if "spsa" in meta.get("args", {}):
             if args.verbose >= 1:
                 print(f"Skipping SPSA test {test} ...")
