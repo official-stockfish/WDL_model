@@ -498,8 +498,8 @@ int main(int argc, char const *argv[]) {
     const auto t1 = std::chrono::high_resolution_clock::now();
 
     std::cout << "\nTime taken: "
-              << std::chrono::duration_cast<std::chrono::seconds>(t1 - t0).count() << "s"
-              << std::endl;
+              << std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count() / 1000.0
+              << "s" << std::endl;
 
     save(pos_map, json_filename);
 
