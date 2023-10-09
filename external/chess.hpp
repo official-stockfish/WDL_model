@@ -36,6 +36,7 @@ VERSION: 0.3.1
 #include <bitset>
 #include <cassert>
 #include <cstdint>
+#include <cstring>
 #include <fstream>
 #include <functional>
 #include <iostream>
@@ -2945,6 +2946,52 @@ template <Color c>
  * uci utility functions                                                     *
 \****************************************************************************/
 
+struct CMove {
+    char str[10] = {'\0'};
+    int length   = 0;
+
+    CMove() = default;
+
+    CMove(const char *str) {
+        for (int i = 0; i < 10; i++) {
+            this->str[i] = str[i];
+            if (str[i] == '\0') {
+                length = i;
+                break;
+            }
+        }
+    }
+
+    const char *c_str() const { return str; }
+
+    bool empty() const { return length == 0; }
+
+    int size() const { return length; }
+
+    void clear() {
+        for (int i = 0; i < 10; i++) {
+            str[i] = '\0';
+        }
+        length = 0;
+    }
+
+    char operator[](int index) const {
+        if (index < 0 || index >= length) {
+            return '\0';
+        }
+
+        return str[index];
+    }
+
+    CMove &operator+=(char c) {
+        if (length >= 9) {
+            return *this;
+        }
+        str[length++] = c;
+        return *this;
+    }
+};
+
 namespace uci {
 /// @brief Converts an internal move to a UCI string
 /// @param move
@@ -3135,99 +3182,87 @@ namespace uci {
     return lan;
 }
 
-/// @brief Converts a SAN string to a move
-/// @param board
-/// @param san
-/// @return
-[[nodiscard]] inline Move parseSan(const Board &board, std::string san) {
-    Movelist moves;
+[[nodiscard]] inline Move parseSanInternal(const Board &board, const CMove &san, Movelist &moves) {
     movegen::legalmoves(moves, board);
 
-    const auto original = san;
+    const char *original = san.str;
 
-    if (san.rfind("0-0-0", 0) == 0 || san.rfind("O-O-O", 0) == 0) {
+    if (strncmp(san.str, "0-0-0", 5) == 0 || strncmp(san.str, "O-O-O", 5) == 0) {
         for (auto move : moves) {
             if (move.typeOf() == Move::CASTLING && move.to() < move.from()) {
                 return move;
             }
         }
 
-        throw std::runtime_error("Illegal San, Step 1: " + san);
-    } else if (san.rfind("0-0", 0) == 0 || san.rfind("O-O", 0) == 0) {
+        throw std::runtime_error("Illegal san.str, Step 1: " + std::string(san.str));
+    } else if (strncmp(san.str, "0-0", 3) == 0 || strncmp(san.str, "O-O", 3) == 0) {
         for (auto move : moves) {
             if (move.typeOf() == Move::CASTLING && move.to() > move.from()) {
                 return move;
             }
         }
 
-        throw std::runtime_error("Illegal San, Step 2: " + san);
+        throw std::runtime_error("Illegal San, Step 2: " + std::string(san.str));
     }
 
     // A move looks like this:
-
     // [NBKRQ]? ([a-h])? ([1-8])? x? [a-h] [1-8] (=[nbrqkNBRQK])?
 
-    if (san.size() < 2) {
-        throw std::runtime_error("Illegal San, Step 3: " + san);
-    }
+    size_t index = 0;
 
-    PieceType pt = PieceType::NONE;
-
+    PieceType pt        = PieceType::NONE;
     PieceType promotion = PieceType::NONE;
+    File file_from      = File::NO_FILE;
+    Rank rank_from      = Rank::NO_RANK;
+    File file_to        = File::NO_FILE;
+    Rank rank_to        = Rank::NO_RANK;
 
-    File file_from = File::NO_FILE;
-    Rank rank_from = Rank::NO_RANK;
-
-    File file_to = File::NO_FILE;
-    Rank rank_to = Rank::NO_RANK;
-
-    // check if san starts with file
-    if (san[0] == 'N' || san[0] == 'B' || san[0] == 'R' || san[0] == 'Q' || san[0] == 'K') {
-        pt = charToPieceType[san[0]];
-        san.erase(0, 1);
+    // check if san starts with a piece type
+    if (san[index] == 'N' || san[index] == 'B' || san[index] == 'R' || san[index] == 'Q' ||
+        san[index] == 'K') {
+        pt = charToPieceType[san[index]];
+        ++index;
     }
 
-    if (san[0] >= 'a' && san[0] <= 'h') {
-        file_from = File(int(san[0] - 97));
-
+    // check if san starts with a file
+    if (san[index] >= 'a' && san[index] <= 'h') {
+        file_from = File(int(san[index] - 'a'));
         if (pt == PieceType::NONE) {
             pt = PieceType::PAWN;
         }
-
-        san.erase(0, 1);
+        ++index;
     }
 
-    if (san[0] >= '1' && san[0] <= '8') {
-        rank_from = Rank(int(san[0] - 49));
-
-        san.erase(0, 1);
+    // check if san starts with a rank
+    if (san[index] >= '1' && san[index] <= '8') {
+        rank_from = Rank(int(san[index] - '1'));
+        ++index;
     }
 
     // skip capture sign
-    if (san[0] == 'x') {
-        san.erase(0, 1);
+    if (san[index] == 'x') {
+        ++index;
     }
 
-    if (san[0] >= 'a' && san[0] <= 'h') {
-        file_to = File(int(san[0] - 97));
-
+    // check if san contains a destination square (file and rank)
+    if (san[index] >= 'a' && san[index] <= 'h') {
+        file_to = File(int(san[index] - 'a'));
         if (pt == PieceType::NONE) {
             pt = PieceType::PAWN;
         }
-
-        san.erase(0, 1);
+        ++index;
     }
 
-    if (san[0] >= '1' && san[0] <= '8') {
-        rank_to = Rank(int(san[0] - 49));
-
-        san.erase(0, 1);
+    if (san[index] >= '1' && san[index] <= '8') {
+        rank_to = Rank(int(san[index] - '1'));
+        ++index;
     }
 
-    if (san[0] == '=') {
-        san.erase(0, 1);
-
-        promotion = charToPieceType[san[0]];
+    // check for promotion
+    if (san[index] == '=') {
+        ++index;
+        promotion = charToPieceType[san[index]];
+        ++index;
     }
 
     // the from square is actually the to
@@ -3291,7 +3326,18 @@ namespace uci {
     std::cout << "promotion " << int(promotion) << std::endl;
     std::cout << "to_sq " << squareToString[int(to_sq)] << std::endl;
 
-    throw std::runtime_error("Illegal San, Step 4: " + original + " " + board.getFen());
+    throw std::runtime_error("Illegal San, Step 4: " + std::string(original) + " " +
+                             board.getFen());
+}
+
+/// @brief Converts a SAN string to a move
+/// @param board
+/// @param san
+/// @return
+[[nodiscard]] inline Move parseSan(const Board &board, const std::string &san) {
+    Movelist moves;
+
+    return parseSanInternal(board, CMove(san.c_str()), moves);
 }
 
 }  // namespace uci
@@ -3354,125 +3400,239 @@ inline std::pair<std::string, std::string> extractHeader(const std::string &line
     return {key, value};
 }
 
-/// @brief [Internal use only] Extract and parse the move, plus any comments it might have.
-/// @param board
-/// @param line
-/// @return
-inline void extractMoves(Board &board, std::vector<PgnMove> &moves, std::string_view line) {
-    std::string move;
+class StreamParser {
+    enum class State { CONTINUE, BREAK };
+
+   public:
+    StreamParser(std::istream &file_stream) : file(file_stream) {}
+
+    template <typename Callable>
+    void readGame(Callable &&func) {
+        const std::size_t bufferSize = 1024;
+        char buffer[bufferSize];
+
+        int bufferIndex           = 0;
+        std::streamsize bytesRead = 0;
+
+        while (true) {
+            bool hasHead = false;
+            bool hasBody = false;
+
+            moves.clear();
+            board.setFen(STARTPOS);
+            game = Game();
+
+            header.first.clear();
+            header.second.clear();
+
+            move.clear();
+            comment.clear();
+
+            readingMove    = false;
+            readingComment = false;
+
+            lineStart = true;
+
+            // current state
+            inHeader = false;
+            inBody   = false;
+
+            // Header
+            readingKey   = false;
+            readingValue = false;
+
+            while (file) {
+                if (bufferIndex == 0) {
+                    file.read(buffer, bufferSize);
+                    bytesRead = file.gcount();
+
+                    if (bytesRead == 0) {
+                        break;
+                    }
+                }
+
+                if (processNextBytes(buffer, bytesRead, hasHead, hasBody, bufferIndex) ==
+                    State::BREAK) {
+                    break;
+                }
+            }
+
+            if (!hasBody && !hasHead) {
+                return;
+            }
+
+            func(game);
+        }
+    }
+
+    template <typename T, typename MemberFunc>
+    auto readGame(T &instance, MemberFunc mem_func) {
+        return readGame([&instance, mem_func](Game &game) { (instance.*mem_func)(game); });
+    }
+
+   private:
+    State processNextBytes(const char *buffer, std::size_t length, bool &hasHead, bool &hasBody,
+                           int &bufferIndex) {
+        for (std::size_t i = bufferIndex; i < length; ++i) {
+            char c = buffer[i];
+
+            if (c == '\r') {
+                continue;
+            }
+
+            // PGN End
+            if (lineStart && inBody && c == '\n') {
+                bufferIndex = i;
+                return State::BREAK;
+            }
+
+            if (c == '\n') {
+                lineStart = true;
+            }
+
+            // PGN Header
+            if (lineStart && c == '[') {
+                hasHead = true;
+
+                inHeader = true;
+                inBody   = false;
+
+                readingKey = true;
+
+                lineStart = false;
+                continue;
+            }
+
+            // PGN Moves Start
+            if (lineStart && hasHead && !inBody && c == '1') {
+                readingMove    = false;
+                readingComment = false;
+
+                hasBody = true;
+
+                inHeader = false;
+                inBody   = true;
+
+                lineStart = false;
+                continue;
+            }
+
+            // make sure that the linestart is turned off again
+            if (lineStart && c != '\n') {
+                lineStart = false;
+            }
+
+            if (inHeader) {
+                if (c == '"') {
+                    readingValue = !readingValue;
+                } else if (readingKey && c == ' ') {
+                    readingKey = false;
+                } else if (readingKey) {
+                    header.first += c;
+                } else if (readingValue) {
+                    header.second += c;
+                } else if (c == '\n') {
+                    readingKey   = false;
+                    readingValue = false;
+                    inHeader     = false;
+
+                    game.setHeader(header.first, header.second);
+
+                    if (header.first == "FEN") {
+                        board.setFen(header.second);
+                    }
+
+                    if (header.first == "Variant") {
+                        board.set960(header.second == "fischerandom");
+                    }
+
+                    header.first.clear();
+                    header.second.clear();
+                }
+            }
+            // Pgn are build up in the following way.
+            // {move_number} {move} {comment} {move} {comment} {move_number} ...
+            // So we need to skip the move_number then start reading the move, then save the comment
+            // then read the second move in the group. After that a move_number will follow again.
+            else if (inBody) {
+                if (readingMove && c == ' ') {
+                    readingMove = false;
+                } else if (readingMove) {
+                    move += c;
+                } else if (!readingComment && c == '{') {
+                    readingComment = true;
+                } else if (readingComment && c == '}') {
+                    readingComment = false;
+
+                    addMove();
+                } else if (!readingMove && !readingComment) {
+                    if (!std::isalpha(c)) {
+                        continue;
+                    }
+
+                    addMove();
+
+                    readingMove = true;
+                    move += c;
+                } else if (readingComment) {
+                    comment += c;
+                } else if (c == '\n') {
+                    readingMove    = false;
+                    readingComment = false;
+
+                    addMove();
+                }
+            }
+
+            continue;
+        }
+
+        bufferIndex = 0;
+        return State::CONTINUE;
+    }
+
+    void addMove() {
+        if (!move.empty()) {
+            moves.clear();
+
+            const auto move_internal = uci::parseSanInternal(board, move.c_str(), moves);
+            game.moves().push_back({move_internal, comment});
+            board.makeMove(move_internal);
+
+            move.clear();
+            comment.clear();
+        }
+    };
+
+    std::istream &file;
+
+    Movelist moves;
+
+    Board board = Board();
+
+    Game game;
+
+    std::pair<std::string, std::string> header;
+
+    // move parsing
+    CMove move;
     std::string comment;
 
     bool readingMove    = false;
     bool readingComment = false;
 
-    // Pgn are build up in the following way.
-    // {move_number} {move} {comment} {move} {comment} {move_number} ...
-    // So we need to skip the move_number then start reading the move, then save the comment
-    // then read the second move in the group. After that a move_number will follow again.
-    for (const auto c : line) {
-        if (readingMove && c == ' ') {
-            readingMove = false;
-        } else if (readingMove) {
-            move += c;
-        } else if (!readingComment && c == '{') {
-            readingComment = true;
-        } else if (readingComment && c == '}') {
-            readingComment = false;
+    bool lineStart = true;
 
-            if (!move.empty()) {
-                const auto move_internal = uci::parseSan(board, move);
-                moves.push_back({move_internal, comment});
+    // current state
+    bool inHeader = false;
+    bool inBody   = false;
 
-                board.makeMove(move_internal);
+    // Header
+    bool readingKey   = false;
+    bool readingValue = false;
 
-                move.clear();
-                comment.clear();
-            }
-        } else if (!readingMove && !readingComment) {
-            if (!std::isalpha(c)) {
-                continue;
-            }
-
-            if (!move.empty()) {
-                const auto move_internal = uci::parseSan(board, move);
-                moves.push_back({move_internal, comment});
-
-                board.makeMove(move_internal);
-
-                move.clear();
-                comment.clear();
-            }
-
-            readingMove = true;
-            move += c;
-        } else if (readingComment) {
-            comment += c;
-        }
-    }
-
-    // add the remaining move
-    if (!move.empty()) {
-        const auto move_internal = uci::parseSan(board, move);
-        moves.push_back({move_internal, comment});
-
-        board.makeMove(move_internal);
-
-        move.clear();
-        comment.clear();
-    }
-}
-
-/// @brief Read the next game from a file
-/// @param file
-/// @return
-inline std::optional<Game> readGame(std::istream &file) {
-    Board board = Board();
-
-    Game game;
-
-    std::string line;
-
-    bool readingMoves = false;
-
-    bool hasHead = false;
-    bool hasBody = false;
-
-    while (!utils::safeGetline(file, line).eof()) {
-        // We read the moves and we reached the end of the pgn, which is signaled by an empty line.
-        if (readingMoves && line.empty()) {
-            break;
-        }
-
-        if (line[0] == '[') {
-            // Parse the header
-            const auto header = extractHeader(line);
-
-            hasHead = true;
-
-            game.setHeader(header.first, header.second);
-
-            if (header.first == "FEN") {
-                board.setFen(header.second);
-            }
-
-            if (header.first == "Variant") {
-                board.set960(header.second == "fischerandom");
-            }
-        } else {
-            // Parse the moves
-            extractMoves(board, game.moves(), line);
-
-            readingMoves = true;
-            hasBody      = true;
-        }
-    }
-
-    if (!hasBody && !hasHead) {
-        return std::nullopt;
-    }
-
-    return game;
-}
+   private:
+};
 
 }  // namespace pgn
 

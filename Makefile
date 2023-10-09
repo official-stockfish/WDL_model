@@ -18,9 +18,9 @@ ifeq ($(uname_S), Darwin)
 	NATIVE =	
 endif
 
-SRC_FILE = scoreWDLstat.cpp
+SRC_FILE = scoreWDLstat.cpp external/gzip/gzstream.cpp
 EXE_FILE = scoreWDLstat
-HEADERS = external/chess.hpp external/json.hpp external/threadpool.hpp scoreWDLstat.hpp
+HEADERS = external/chess.hpp external/json.hpp external/threadpool.hpp scoreWDLstat.hpp external/gzip/gzstream.h
 
 all: $(EXE_FILE)
 
