@@ -321,9 +321,10 @@ void filter_files_sprt(std::vector<std::string> &file_list, const map_meta &meta
 }
 
 void process(const std::vector<std::string> &files_pgn, map_t &pos_map,
-             const std::string &regex_engine, const map_meta &meta_map, bool fix_fens) {
+             const std::string &regex_engine, const map_meta &meta_map, bool fix_fens,
+             int concurrency) {
     // Create more chunks than threads to prevent threads from idling.
-    int target_chunks = 4 * std::max(1, int(std::thread::hardware_concurrency()));
+    int target_chunks = 4 * concurrency;
 
     auto files_chunked = split_chunks(files_pgn, target_chunks);
 
@@ -334,7 +335,7 @@ void process(const std::vector<std::string> &files_pgn, map_t &pos_map,
     std::mutex map_mutex;
 
     // Create a thread pool
-    ThreadPool pool(std::thread::hardware_concurrency());
+    ThreadPool pool(concurrency);
 
     // Print progress
     std::cout << "\rProgress: " << total_chunks << "/" << files_chunked.size() << std::flush;
@@ -399,6 +400,7 @@ void print_usage(char const *program_name) {
     ss << "  --dir <path>          Path to directory containing .pgn(.gz) files (default: pgns)" << "\n";
     ss << "  -r                    Search for .pgn(.gz) files recursively in subdirectories" << "\n";
     ss << "  --allowDuplicates     Allow duplicate directories for test pgns" << "\n";
+    ss << "  --concurrency <N>     Number of concurrent threads to use (default: maximum)" << "\n";
     ss << "  --matchEngine <regex> Filter data based on engine name" << "\n";
     ss << "  --matchBook <regex>   Filter data based on book name" << "\n";
     ss << "  --matchBookInvert     Invert the filter" << "\n";
@@ -423,9 +425,15 @@ int main(int argc, char const *argv[]) {
 
     std::vector<std::string>::const_iterator pos;
 
+    int concurrency = std::max(1, int(std::thread::hardware_concurrency()));
+
     if (std::find(args.begin(), args.end(), "--help") != args.end()) {
         print_usage(argv[0]);
         return 0;
+    }
+
+    if (find_argument(args, pos, "--concurrency")) {
+        concurrency = std::stoi(*std::next(pos));
     }
 
     if (find_argument(args, pos, "--file")) {
@@ -489,7 +497,7 @@ int main(int argc, char const *argv[]) {
 
     const auto t0 = std::chrono::high_resolution_clock::now();
 
-    process(files_pgn, pos_map, regex_engine, meta_map, fix_fens);
+    process(files_pgn, pos_map, regex_engine, meta_map, fix_fens, concurrency);
 
     const auto t1 = std::chrono::high_resolution_clock::now();
 
