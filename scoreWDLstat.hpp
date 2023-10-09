@@ -1,3 +1,5 @@
+#include <zlib.h>
+
 #include <algorithm>
 #include <cstdint>
 #include <filesystem>
@@ -151,7 +153,7 @@ inline float fast_stof(const char *str) {
 
     for (const auto &entry : std::filesystem::directory_iterator(path)) {
         if (std::filesystem::is_regular_file(entry)) {
-            std::string stem = entry.path().stem().string();
+            std::string stem      = entry.path().stem().string();
             std::string extension = entry.path().extension().string();
             if (extension == ".gz") {
                 if (stem.size() >= 4 && stem.substr(stem.size() - 4) == ".pgn") {
@@ -199,3 +201,51 @@ inline bool find_argument(const std::vector<std::string> &args,
 
     return pos != args.end() && (without_parameter || std::next(pos) != args.end());
 }
+
+class GzippedFileBuf : public std::streambuf {
+   public:
+    GzippedFileBuf(const char *file_path) {
+        file_ = gzopen(file_path, "rb");
+        if (!file_) {
+            throw std::runtime_error("Failed to open gzipped file.");
+        }
+
+        // Set the buffer pointers and sizes
+        setp(buffer_, buffer_ + BufferSize);
+        setg(buffer_, buffer_, buffer_);
+    }
+
+    ~GzippedFileBuf() { gzclose(file_); }
+
+   protected:
+    int_type underflow() override {
+        if (gptr() < egptr()) {
+            return traits_type::to_int_type(*gptr());
+        }
+
+        // Read more data into the buffer
+        int bytesRead = gzread(file_, buffer_, BufferSize);
+        if (bytesRead <= 0) {
+            return traits_type::eof();
+        }
+
+        setg(buffer_, buffer_, buffer_ + bytesRead);
+
+        return traits_type::to_int_type(*gptr());
+    }
+
+   private:
+    gzFile file_;
+    static constexpr int BufferSize = 1024;
+    char buffer_[BufferSize];
+};
+
+class GzippedFileIStream : public std::istream {
+   public:
+    GzippedFileIStream(const char *file_path) : std::istream(&buf_), buf_(file_path) {
+        exceptions(std::ios::failbit | std::ios::badbit);
+    }
+
+   private:
+    GzippedFileBuf buf_;
+};

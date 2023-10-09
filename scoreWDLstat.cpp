@@ -1,7 +1,5 @@
 #include "scoreWDLstat.hpp"
 
-#include <zlib.h>
-
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -167,19 +165,6 @@ void ana_game(map_t &pos_map, const std::optional<Game> &game, const std::string
     }
 }
 
-void gzip_uncompress(std::string &out, const std::string &compressed_file_path) {
-    char outbuffer[1024 * 16];
-    gzFile infile = (gzFile)gzopen(compressed_file_path.c_str(), "rb");
-    gzrewind(infile);
-
-    while (!gzeof(infile)) {
-        int len = gzread(infile, outbuffer, sizeof(outbuffer));
-        out.append(outbuffer, len);
-    }
-
-    gzclose(infile);
-}
-
 void ana_files(map_t &map, const std::vector<std::string> &files, const std::string &regex_engine,
                const map_meta &meta_map, bool fix_fens) {
     map.reserve(map_size);
@@ -228,11 +213,8 @@ void ana_files(map_t &map, const std::vector<std::string> &files, const std::str
         };
 
         if (file.size() >= 3 && file.substr(file.size() - 3) == ".gz") {
-            std::string file_content;
-            gzip_uncompress(file_content, file);
-
-            std::istringstream iss(file_content);
-            pgn_iterator(iss);
+            GzippedFileIStream input(file.c_str());
+            pgn_iterator(input);
         } else {
             std::ifstream pgn_stream(file);
             pgn_iterator(pgn_stream);
