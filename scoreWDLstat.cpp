@@ -69,7 +69,11 @@ class Analyze : public pgn::Visitor {
     Board board;
     Movelist moves;
 
-    bool skip = true;
+    bool skip = false;
+
+    bool hasResult       = false;
+    bool goodTermination = false;
+    bool goodResult      = false;
 
     ResultKey resultkey;
 
@@ -86,8 +90,7 @@ class Analyze : public pgn::Visitor {
         }
 
         if (key == "Result") {
-            skip = false;
-
+            hasResult = true;
             if (value == "1-0") {
                 resultkey.white = Result::WIN;
                 resultkey.black = Result::LOSS;
@@ -98,36 +101,30 @@ class Analyze : public pgn::Visitor {
                 resultkey.white = Result::DRAW;
                 resultkey.black = Result::DRAW;
             } else {
-                return;
+                goodResult = true;
             }
         }
 
-        if (key == "Termination" && value != "time forfeit" && value != "abandoned") {
-            skip = false;
+        if (key == "Termination" && (value == "time forfeit" || value == "abandoned")) {
+            goodTermination = true;
         }
+
+        skip = hasResult && goodTermination && goodResult;
     }
 
     void move(const std::string &move, const std::string &comment) override {
-        moves.clear();
-        Move m;
-
-        try {
-            m = uci::parseSanInternal(board, move.c_str(), moves);
-        } catch (const std::exception &e) {
-            std::cout << "Error when parsing: " << move << " " << comment << std::endl;
-            std::cerr << e.what() << '\n';
-            throw e;
-        }
-
         if (skip) {
-            board.makeMove(m);
             return;
         }
 
         if (board.fullMoveNumber() > 200) {
-            board.makeMove(m);
             return;
         }
+
+        moves.clear();
+        Move m;
+
+        m = uci::parseSanInternal(board, move.c_str(), moves);
 
         const size_t delimiter_pos = comment.find('/');
 
@@ -175,7 +172,6 @@ class Analyze : public pgn::Visitor {
     void end() override {
         board.set960(false);
         board.setFen(STARTPOS);
-        skip = true;
     }
 
     /// @brief Analyze a single game and update the position map, apply filter if present
