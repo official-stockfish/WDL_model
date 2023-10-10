@@ -77,12 +77,8 @@ class Analyze : public pgn::Visitor {
 
     ResultKey resultkey;
 
-    std::ofstream out_file;
-
     Analyze(map_t &pos_map, const std::string &regex_engine, const std::string &move_counter)
-        : pos_map(pos_map), regex_engine(regex_engine), move_counter(move_counter) {
-        out_file.open("log.txt");
-    }
+        : pos_map(pos_map), regex_engine(regex_engine), move_counter(move_counter) {}
 
     void header(const std::string &key, const std::string &value) override {
         if (key == "FEN") {
@@ -128,9 +124,6 @@ class Analyze : public pgn::Visitor {
         if (board.fullMoveNumber() > 200) {
             return;
         }
-
-        // write
-        out_file << move << " " << comment << std::endl;
 
         moves.clear();
         Move m;
@@ -360,13 +353,10 @@ void ana_files(map_t &map, const std::vector<std::string> &files, const std::str
 
             auto vis = std::make_unique<Analyze>(map, regex_engine, move_counter);
 
-            pgn::StreamParser parser(iss, *vis);
-
-            // parser.readGame();
+            pgn::StreamParser parser(iss);
 
             try {
-                parser.readGame();
-
+                parser.readGame(*vis);
             } catch (const std::exception &e) {
                 std::cout << "Error when parsing: " << file << std::endl;
                 std::cerr << e.what() << '\n';

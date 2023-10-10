@@ -2948,52 +2948,6 @@ template <Color c>
  * uci utility functions                                                     *
 \****************************************************************************/
 
-struct CMove {
-    char str[10] = {'\0'};
-    int length   = 0;
-
-    CMove() = default;
-
-    CMove(const char *str) {
-        for (int i = 0; i < 10; i++) {
-            this->str[i] = str[i];
-            if (str[i] == '\0') {
-                length = i;
-                break;
-            }
-        }
-    }
-
-    const char *c_str() const { return str; }
-
-    bool empty() const { return length == 0; }
-
-    int size() const { return length; }
-
-    void clear() {
-        for (int i = 0; i < 10; i++) {
-            str[i] = '\0';
-        }
-        length = 0;
-    }
-
-    char operator[](int index) const {
-        if (index < 0 || index >= length) {
-            return '\0';
-        }
-
-        return str[index];
-    }
-
-    CMove &operator+=(char c) {
-        if (length >= 9) {
-            return *this;
-        }
-        str[length++] = c;
-        return *this;
-    }
-};
-
 namespace uci {
 /// @brief Converts an internal move to a UCI string
 /// @param move
@@ -3184,10 +3138,11 @@ namespace uci {
     return lan;
 }
 
-[[nodiscard]] inline Move parseSanInternal(const Board &board, const CMove &san, Movelist &moves) {
-    const char *original = san.str;
+[[nodiscard]] inline Move parseSanInternal(const Board &board, const std::string &san,
+                                           Movelist &moves) {
+    const char *original = san.c_str();
 
-    const auto cmp = [](const char *src, const char *pattern, int n) {
+    const auto cmp = [](const std::string &src, const std::string &pattern, int n) {
         for (int i = 0; i < n; i++) {
             if (src[i] != pattern[i]) {
                 return false;
@@ -3196,7 +3151,7 @@ namespace uci {
         return true;
     };
 
-    if (cmp(san.str, "0-0-0", 5) || cmp(san.str, "O-O-O", 5)) {
+    if (cmp(san, "0-0-0", 5) || cmp(san, "O-O-O", 5)) {
         movegen::legalmoves(moves, board, PieceGenType::KING);
         for (const auto &move : moves) {
             if (move.typeOf() == Move::CASTLING && move.to() < move.from()) {
@@ -3204,8 +3159,8 @@ namespace uci {
             }
         }
 
-        throw std::runtime_error("Illegal san.str, Step 1: " + std::string(san.str));
-    } else if (cmp(san.str, "0-0", 3) || cmp(san.str, "O-O", 3)) {
+        throw std::runtime_error("Illegal san.str, Step 1: " + std::string(san));
+    } else if (cmp(san, "0-0", 3) || cmp(san, "O-O", 3)) {
         movegen::legalmoves(moves, board, PieceGenType::KING);
         for (const auto &move : moves) {
             if (move.typeOf() == Move::CASTLING && move.to() > move.from()) {
@@ -3213,7 +3168,7 @@ namespace uci {
             }
         }
 
-        throw std::runtime_error("Illegal San, Step 2: " + std::string(san.str));
+        throw std::runtime_error("Illegal San, Step 2: " + std::string(san));
     }
 
     // A move looks like this:
@@ -3377,7 +3332,7 @@ namespace uci {
 [[nodiscard]] inline Move parseSan(const Board &board, const std::string &san) {
     Movelist moves;
 
-    return parseSanInternal(board, CMove(san.c_str()), moves);
+    return parseSanInternal(board, san, moves);
 }
 
 }  // namespace uci
@@ -3449,15 +3404,12 @@ class Visitor {
 };
 
 class StreamParser {
-    enum class State { CONTINUE, BREAK };
-
    public:
-    Visitor *visitor = nullptr;
+    StreamParser(std::istream &file_stream) : file(file_stream) {}
 
-    StreamParser(std::istream &file_stream, Visitor &visitor)
-        : visitor(&visitor), file(file_stream) {}
+    void readGame(Visitor &vis) {
+        this->visitor = &vis;
 
-    void readGame() {
         const std::size_t bufferSize = 1024;
         char buffer[bufferSize];
 
@@ -3507,20 +3459,15 @@ class StreamParser {
                 return;
             }
 
-            visitor->end();
+            this->visitor->end();
         }
     }
 
-    template <typename T, typename MemberFunc>
-    auto readGame(T &instance, MemberFunc mem_func) {
-        return readGame([&instance, mem_func](Game &game) { (instance.*mem_func)(game); });
-    }
-
    private:
-    bool isMoveChar(char c) {
-        // p, n, b, r, q, k, P, N, B, R, Q, K, a, b, c, d, e, f, g, h
-        return (c >= 97 && c <= 122) || (c >= 65 && c <= 90);
-    }
+    enum class State { CONTINUE, BREAK };
+
+    // A-Za-z
+    bool isMoveChar(char c) { return (c >= 97 && c <= 122) || (c >= 65 && c <= 90); }
 
     State processNextBytes(const char *buffer, std::size_t length, bool &hasHead, bool &hasBody,
                            int &bufferIndex) {
@@ -3612,11 +3559,6 @@ class StreamParser {
                         move.clear();
                         comment.clear();
                     }
-
-                    // if (!comment.empty()) {
-                    //     visitor->comment(comment);
-                    //     comment.clear();
-                    // }
                 } else if (!readingMove && !readingComment) {
                     // we are in empty space, when we encounter now a file or a piece we try to
                     // parse the move
@@ -3628,13 +3570,6 @@ class StreamParser {
                         visitor->move(move, comment);
                         move.clear();
                         comment.clear();
-                        // visitor->move(move);
-                        // move.clear();
-                    }
-
-                    if (!comment.empty()) {
-                        // visitor->comment(comment);
-                        // comment.clear();
                     }
 
                     readingMove = true;
@@ -3644,16 +3579,6 @@ class StreamParser {
                 } else if (c == '\n') {
                     readingMove    = false;
                     readingComment = false;
-
-                    // if (!move.empty()) {
-                    //     visitor->move(move);
-                    //     move.clear();
-                    // }
-
-                    // if (!comment.empty()) {
-                    //     visitor->comment(comment);
-                    //     comment.clear();
-                    // }
                 }
             }
 
@@ -3663,6 +3588,8 @@ class StreamParser {
         bufferIndex = 0;
         return State::CONTINUE;
     }
+
+    Visitor *visitor = nullptr;
 
     std::istream &file;
 
