@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <mutex>
 #include <regex>
 #include <set>
@@ -36,14 +37,146 @@ namespace analysis {
 /// @brief Magic value for fishtest pgns, ~1.2 million keys
 static constexpr int map_size = 1200000;
 
-class Analyze {
+// class MyVisitor : public pgn::Visitor {
+//    private:
+//     Board board;
+//     Movelist moves;
+
+//    public:
+//     void header(const std::string &key, const std::string &value) override {
+//         if (key == "FEN") {
+//             board.setFen(value);
+//         }
+//     }
+
+//     void move(const std::string &move) override {
+//         moves.clear();
+//         const auto m = uci::parseSanInternal(board, move.c_str(), moves);
+//         board.makeMove(m);
+//     }
+
+//     void comment(const std::string &comment) override {}
+
+//     void end() override { board.setFen(STARTPOS); }
+// };
+
+class Analyze : public pgn::Visitor {
    public:
     std::unordered_map<Key, int> &pos_map;
     const std::string &regex_engine;
     const std::string &move_counter;
 
+    Board board;
+    Movelist moves;
+
+    bool skip = true;
+
+    ResultKey resultkey;
+
     Analyze(map_t &pos_map, const std::string &regex_engine, const std::string &move_counter)
         : pos_map(pos_map), regex_engine(regex_engine), move_counter(move_counter) {}
+
+    void header(const std::string &key, const std::string &value) override {
+        if (key == "FEN") {
+            board.setFen(value);
+        }
+
+        if (key == "Variant" && value == "fischerandom") {
+            board.set960(true);
+        }
+
+        if (key == "Result") {
+            skip = false;
+
+            if (value == "1-0") {
+                resultkey.white = Result::WIN;
+                resultkey.black = Result::LOSS;
+            } else if (value == "0-1") {
+                resultkey.white = Result::LOSS;
+                resultkey.black = Result::WIN;
+            } else if (value == "1/2-1/2") {
+                resultkey.white = Result::DRAW;
+                resultkey.black = Result::DRAW;
+            } else {
+                return;
+            }
+        }
+
+        if (key == "Termination" && value != "time forfeit" && value != "abandoned") {
+            skip = false;
+        }
+    }
+
+    void move(const std::string &move, const std::string &comment) override {
+        moves.clear();
+        Move m;
+
+        try {
+            m = uci::parseSanInternal(board, move.c_str(), moves);
+        } catch (const std::exception &e) {
+            std::cout << "Error when parsing: " << move << " " << comment << std::endl;
+            std::cerr << e.what() << '\n';
+            throw e;
+        }
+
+        if (skip) {
+            board.makeMove(m);
+            return;
+        }
+
+        if (board.fullMoveNumber() > 200) {
+            board.makeMove(m);
+            return;
+        }
+
+        const size_t delimiter_pos = comment.find('/');
+
+        Key key;
+        key.score = 1002;
+
+        if (delimiter_pos != std::string::npos && comment != "book") {
+            const auto match_score = move.substr(0, delimiter_pos);
+
+            if (match_score[1] == 'M') {
+                if (match_score[0] == '+') {
+                    key.score = 1001;
+                } else {
+                    key.score = -1001;
+                }
+
+            } else {
+                int score = 100 * fast_stof(match_score.c_str());
+
+                if (score > 1000) {
+                    score = 1000;
+                } else if (score < -1000) {
+                    score = -1000;
+                }
+
+                key.score = int(std::floor(score / 5.0)) * 5;  // reduce precision
+            }
+        }
+
+        if (key.score != 1002) {  // a score was found
+            key.outcome = board.sideToMove() == Color::WHITE ? resultkey.white : resultkey.black;
+            key.move    = board.fullMoveNumber();
+            const auto knights = builtin::popcount(board.pieces(PieceType::KNIGHT));
+            const auto bishops = builtin::popcount(board.pieces(PieceType::BISHOP));
+            const auto rooks   = builtin::popcount(board.pieces(PieceType::ROOK));
+            const auto queens  = builtin::popcount(board.pieces(PieceType::QUEEN));
+            const auto pawns   = builtin::popcount(board.pieces(PieceType::PAWN));
+            key.material       = 9 * queens + 5 * rooks + 3 * bishops + 3 * knights + pawns;
+            pos_map[key] += 1;
+        }
+
+        board.makeMove(m);
+    }
+
+    void end() override {
+        board.set960(false);
+        board.setFen(STARTPOS);
+        skip = true;
+    }
 
     /// @brief Analyze a single game and update the position map, apply filter if present
     /// @param pos_map
@@ -212,12 +345,16 @@ void ana_files(map_t &map, const std::vector<std::string> &files, const std::str
         }
 
         const auto pgn_iterator = [&](std::istream &iss) {
-            auto ana = Analyze(map, regex_engine, move_counter);
+            // auto ana = Analyze(map, regex_engine, move_counter);
 
-            pgn::StreamParser parser(iss);
+            auto vis = std::make_unique<Analyze>(map, regex_engine, move_counter);
+
+            pgn::StreamParser parser(iss, *vis);
+
+            // parser.readGame();
 
             try {
-                parser.readGame(ana, &Analyze::ana_game);
+                parser.readGame();
 
             } catch (const std::exception &e) {
                 std::cout << "Error when parsing: " << file << std::endl;
