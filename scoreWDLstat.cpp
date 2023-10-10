@@ -37,29 +37,6 @@ namespace analysis {
 /// @brief Magic value for fishtest pgns, ~1.2 million keys
 static constexpr int map_size = 1200000;
 
-// class MyVisitor : public pgn::Visitor {
-//    private:
-//     Board board;
-//     Movelist moves;
-
-//    public:
-//     void header(const std::string &key, const std::string &value) override {
-//         if (key == "FEN") {
-//             board.setFen(value);
-//         }
-//     }
-
-//     void move(const std::string &move) override {
-//         moves.clear();
-//         const auto m = uci::parseSanInternal(board, move.c_str(), moves);
-//         board.makeMove(m);
-//     }
-
-//     void comment(const std::string &comment) override {}
-
-//     void end() override { board.setFen(STARTPOS); }
-// };
-
 class Analyze : public pgn::Visitor {
    public:
     std::unordered_map<Key, int> &pos_map;
@@ -75,14 +52,51 @@ class Analyze : public pgn::Visitor {
     bool hasResult       = false;
     bool goodResult      = false;
 
+    bool do_filter    = false;
+    Color filter_side = Color::NONE;
+
+    std::string white;
+    std::string black;
+
     ResultKey resultkey;
 
     Analyze(map_t &pos_map, const std::string &regex_engine, const std::string &move_counter)
         : pos_map(pos_map), regex_engine(regex_engine), move_counter(move_counter) {}
 
+    void startPgn() override {
+        do_filter = !regex_engine.empty();
+
+        if (do_filter) {
+            if (!white.empty() && !black.empty()) {
+                std::regex regex(regex_engine);
+
+                if (std::regex_match(white, regex)) {
+                    filter_side = Color::WHITE;
+                }
+
+                if (std::regex_match(black, regex)) {
+                    if (filter_side == Color::NONE) {
+                        filter_side = Color::BLACK;
+                    } else {
+                        do_filter = false;
+                    }
+                }
+            }
+        }
+    }
+
+    void startMoves() override {}
+
     void header(const std::string &key, const std::string &value) override {
         if (key == "FEN") {
-            board.setFen(value);
+            std::regex p("0 1$");
+
+            // revert change by cutechess-cli of move counters in .epd books to "0 1"
+            if (!move_counter.empty() && std::regex_search(value, p)) {
+                board.setFen(std::regex_replace(value, p, "0 " + move_counter));
+            } else {
+                board.setFen(value);
+            }
         }
 
         if (key == "Variant" && value == "fischerandom") {
@@ -111,6 +125,14 @@ class Analyze : public pgn::Visitor {
             if (value == "time forfeit" || value == "abandoned") {
                 goodTermination = false;
             }
+        }
+
+        if (key == "White") {
+            white = value;
+        }
+
+        if (key == "Black") {
+            black = value;
         }
 
         skip = !(hasResult && goodTermination && goodResult);
@@ -173,7 +195,7 @@ class Analyze : public pgn::Visitor {
         board.makeMove(m);
     }
 
-    void end() override {
+    void endPgn() override {
         board.set960(false);
         board.setFen(STARTPOS);
 
