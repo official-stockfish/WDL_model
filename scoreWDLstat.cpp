@@ -127,7 +127,6 @@ class Analyze : public pgn::Visitor {
             return;
         }
 
-        moves.clear();
         Move m;
 
         m = uci::parseSanInternal(board, move.c_str(), moves);
