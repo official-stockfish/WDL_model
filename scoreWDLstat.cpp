@@ -71,14 +71,18 @@ class Analyze : public pgn::Visitor {
 
     bool skip = false;
 
+    bool goodTermination = true;
     bool hasResult       = false;
-    bool goodTermination = false;
     bool goodResult      = false;
 
     ResultKey resultkey;
 
+    std::ofstream out_file;
+
     Analyze(map_t &pos_map, const std::string &regex_engine, const std::string &move_counter)
-        : pos_map(pos_map), regex_engine(regex_engine), move_counter(move_counter) {}
+        : pos_map(pos_map), regex_engine(regex_engine), move_counter(move_counter) {
+        out_file.open("log.txt");
+    }
 
     void header(const std::string &key, const std::string &value) override {
         if (key == "FEN") {
@@ -90,7 +94,9 @@ class Analyze : public pgn::Visitor {
         }
 
         if (key == "Result") {
-            hasResult = true;
+            hasResult  = true;
+            goodResult = true;
+
             if (value == "1-0") {
                 resultkey.white = Result::WIN;
                 resultkey.black = Result::LOSS;
@@ -101,15 +107,17 @@ class Analyze : public pgn::Visitor {
                 resultkey.white = Result::DRAW;
                 resultkey.black = Result::DRAW;
             } else {
-                goodResult = true;
+                goodResult = false;
             }
         }
 
-        if (key == "Termination" && (value == "time forfeit" || value == "abandoned")) {
-            goodTermination = true;
+        if (key == "Termination") {
+            if (value == "time forfeit" || value == "abandoned") {
+                goodTermination = false;
+            }
         }
 
-        skip = hasResult && goodTermination && goodResult;
+        skip = !(hasResult && goodTermination && goodResult);
     }
 
     void move(const std::string &move, const std::string &comment) override {
@@ -120,6 +128,9 @@ class Analyze : public pgn::Visitor {
         if (board.fullMoveNumber() > 200) {
             return;
         }
+
+        // write
+        out_file << move << " " << comment << std::endl;
 
         moves.clear();
         Move m;
@@ -172,6 +183,10 @@ class Analyze : public pgn::Visitor {
     void end() override {
         board.set960(false);
         board.setFen(STARTPOS);
+
+        goodTermination = true;
+        hasResult       = false;
+        goodResult      = false;
     }
 
     /// @brief Analyze a single game and update the position map, apply filter if present
