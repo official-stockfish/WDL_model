@@ -37,29 +37,9 @@ namespace analysis {
 /// @brief Magic value for fishtest pgns, ~1.2 million keys
 static constexpr int map_size = 1200000;
 
+/// @brief Analyze a file with pgn games and update the position map, apply filter if present
 class Analyze : public pgn::Visitor {
    public:
-    std::unordered_map<Key, int> &pos_map;
-    const std::string &regex_engine;
-    const std::string &move_counter;
-
-    Board board;
-    Movelist moves;
-
-    bool skip = false;
-
-    bool goodTermination = true;
-    bool hasResult       = false;
-    bool goodResult      = false;
-
-    bool do_filter    = false;
-    Color filter_side = Color::NONE;
-
-    std::string white;
-    std::string black;
-
-    ResultKey resultkey;
-
     Analyze(map_t &pos_map, const std::string &regex_engine, const std::string &move_counter)
         : pos_map(pos_map), regex_engine(regex_engine), move_counter(move_counter) {}
 
@@ -204,135 +184,27 @@ class Analyze : public pgn::Visitor {
         goodResult      = false;
     }
 
-    /// @brief Analyze a single game and update the position map, apply filter if present
-    /// @param pos_map
-    /// @param game
-    /// @param regex_engine
-    /// @param move_counter
-    void ana_game(const Game &game) {
-        if (game.headers().find("Result") == game.headers().end()) {
-            return;
-        }
+   private:
+    std::unordered_map<Key, int> &pos_map;
+    const std::string &regex_engine;
+    const std::string &move_counter;
 
-        if (game.headers().find("Termination") != game.headers().end()) {
-            std::string term = game.headers().at("Termination");
-            if (term == "time forfeit" || term == "abandoned") {
-                return;
-            }
-        }
+    Board board;
+    Movelist moves;
 
-        bool do_filter    = !regex_engine.empty();
-        Color filter_side = Color::NONE;
-        if (do_filter) {
-            if (game.headers().find("White") == game.headers().end() ||
-                game.headers().find("Black") == game.headers().end()) {
-                return;
-            }
+    bool skip = false;
 
-            std::regex regex(regex_engine);
+    bool goodTermination = true;
+    bool hasResult       = false;
+    bool goodResult      = false;
 
-            if (std::regex_match(game.headers().at("White"), regex)) {
-                filter_side = Color::WHITE;
-            }
+    bool do_filter    = false;
+    Color filter_side = Color::NONE;
 
-            if (std::regex_match(game.headers().at("Black"), regex)) {
-                if (filter_side == Color::NONE) {
-                    filter_side = Color::BLACK;
-                } else {
-                    do_filter = false;
-                }
-            }
-        }
+    std::string white;
+    std::string black;
 
-        const auto result = game.headers().at("Result");
-
-        ResultKey resultkey;
-
-        if (result == "1-0") {
-            resultkey.white = Result::WIN;
-            resultkey.black = Result::LOSS;
-        } else if (result == "0-1") {
-            resultkey.white = Result::LOSS;
-            resultkey.black = Result::WIN;
-        } else if (result == "1/2-1/2") {
-            resultkey.white = Result::DRAW;
-            resultkey.black = Result::DRAW;
-        } else {
-            return;
-        }
-
-        Board board = Board();
-
-        if (game.headers().find("FEN") != game.headers().end()) {
-            std::string fen = game.headers().at("FEN");
-
-            if (!move_counter.empty()) {
-                // revert change by cutechess-cli of move counters in .epd books to "0 1"
-                std::regex p("0 1$");
-                if (std::regex_search(fen, p)) {
-                    fen = std::regex_replace(fen, p, "0 " + move_counter);
-                }
-            }
-
-            board.setFen(fen);
-        }
-
-        if (game.headers().find("Variant") != game.headers().end() &&
-            game.headers().at("Variant") == "fischerandom") {
-            board.set960(true);
-        }
-
-        for (const auto &move : game.moves()) {
-            if (board.fullMoveNumber() > 200) {
-                break;
-            }
-
-            const size_t delimiter_pos = move.comment.find('/');
-
-            Key key;
-            key.score = 1002;
-
-            if (!do_filter || filter_side == board.sideToMove()) {
-                if (delimiter_pos != std::string::npos && move.comment != "book") {
-                    const auto match_score = move.comment.substr(0, delimiter_pos);
-
-                    if (match_score[1] == 'M') {
-                        if (match_score[0] == '+') {
-                            key.score = 1001;
-                        } else {
-                            key.score = -1001;
-                        }
-
-                    } else {
-                        int score = 100 * fast_stof(match_score.c_str());
-
-                        if (score > 1000) {
-                            score = 1000;
-                        } else if (score < -1000) {
-                            score = -1000;
-                        }
-
-                        key.score = int(std::floor(score / 5.0)) * 5;  // reduce precision
-                    }
-                }
-            }
-
-            if (key.score != 1002) {  // a score was found
-                key.outcome =
-                    board.sideToMove() == Color::WHITE ? resultkey.white : resultkey.black;
-                key.move           = board.fullMoveNumber();
-                const auto knights = builtin::popcount(board.pieces(PieceType::KNIGHT));
-                const auto bishops = builtin::popcount(board.pieces(PieceType::BISHOP));
-                const auto rooks   = builtin::popcount(board.pieces(PieceType::ROOK));
-                const auto queens  = builtin::popcount(board.pieces(PieceType::QUEEN));
-                const auto pawns   = builtin::popcount(board.pieces(PieceType::PAWN));
-                key.material       = 9 * queens + 5 * rooks + 3 * bishops + 3 * knights + pawns;
-                pos_map[key] += 1;
-            }
-
-            board.makeMove(move.move);
-        }
-    }
+    ResultKey resultkey;
 };
 
 void ana_files(map_t &map, const std::vector<std::string> &files, const std::string &regex_engine,
@@ -371,14 +243,12 @@ void ana_files(map_t &map, const std::vector<std::string> &files, const std::str
         }
 
         const auto pgn_iterator = [&](std::istream &iss) {
-            // auto ana = Analyze(map, regex_engine, move_counter);
-
             auto vis = std::make_unique<Analyze>(map, regex_engine, move_counter);
 
             pgn::StreamParser parser(iss);
 
             try {
-                parser.readGame(*vis);
+                parser.readGames(*vis);
             } catch (const std::exception &e) {
                 std::cout << "Error when parsing: " << file << std::endl;
                 std::cerr << e.what() << '\n';
