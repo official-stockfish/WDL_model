@@ -50,29 +50,31 @@ class Analyze : public pgn::Visitor {
 
     virtual ~Analyze() {}
 
-    void startPgn() override {
+    void startPgn() override {}
+
+    void startMoves() override {
         do_filter = !regex_engine.empty();
 
         if (do_filter) {
-            if (!white.empty() && !black.empty()) {
-                std::regex regex(regex_engine);
+            if (white.empty() || black.empty()) {
+                return;
+            }
 
-                if (std::regex_match(white, regex)) {
-                    filter_side = Color::WHITE;
-                }
+            std::regex regex(regex_engine);
 
-                if (std::regex_match(black, regex)) {
-                    if (filter_side == Color::NONE) {
-                        filter_side = Color::BLACK;
-                    } else {
-                        do_filter = false;
-                    }
+            if (std::regex_match(white, regex)) {
+                filter_side = Color::WHITE;
+            }
+
+            if (std::regex_match(black, regex)) {
+                if (filter_side == Color::NONE) {
+                    filter_side = Color::BLACK;
+                } else {
+                    do_filter = false;
                 }
             }
         }
     }
-
-    void startMoves() override {}
 
     void header(std::string_view key, std::string_view value) override {
         if (key == "FEN") {
@@ -143,26 +145,28 @@ class Analyze : public pgn::Visitor {
         Key key;
         key.score = 1002;
 
-        if (delimiter_pos != std::string::npos && comment != "book") {
-            const auto match_score = comment.substr(0, delimiter_pos);
+        if (!do_filter || filter_side == board.sideToMove()) {
+            if (delimiter_pos != std::string::npos && comment != "book") {
+                const auto match_score = comment.substr(0, delimiter_pos);
 
-            if (match_score[1] == 'M') {
-                if (match_score[0] == '+') {
-                    key.score = 1001;
+                if (match_score[1] == 'M') {
+                    if (match_score[0] == '+') {
+                        key.score = 1001;
+                    } else {
+                        key.score = -1001;
+                    }
+
                 } else {
-                    key.score = -1001;
+                    int score = 100 * fast_stof(match_score.data());
+
+                    if (score > 1000) {
+                        score = 1000;
+                    } else if (score < -1000) {
+                        score = -1000;
+                    }
+
+                    key.score = int(std::floor(score / 5.0)) * 5;  // reduce precision
                 }
-
-            } else {
-                int score = 100 * fast_stof(match_score.data());
-
-                if (score > 1000) {
-                    score = 1000;
-                } else if (score < -1000) {
-                    score = -1000;
-                }
-
-                key.score = int(std::floor(score / 5.0)) * 5;  // reduce precision
             }
         }
 
@@ -191,6 +195,11 @@ class Analyze : public pgn::Visitor {
         goodTermination = true;
         hasResult       = false;
         goodResult      = false;
+
+        filter_side = Color::NONE;
+
+        white.clear();
+        black.clear();
     }
 
    private:
