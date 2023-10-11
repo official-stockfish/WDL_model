@@ -69,13 +69,13 @@ class Analyze : public pgn::Visitor {
 
     void startMoves() override {}
 
-    void header(const std::string &key, const std::string &value) override {
+    void header(std::string_view key, std::string_view value) override {
         if (key == "FEN") {
             std::regex p("0 1$");
 
             // revert change by cutechess-cli of move counters in .epd books to "0 1"
-            if (!move_counter.empty() && std::regex_search(value, p)) {
-                board.setFen(std::regex_replace(value, p, "0 " + move_counter));
+            if (!move_counter.empty() && std::regex_search(value.data(), p)) {
+                board.setFen(std::regex_replace(value.data(), p, "0 " + move_counter));
             } else {
                 board.setFen(value);
             }
@@ -120,7 +120,7 @@ class Analyze : public pgn::Visitor {
         skip = !(hasResult && goodTermination && goodResult);
     }
 
-    void move(const std::string &move, const std::string &comment) override {
+    void move(std::string_view move, std::string_view comment) override {
         if (skip) {
             return;
         }
@@ -131,7 +131,7 @@ class Analyze : public pgn::Visitor {
 
         Move m;
 
-        m = uci::parseSanInternal(board, move.c_str(), moves);
+        m = uci::parseSanInternal(board, move.data(), moves);
 
         const size_t delimiter_pos = comment.find('/');
 
@@ -149,7 +149,7 @@ class Analyze : public pgn::Visitor {
                 }
 
             } else {
-                int score = 100 * fast_stof(match_score.c_str());
+                int score = 100 * fast_stof(match_score.data());
 
                 if (score > 1000) {
                     score = 1000;
