@@ -20,7 +20,7 @@ endif
 
 SRC_FILE = scoreWDLstat.cpp external/gzip/gzstream.cpp
 EXE_FILE = scoreWDLstat
-HEADERS = external/chess.hpp external/json.hpp external/threadpool.hpp scoreWDLstat.hpp external/gzip/gzstream.h
+HEADERS = external/chess.hpp external/json.hpp external/threadpool.hpp scoreWDLstat.hpp external/gzip/gzstream.h external/parallel_hashmap/phmap.h
 
 all: $(EXE_FILE)
 
