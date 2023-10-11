@@ -43,6 +43,8 @@ class Analyze : public pgn::Visitor {
     Analyze(map_t &pos_map, const std::string &regex_engine, const std::string &move_counter)
         : pos_map(pos_map), regex_engine(regex_engine), move_counter(move_counter) {}
 
+    virtual ~Analyze() {}
+
     void startPgn() override {
         do_filter = !regex_engine.empty();
 
