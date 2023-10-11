@@ -139,7 +139,7 @@ class Analyze : public pgn::Visitor {
         key.score = 1002;
 
         if (delimiter_pos != std::string::npos && comment != "book") {
-            const auto match_score = move.substr(0, delimiter_pos);
+            const auto match_score = comment.substr(0, delimiter_pos);
 
             if (match_score[1] == 'M') {
                 if (match_score[0] == '+') {
@@ -235,9 +235,9 @@ void ana_files(map_t &map, const std::vector<std::string> &files, const std::str
                 std::regex p(".epd");
 
                 if (std::regex_search(meta_map.at(test_filename).book.value(), p)) {
-                    std::cout
-                        << "Error: Missing \"book_depth\" key in metadata for .epd book for test "
-                        << test_filename << std::endl;
+                    std::cout << "Error: Missing \"book_depth\" key in metadata for .epd book "
+                                 "for test "
+                              << test_filename << std::endl;
                     std::exit(1);
                 }
             }
