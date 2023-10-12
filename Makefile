@@ -29,7 +29,7 @@ $(EXE_FILE): $(SRC_FILE) $(HEADERS)
 
 format:
 	clang-format -i $(SRC_FILE)
-	black -q download_fishtest_pgns.py scoreWDL.py
+	black -q download_fishtest_pgns.py scoreWDL.py download_missing_metadata.py
 	shfmt -w -i 4 updateWDL.sh
 
 clean:
