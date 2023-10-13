@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "external/chess.hpp"
+#include "external/parallel_hashmap/phmap.h"
 #include "external/threadpool.hpp"
 
 namespace fs = std::filesystem;
@@ -23,7 +24,11 @@ using json   = nlohmann::json;
 using namespace chess;
 
 // unordered map to count (outcome, move, material, score) tuples in pgns
-using map_t = std::unordered_map<Key, int>;
+using map_t =
+    phmap::parallel_flat_hash_map<Key, int, std::hash<Key>, std::equal_to<Key>,
+                                  std::allocator<std::pair<const Key, int>>, 8, std::mutex>;
+
+map_t pos_map = {};
 
 // map to collect metadata for tests
 using map_meta = std::unordered_map<std::string, TestMetaData>;
@@ -36,11 +41,10 @@ namespace analysis {
 static constexpr int map_size = 1200000;
 
 /// @brief Analyze a single game and update the position map, apply filter if present
-/// @param pos_map
 /// @param game
 /// @param regex_engine
 /// @param move_counter
-void ana_game(map_t &pos_map, const std::optional<Game> &game, const std::string &regex_engine,
+void ana_game(const std::optional<Game> &game, const std::string &regex_engine,
               const std::string &move_counter) {
     if (game.value().headers().find("Result") == game.value().headers().end()) {
         return;
@@ -158,7 +162,10 @@ void ana_game(map_t &pos_map, const std::optional<Game> &game, const std::string
             const auto queens  = builtin::popcount(board.pieces(PieceType::QUEEN));
             const auto pawns   = builtin::popcount(board.pieces(PieceType::PAWN));
             key.material       = 9 * queens + 5 * rooks + 3 * bishops + 3 * knights + pawns;
-            pos_map[key] += 1;
+
+            pos_map.lazy_emplace_l(
+                std::move(key), [&](map_t::value_type &v) { v.second += 1; },
+                [&](const map_t::constructor &ctor) { ctor(std::move(key), 1); });
         }
 
         board.makeMove(move.move);
@@ -210,7 +217,7 @@ void ana_files(map_t &map, const std::vector<std::string> &files, const std::str
                         break;
                     }
 
-                    ana_game(map, game, regex_engine, move_counter);
+                    ana_game(game, regex_engine, move_counter);
                 } catch (const std::exception &e) {
                     std::cout << "Error when parsing: " << file << " at game index " << game_index
                               << std::endl;
@@ -316,9 +323,8 @@ void filter_files_sprt(std::vector<std::string> &file_list, const map_meta &meta
     file_list.erase(std::remove_if(file_list.begin(), file_list.end(), pred), file_list.end());
 }
 
-void process(const std::vector<std::string> &files_pgn, map_t &pos_map,
-             const std::string &regex_engine, const map_meta &meta_map, bool fix_fens,
-             int concurrency) {
+void process(const std::vector<std::string> &files_pgn, const std::string &regex_engine,
+             const map_meta &meta_map, bool fix_fens, int concurrency) {
     // Create more chunks than threads to prevent threads from idling.
     int target_chunks = 4 * concurrency;
 
@@ -327,8 +333,8 @@ void process(const std::vector<std::string> &files_pgn, map_t &pos_map,
     std::cout << "Found " << files_pgn.size() << " .pgn(.gz) files, creating "
               << files_chunked.size() << " chunks for processing." << std::endl;
 
-    // Mutex for pos_map access
-    std::mutex map_mutex;
+    // Mutex for progress
+    std::mutex progress_mutex;
 
     // Create a thread pool
     ThreadPool pool(concurrency);
@@ -338,7 +344,7 @@ void process(const std::vector<std::string> &files_pgn, map_t &pos_map,
 
     for (const auto &files : files_chunked) {
         pool.enqueue(
-            [&files, &regex_engine, &meta_map, &fix_fens, &map_mutex, &pos_map, &files_chunked]() {
+            [&files, &regex_engine, &meta_map, &fix_fens, &progress_mutex, &files_chunked]() {
                 map_t map;
                 analysis::ana_files(map, files, regex_engine, meta_map, fix_fens);
 
@@ -346,11 +352,7 @@ void process(const std::vector<std::string> &files_pgn, map_t &pos_map,
 
                 // Limit the scope of the lock
                 {
-                    const std::lock_guard<std::mutex> lock(map_mutex);
-
-                    for (const auto &pair : map) {
-                        pos_map[pair.first] += pair.second;
-                    }
+                    const std::lock_guard<std::mutex> lock(progress_mutex);
 
                     // Print progress
                     std::cout << "\rProgress: " << total_chunks << "/" << files_chunked.size()
@@ -364,9 +366,8 @@ void process(const std::vector<std::string> &files_pgn, map_t &pos_map,
 }
 
 /// @brief Save the position map to a json file.
-/// @param pos_map
 /// @param json_filename
-void save(const map_t &pos_map, const std::string &json_filename) {
+void save(const std::string &json_filename) {
     std::uint64_t total = 0;
 
     json j;
@@ -488,12 +489,11 @@ int main(int argc, char const *argv[]) {
         json_filename = *std::next(pos);
     }
 
-    map_t pos_map;
     pos_map.reserve(analysis::map_size);
 
     const auto t0 = std::chrono::high_resolution_clock::now();
 
-    process(files_pgn, pos_map, regex_engine, meta_map, fix_fens, concurrency);
+    process(files_pgn, regex_engine, meta_map, fix_fens, concurrency);
 
     const auto t1 = std::chrono::high_resolution_clock::now();
 
@@ -501,7 +501,7 @@ int main(int argc, char const *argv[]) {
               << std::chrono::duration_cast<std::chrono::seconds>(t1 - t0).count() << "s"
               << std::endl;
 
-    save(pos_map, json_filename);
+    save(json_filename);
 
     return 0;
 }
