@@ -21,15 +21,16 @@ endif
 SRC_FILE = scoreWDLstat.cpp
 EXT_SRC_FILE = external/gzip/gzstream.cpp
 EXE_FILE = scoreWDLstat
-HEADERS = external/chess.hpp external/json.hpp external/threadpool.hpp scoreWDLstat.hpp external/gzip/gzstream.h external/parallel_hashmap/phmap.h
+HEADERS = scoreWDLstat.hpp
+EXT_HEADERS = external/chess.hpp external/json.hpp external/threadpool.hpp external/gzip/gzstream.h external/parallel_hashmap/phmap.h
 
 all: $(EXE_FILE)
 
-$(EXE_FILE): $(SRC_FILE) $(HEADERS) $(EXT_SRC_FILE)
+$(EXE_FILE): $(SRC_FILE) $(HEADERS) $(EXT_HEADERS) $(EXT_SRC_FILE)
 	$(CXX) $(CXXFLAGS) $(NATIVE) -o $(EXE_FILE) $(SRC_FILE) $(EXT_SRC_FILE) -lz
 
 format:
-	clang-format -i $(SRC_FILE)
+	clang-format -i $(SRC_FILE) $(HEADERS)
 	black -q download_fishtest_pgns.py scoreWDL.py
 	shfmt -w -i 4 updateWDL.sh
 
