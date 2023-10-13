@@ -42,22 +42,9 @@ struct std::hash<Key> {
 };
 
 struct TestMetaData {
-    std::optional<std::string> base_net;
-    std::optional<std::string> base_options;
-    std::optional<std::string> base_tag;
     std::optional<std::string> book;
-    std::optional<std::string> last_updated;
-    std::optional<std::string> new_net;
-    std::optional<std::string> new_options;
-    std::optional<std::string> new_tag;
-    std::optional<std::string> new_tc;
     std::optional<std::string> sprt;
-    std::optional<std::string> start_time;
-    std::optional<std::string> tc;
-
-    std::optional<int> threads;
     std::optional<int> book_depth;
-    std::optional<bool> adjudication;
 };
 
 template <typename T = std::string>
@@ -71,51 +58,14 @@ std::optional<T> get_optional(const nlohmann::json &j, const char *name) {
 }
 
 void from_json(const nlohmann::json &nlohmann_json_j, TestMetaData &nlohmann_json_t) {
-    auto j = nlohmann_json_j;
+    auto &j = nlohmann_json_j["args"];
 
-    // Check if args key is present, if so we are using metadata from the fishtest api
-    if (j.find("args") != j.end()) {
-        nlohmann_json_t.start_time   = get_optional(nlohmann_json_j, "start_time");
-        nlohmann_json_t.last_updated = get_optional(nlohmann_json_j, "last_updated");
+    nlohmann_json_t.book_depth =
+        get_optional(j, "book_depth").has_value()
+            ? std::optional<int>(std::stoi(get_optional(j, "book_depth").value()))
+            : std::nullopt;
 
-        j = j["args"];
-
-        nlohmann_json_t.adjudication = get_optional<bool>(j, "adjudication");
-
-        nlohmann_json_t.threads = get_optional<int>(j, "threads");
-
-        nlohmann_json_t.book_depth =
-            get_optional(j, "book_depth").has_value()
-                ? std::optional<int>(std::stoi(get_optional(j, "book_depth").value()))
-                : std::nullopt;
-
-    } else {
-        nlohmann_json_t.start_time = get_optional(nlohmann_json_j, "start time");
-
-        nlohmann_json_t.last_updated = get_optional(nlohmann_json_j, "last updated");
-
-        nlohmann_json_t.adjudication = get_optional(j, "adjudication").value_or("False") == "True";
-
-        nlohmann_json_t.book_depth =
-            get_optional(j, "book_depth").has_value()
-                ? std::optional<int>(std::stoi(get_optional(j, "book_depth").value()))
-                : std::nullopt;
-
-        nlohmann_json_t.threads =
-            get_optional(j, "threads").has_value()
-                ? std::optional<int>(std::stoi(get_optional(j, "threads").value()))
-                : std::nullopt;
-    }
-
-    nlohmann_json_t.tc           = get_optional(j, "tc");
-    nlohmann_json_t.base_net     = get_optional(j, "base_net");
-    nlohmann_json_t.base_options = get_optional(j, "base_options");
-    nlohmann_json_t.base_tag     = get_optional(j, "base_tag");
-    nlohmann_json_t.book         = get_optional(j, "book");
-    nlohmann_json_t.new_net      = get_optional(j, "new_net");
-    nlohmann_json_t.new_options  = get_optional(j, "new_options");
-    nlohmann_json_t.new_tag      = get_optional(j, "new_tag");
-    nlohmann_json_t.new_tc       = get_optional(j, "new_tc");
+    nlohmann_json_t.book = get_optional(j, "book");
 }
 
 /// @brief Custom stof implementation to avoid locale issues, once clang supports std::from_chars
