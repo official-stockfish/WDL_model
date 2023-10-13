@@ -3393,14 +3393,30 @@ struct Game {
 
 namespace pgn {
 
+/// @brief Visitor interface for parsing PGN files
+/// The order of the calls is as follows:
 class Visitor {
    public:
-    virtual void header(std::string_view key, std::string_view value)  = 0;
+    virtual ~Visitor(){};
+
+    /// @brief Called when a new PGN starts
+    virtual void startPgn() = 0;
+
+    /// @brief Called for each header
+    /// @param key
+    /// @param value
+    virtual void header(std::string_view key, std::string_view value) = 0;
+
+    /// @brief Called before the first move of a game
+    virtual void startMoves() = 0;
+
+    /// @brief Called for each move of a game
+    /// @param move
+    /// @param comment
     virtual void move(std::string_view move, std::string_view comment) = 0;
 
-    virtual void startPgn()   = 0;
-    virtual void startMoves() = 0;
-    virtual void endPgn()     = 0;
+    /// @brief Called when a game ends
+    virtual void endPgn() = 0;
 };
 
 class StreamParser {
@@ -3627,18 +3643,20 @@ class StreamParser {
 
     std::istream &file;
 
+    // one time allocations
     std::pair<std::string, std::string> header;
 
-    // move parsing
     std::string move;
     std::string comment;
+
+    // State
 
     bool reading_move    = false;
     bool reading_comment = false;
 
+    // True when at the start of a line
     bool line_start = true;
 
-    // current state
     bool in_header = false;
     bool in_body   = false;
 
