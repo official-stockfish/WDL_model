@@ -303,7 +303,7 @@ void filter_files_sprt(std::vector<std::string> &file_list, const map_meta &meta
 
         // check if metadata and "sprt" entry exist
         if (meta_map.find(test_filename) != meta_map.end() &&
-            meta_map.at(test_filename).sprt.has_value()) {
+            meta_map.at(test_filename).sprt.value()) {
             return false;
         }
 
