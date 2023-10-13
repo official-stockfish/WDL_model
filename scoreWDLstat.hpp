@@ -43,6 +43,12 @@ struct std::hash<Key> {
     std::size_t operator()(const Key &k) const { return static_cast<std::size_t>(k); }
 };
 
+// overload the std::equal_to function for Key
+template <>
+struct std::equal_to<Key> {
+    bool operator()(const Key &lhs, const Key &rhs) const { return lhs == rhs; }
+};
+
 struct TestMetaData {
     std::optional<std::string> base_net;
     std::optional<std::string> base_options;
