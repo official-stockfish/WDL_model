@@ -66,6 +66,7 @@ void from_json(const nlohmann::json &nlohmann_json_j, TestMetaData &nlohmann_jso
             : std::nullopt;
 
     nlohmann_json_t.book = get_optional(j, "book");
+    nlohmann_json_t.sprt = get_optional(j, "sprt");
 }
 
 /// @brief Custom stof implementation to avoid locale issues, once clang supports std::from_chars
