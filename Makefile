@@ -18,13 +18,14 @@ ifeq ($(uname_S), Darwin)
 	NATIVE =	
 endif
 
-SRC_FILE = scoreWDLstat.cpp external/gzip/gzstream.cpp
+SRC_FILE = scoreWDLstat.cpp
+EXT_SRC_FILE = external/gzip/gzstream.cpp
 EXE_FILE = scoreWDLstat
 HEADERS = external/chess.hpp external/json.hpp external/threadpool.hpp scoreWDLstat.hpp external/gzip/gzstream.h external/parallel_hashmap/phmap.h
 
 all: $(EXE_FILE)
 
-$(EXE_FILE): $(SRC_FILE) $(HEADERS)
+$(EXE_FILE): $(SRC_FILE) $(HEADERS) $(EXT_SRC_FILE)
 	$(CXX) $(CXXFLAGS) $(NATIVE) -o $(EXE_FILE) $(SRC_FILE) -lz
 
 format:
