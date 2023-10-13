@@ -65,7 +65,7 @@ void from_json(const nlohmann::json &nlohmann_json_j, TestMetaData &nlohmann_jso
             ? std::optional<int>(std::stoi(get_optional(j, "book_depth").value()))
             : std::nullopt;
 
-    nlohmann_json_t.sprt = get_optional(j, "sprt").has_value();
+    nlohmann_json_t.sprt = j.contains("sprt") ? std::optional<bool>(true) : std::nullopt;
 
     nlohmann_json_t.book = get_optional(j, "book");
 }
