@@ -74,21 +74,34 @@ for test, dateStr in ids:
     if args.verbose >= 1:
         print(f"Collecting meta data for test {test} ...")
     url = "https://tests.stockfishchess.org/api/get_run/" + test
+    wins, draws, losses = 0, 0, 0
     try:
-        meta = requests.get(url).json()
+        meta = requests.get(url, timeout=30)
+        meta.raise_for_status()
+        meta = meta.json()
         if "spsa" in meta.get("args", {}):
             if args.verbose >= 1:
                 print(f"Skipping SPSA test {test} ...")
             continue
         with open(path + test + ".json", "w") as jsonFile:
             json.dump(meta, jsonFile, indent=4, sort_keys=True)
+        if "results" in meta:
+            wins = meta["results"].get("wins", 0)
+            draws = meta["results"].get("draws", 0)
+            losses = meta["results"].get("losses", 0)
     except Exception as ex:
         if args.verbose >= 2:
-            print(f'  error: caught exception "{ex}"')
+            print(f'  error: {test}.json : caught exception "{ex}"')
 
-    print(f"Downloading {test}.pgns.tar to {path} ...")
     url = "https://tests.stockfishchess.org/api/run_pgns/" + test + ".pgns.tar"
     try:
+        response = urllib.request.urlopen(url)
+        mb = int(response.getheader("Content-Length", 0)) // (2**20)
+        games = wins + draws + losses
+        msg = f"Downloading{'' if mb == 0 else f' {mb}MB'} .pgns.tar file "
+        if games:
+            msg += f"with {games} games {'' if args.verbose == 0 else f'(WDL = {wins} {draws} {losses}) '}"
+        print(msg + f"to {path} ...")
         tmpName = path + test + ".tmp"
         urllib.request.urlretrieve(url, tmpName)
         if args.verbose >= 2:
