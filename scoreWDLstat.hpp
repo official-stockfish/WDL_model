@@ -50,7 +50,7 @@ struct std::equal_to<Key> {
 };
 
 struct TestMetaData {
-    std::optional<std::string> book;
+    std::optional<std::string> book, resolved_base, resolved_new;
     std::optional<bool> sprt;
     std::optional<int> book_depth;
 };
@@ -75,7 +75,9 @@ void from_json(const nlohmann::json &nlohmann_json_j, TestMetaData &nlohmann_jso
 
     nlohmann_json_t.sprt = j.contains("sprt") ? std::optional<bool>(true) : std::nullopt;
 
-    nlohmann_json_t.book = get_optional(j, "book");
+    nlohmann_json_t.book          = get_optional(j, "book");
+    nlohmann_json_t.resolved_base = get_optional(j, "resolved_base");
+    nlohmann_json_t.resolved_new  = get_optional(j, "resolved_new");
 }
 
 /// @brief Custom stof implementation to avoid locale issues, once clang supports std::from_chars
