@@ -344,6 +344,28 @@ void filter_files_book(std::vector<std::string> &file_list, const map_meta &meta
     file_list.erase(std::remove_if(file_list.begin(), file_list.end(), pred), file_list.end());
 }
 
+void filter_files_revision(std::vector<std::string> &file_list, const map_meta &meta_map,
+                           const std::regex &regex_rev) {
+    const auto pred = [&regex_rev, &meta_map](const std::string &pathname) {
+        std::string test_filename = pathname.substr(0, pathname.find_last_of('-'));
+
+        if (meta_map.find(test_filename) == meta_map.end()) {
+            return true;
+        }
+        if (meta_map.at(test_filename).resolved_base.has_value() &&
+            std::regex_match(meta_map.at(test_filename).resolved_base.value(), regex_rev)) {
+            return false;
+        }
+        if (meta_map.at(test_filename).resolved_new.has_value() &&
+            std::regex_match(meta_map.at(test_filename).resolved_new.value(), regex_rev)) {
+            return false;
+        }
+        return true;
+    };
+
+    file_list.erase(std::remove_if(file_list.begin(), file_list.end(), pred), file_list.end());
+}
+
 void filter_files_sprt(std::vector<std::string> &file_list, const map_meta &meta_map) {
     const auto pred = [&meta_map](const std::string &pathname) {
         std::string test_filename = pathname.substr(0, pathname.find_last_of('-'));
@@ -435,8 +457,9 @@ void print_usage(char const *program_name) {
     ss << "  -r                    Search for .pgn(.gz) files recursively in subdirectories" << "\n";
     ss << "  --allowDuplicates     Allow duplicate directories for test pgns" << "\n";
     ss << "  --concurrency <N>     Number of concurrent threads to use (default: maximum)" << "\n";
-    ss << "  --matchEngine <regex> Filter data based on engine name" << "\n";
-    ss << "  --matchBook <regex>   Filter data based on book name" << "\n";
+    ss << "  --matchRev <regex>    Filter data based on revision SHA in metadata" << "\n";
+    ss << "  --matchEngine <regex> Filter data based on engine name in pgns, defaults to matchRev if given" << "\n";
+    ss << "  --matchBook <regex>   Filter data based on book name in metadata" << "\n";
     ss << "  --matchBookInvert     Invert the filter" << "\n";
     ss << "  --SPRTonly            Analyse only pgns from SPRT tests" << "\n";
     ss << "  --fixFEN              Patch move counters lost by cutechess-cli" << "\n";
@@ -455,7 +478,7 @@ int main(int argc, char const *argv[]) {
     const std::vector<std::string> args(argv + 1, argv + argc);
 
     std::vector<std::string> files_pgn;
-    std::string regex_engine, regex_book, json_filename = "scoreWDLstat.json";
+    std::string regex_book, regex_rev, regex_engine, json_filename = "scoreWDLstat.json";
 
     std::vector<std::string>::const_iterator pos;
 
@@ -497,6 +520,8 @@ int main(int argc, char const *argv[]) {
         }
     }
 
+    std::cout << "Found " << files_pgn.size() << " .pgn(.gz) files in total." << std::endl;
+
     bool allow_duplicates = find_argument(args, pos, "--allowDuplicates", true);
     auto meta_map         = get_metadata(files_pgn, allow_duplicates);
 
@@ -514,6 +539,17 @@ int main(int argc, char const *argv[]) {
             std::regex regex(regex_book);
             filter_files_book(files_pgn, meta_map, regex, invert);
         }
+    }
+
+    if (find_argument(args, pos, "--matchRev")) {
+        regex_rev = *std::next(pos);
+
+        if (!regex_rev.empty()) {
+            std::cout << "Filtering pgn files matching revision SHA " << regex_rev << std::endl;
+            std::regex regex(regex_rev);
+            filter_files_revision(files_pgn, meta_map, regex);
+        }
+        regex_engine = regex_rev;
     }
 
     bool fix_fens = find_argument(args, pos, "--fixFEN", true);

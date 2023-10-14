@@ -38,7 +38,7 @@ newepoch=$(git show --quiet --format=%ci $lastrev)
 # build a regex pattern to match all revisions
 regex_pattern=""
 for rev in $revs; do
-    regex_pattern="${regex_pattern}.*-$rev|"
+    regex_pattern="${regex_pattern}.*$rev|"
     newpawn=$(git grep 'const int NormalizeToPawnValue' $rev -- src/uci.h | grep -oP 'const int NormalizeToPawnValue = \K\d+')
     if [[ $oldpawn -ne $newpawn ]]; then
         echo "Revision $rev has wrong NormalizeToPawnValue ($newpawn != $oldpawn)"
@@ -56,7 +56,7 @@ echo "Look recursively in directory $pgnpath for games from SPRT tests using" \
     "$oldepoch) and $lastrev (from $newepoch)."
 
 # obtain the WDL data from games of SPRT tests of the SF revisions of interest
-./scoreWDLstat --dir $pgnpath -r --matchEngine $regex_pattern --matchBook "$bookname" --fixFEN --SPRTonly -o updateWDL.json >&scoreWDLstat.log
+./scoreWDLstat --dir $pgnpath -r --matchRev $regex_pattern --matchBook "$bookname" --fixFEN --SPRTonly -o updateWDL.json >&scoreWDLstat.log
 
 # fit the new WDL model, keeping anchor at move 32
 # we ignore the first 2 full moves out of book for fitting (11=8+1+2), and the first 9 for (contour) plotting (18=8+1+9)
