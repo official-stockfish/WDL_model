@@ -46,10 +46,12 @@ for json_name in tests:
     test = p.match(os.path.basename(json_name)).group(1)
     url = "https://tests.stockfishchess.org/api/get_run/" + test
     try:
-        meta = requests.get(url).json()
+        meta = requests.get(url, timeout=30)
+        meta.raise_for_status()
         with open(json_name, "w") as jsonFile:
-            json.dump(meta, jsonFile, indent=4, sort_keys=True)
+            json.dump(meta.json(), jsonFile, indent=4, sort_keys=True)
         print(f"Downloaded {json_name}.")
-        time.sleep(0.1)  # be server friendly... wait a bit between requests
     except Exception as ex:
-        print(f'  error: caught exception "{ex}"')
+        print(f'  error: {json_name} : caught exception "{ex}"')
+        time.sleep(5.0)
+    time.sleep(0.1)  # be server friendly... wait a bit between requests
