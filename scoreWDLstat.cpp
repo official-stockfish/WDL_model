@@ -36,6 +36,7 @@ map_t pos_map = {};
 using map_meta = std::unordered_map<std::string, TestMetaData>;
 
 std::atomic<std::size_t> total_chunks = 0;
+std::atomic<std::size_t> total_games  = 0;
 
 namespace analysis {
 
@@ -125,6 +126,10 @@ class Analyze : public pgn::Visitor {
         }
 
         skip = !(hasResult && goodTermination && goodResult);
+
+        if (!skip) {
+            total_games++;
+        }
     }
 
     void move(std::string_view move, std::string_view comment) override {
@@ -427,14 +432,14 @@ void process(const std::vector<std::string> &files_pgn, const std::string &regex
 /// @brief Save the position map to a json file.
 /// @param json_filename
 void save(const std::string &json_filename) {
-    std::uint64_t total = 0;
+    std::uint64_t total_pos = 0;
 
     json j;
 
     for (const auto &pair : pos_map) {
         const auto map_key_t = static_cast<std::string>(pair.first);
         j[map_key_t]         = pair.second;
-        total += pair.second;
+        total_pos += pair.second;
     }
 
     // save json to file
@@ -442,8 +447,8 @@ void save(const std::string &json_filename) {
     out_file << j.dump(2);
     out_file.close();
 
-    std::cout << "Wrote " << total << " scored positions to " << json_filename << " for analysis."
-              << std::endl;
+    std::cout << "Wrote " << total_pos << " scored positions from " << total_games << " games to "
+              << json_filename << " for analysis." << std::endl;
 }
 
 void print_usage(char const *program_name) {
