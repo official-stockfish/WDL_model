@@ -195,7 +195,7 @@ class Analyze : public pgn::Visitor {
 
     void endPgn() override {
         board.set960(false);
-        board.setFen(chess::constants::STARTPOS);
+        board.setFen(constants::STARTPOS);
 
         goodTermination = true;
         hasResult       = false;
