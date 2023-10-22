@@ -54,8 +54,11 @@ class Analyze : public pgn::Visitor {
     void startPgn() override {}
 
     void startMoves() override {
-        do_filter = !regex_engine.empty();
+        if (!skip) {
+            total_games++;
+        }
 
+        do_filter = !regex_engine.empty();
         if (do_filter) {
             if (white.empty() || black.empty()) {
                 return;
@@ -126,10 +129,6 @@ class Analyze : public pgn::Visitor {
         }
 
         skip = !(hasResult && goodTermination && goodResult);
-
-        if (!skip) {
-            total_games++;
-        }
     }
 
     void move(std::string_view move, std::string_view comment) override {
@@ -233,7 +232,6 @@ void ana_files(const std::vector<std::string> &files, const std::string &regex_e
                const map_meta &meta_map, bool fix_fens) {
     for (const auto &file : files) {
         std::string move_counter;
-
         if (fix_fens) {
             std::string test_filename = file.substr(0, file.find_last_of('-'));
 
