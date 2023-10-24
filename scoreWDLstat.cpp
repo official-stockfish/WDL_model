@@ -95,12 +95,12 @@ class Analyze : public pgn::Visitor {
 
     void header(std::string_view key, std::string_view value) override {
         if (key == "FEN") {
-            std::regex p("^(.+) .+ 0 1$");
+            std::regex p("^(.+) (.+) 0 1$");
             std::smatch match;
             std::string value_str(value);
 
-            // revert changes by cutechess-cli to ep square and move counters
-            if (!fixfen_map.empty() && std::regex_search(value_str, match, p) && match.size() > 1) {
+            // revert changes by cutechess-cli to move counters, but trust it on ep square
+            if (!fixfen_map.empty() && std::regex_search(value_str, match, p) && match.size() > 2) {
                 std::string fen = match[1];
                 auto it         = fixfen_map.find(fen);
                 if (it == fixfen_map.end()) {
@@ -108,7 +108,8 @@ class Analyze : public pgn::Visitor {
                     std::exit(1);
                 }
                 const auto &fix         = it->second;
-                std::string fixed_value = fen + " " + fix.ep + " " + std::to_string(fix.halfmove) +
+                std::string ep          = match[2];  // trust cutechess-cli on this one
+                std::string fixed_value = fen + " " + ep + " " + std::to_string(fix.halfmove) +
                                           " " + std::to_string(fix.fullmove);
                 board.setFen(fixed_value);
             } else {
