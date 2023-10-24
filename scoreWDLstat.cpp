@@ -47,8 +47,8 @@ static constexpr int map_size = 1200000;
 /// @brief Analyze a file with pgn games and update the position map, apply filter if present
 class Analyze : public pgn::Visitor {
    public:
-    Analyze(const std::string &regex_engine, const std::string &move_counter)
-        : regex_engine(regex_engine), move_counter(move_counter) {}
+    Analyze(const std::string &regex_engine, const map_fens &fixfen_map)
+        : regex_engine(regex_engine), fixfen_map(fixfen_map) {}
 
     virtual ~Analyze() {}
 
@@ -83,11 +83,22 @@ class Analyze : public pgn::Visitor {
 
     void header(std::string_view key, std::string_view value) override {
         if (key == "FEN") {
-            std::regex p("0 1$");
+            std::regex p("^(.+) 0 1$");
+            std::smatch match;
+            std::string value_str(value);
 
             // revert change by cutechess-cli of move counters in .epd books to "0 1"
-            if (!move_counter.empty() && std::regex_search(value.data(), p)) {
-                board.setFen(std::regex_replace(value.data(), p, "0 " + move_counter));
+            if (!fixfen_map.empty() && std::regex_search(value_str, match, p) && match.size() > 1) {
+                std::string fen = match[1];
+                auto it         = fixfen_map.find(fen);
+                if (it == fixfen_map.end()) {
+                    std::cerr << "Could not find FEN " << fen << " in fixFENsource." << std::endl;
+                    std::exit(1);
+                }
+                const auto &pair = it->second;
+                std::string fixed_value =
+                    fen + " " + std::to_string(pair.first) + " " + std::to_string(pair.second);
+                board.setFen(fixed_value);
             } else {
                 board.setFen(value);
             }
@@ -209,7 +220,7 @@ class Analyze : public pgn::Visitor {
 
    private:
     const std::string &regex_engine;
-    const std::string &move_counter;
+    const map_fens &fixfen_map;
 
     Board board;
     Movelist moves;
@@ -230,39 +241,10 @@ class Analyze : public pgn::Visitor {
 };
 
 void ana_files(const std::vector<std::string> &files, const std::string &regex_engine,
-               const map_meta &meta_map, bool fix_fens) {
+               const map_fens &fixfen_map) {
     for (const auto &file : files) {
-        std::string move_counter;
-        if (fix_fens) {
-            std::string test_filename = file.substr(0, file.find_last_of('-'));
-
-            if (meta_map.find(test_filename) == meta_map.end()) {
-                std::cout << "Error: No metadata for test " << test_filename << std::endl;
-                std::exit(1);
-            }
-
-            if (meta_map.at(test_filename).book_depth.has_value()) {
-                move_counter = std::to_string(meta_map.at(test_filename).book_depth.value() + 1);
-            } else {
-                if (!meta_map.at(test_filename).book.has_value()) {
-                    std::cout << "Error: Missing \"book\" key in metadata for test "
-                              << test_filename << std::endl;
-                    std::exit(1);
-                }
-
-                std::regex p(".epd");
-
-                if (std::regex_search(meta_map.at(test_filename).book.value(), p)) {
-                    std::cout << "Error: Missing \"book_depth\" key in metadata for .epd book "
-                                 "for test "
-                              << test_filename << std::endl;
-                    std::exit(1);
-                }
-            }
-        }
-
         const auto pgn_iterator = [&](std::istream &iss) {
-            auto vis = std::make_unique<Analyze>(regex_engine, move_counter);
+            auto vis = std::make_unique<Analyze>(regex_engine, fixfen_map);
 
             pgn::StreamParser parser(iss);
 
@@ -287,8 +269,11 @@ void ana_files(const std::vector<std::string> &files, const std::string &regex_e
 
 }  // namespace analysis
 
-[[nodiscard]] map_fens get_fixfens(std::string file) {
-    map_fens fixfens_map;
+[[nodiscard]] map_fens get_fixfen(std::string file) {
+    map_fens fixfen_map;
+    if (file.empty()) {
+        return fixfen_map;
+    }
 
     const auto fen_iterator = [&](std::istream &iss) {
         std::string line;
@@ -300,13 +285,13 @@ void ana_files(const std::vector<std::string> &files, const std::string &regex_e
             iss >> f1 >> f2 >> f3 >> f4 >> halfmoveCounter >> fullmoveCounter;
             key = f1 + ' ' + f2 + ' ' + f3 + ' ' + f4;
 
-            if (fixfens_map.find(key) != fixfens_map.end()) {
+            if (fixfen_map.find(key) != fixfen_map.end()) {
                 // for duplicate FENs, prefer the one with lower full move conuter
-                if (fullmoveCounter && fullmoveCounter < fixfens_map[key].second) {
-                    fixfens_map[key] = std::make_pair(halfmoveCounter, fullmoveCounter);
+                if (fullmoveCounter && fullmoveCounter < fixfen_map[key].second) {
+                    fixfen_map[key] = std::make_pair(halfmoveCounter, fullmoveCounter);
                 }
             } else {
-                fixfens_map[key] = std::make_pair(halfmoveCounter, fullmoveCounter);
+                fixfen_map[key] = std::make_pair(halfmoveCounter, fullmoveCounter);
             }
         }
     };
@@ -319,7 +304,7 @@ void ana_files(const std::vector<std::string> &files, const std::string &regex_e
         fen_iterator(input);
     }
 
-    return fixfens_map;
+    return fixfen_map;
 }
 
 [[nodiscard]] map_meta get_metadata(const std::vector<std::string> &file_list,
@@ -423,7 +408,7 @@ void filter_files_sprt(std::vector<std::string> &file_list, const map_meta &meta
 }
 
 void process(const std::vector<std::string> &files_pgn, const std::string &regex_engine,
-             const map_meta &meta_map, bool fix_fens, int concurrency) {
+             const map_meta &meta_map, const map_fens &fixfen_map, int concurrency) {
     // Create more chunks than threads to prevent threads from idling.
     int target_chunks = 4 * concurrency;
 
@@ -443,8 +428,8 @@ void process(const std::vector<std::string> &files_pgn, const std::string &regex
 
     for (const auto &files : files_chunked) {
         pool.enqueue(
-            [&files, &regex_engine, &meta_map, &fix_fens, &progress_mutex, &files_chunked]() {
-                analysis::ana_files(files, regex_engine, meta_map, fix_fens);
+            [&files, &regex_engine, &meta_map, &fixfen_map, &progress_mutex, &files_chunked]() {
+                analysis::ana_files(files, regex_engine, fixfen_map);
 
                 total_chunks++;
 
@@ -591,10 +576,11 @@ int main(int argc, char const *argv[]) {
         regex_engine = regex_rev;
     }
 
-    bool fix_fens = find_argument(args, pos, "--fixFEN", true);
+    std::string fixfen_source;
     if (find_argument(args, pos, "--fixFENsource")) {
-        auto fixfens_map = get_fixfens(*std::next(pos));
+        fixfen_source = *std::next(pos);
     }
+    auto fixfen_map = get_fixfen(fixfen_source);
 
     if (find_argument(args, pos, "--matchEngine")) {
         regex_engine = *std::next(pos);
@@ -608,7 +594,7 @@ int main(int argc, char const *argv[]) {
 
     const auto t0 = std::chrono::high_resolution_clock::now();
 
-    process(files_pgn, regex_engine, meta_map, fix_fens, concurrency);
+    process(files_pgn, regex_engine, meta_map, fixfen_map, concurrency);
 
     const auto t1 = std::chrono::high_resolution_clock::now();
 
