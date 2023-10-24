@@ -32,9 +32,21 @@ using map_t =
 
 map_t pos_map = {};
 
-// maps to collect metadata for tests, and move counters for fix FENs
+// map to collect metadata for tests
 using map_meta = std::unordered_map<std::string, TestMetaData>;
-using map_fens = std::unordered_map<std::string, std::pair<int, int>>;
+
+// class (and map) to hold data that cutechess-cli lost from original FENs
+class FixFenData {
+   public:
+    std::string ep;
+    int halfmove;
+    int fullmove;
+
+    FixFenData() {}
+    FixFenData(const std::string &ep, int halfmove, int fullmove)
+        : ep(ep), halfmove(halfmove), fullmove(fullmove) {}
+};
+using map_fens = std::unordered_map<std::string, FixFenData>;
 
 std::atomic<std::size_t> total_chunks = 0;
 std::atomic<std::size_t> total_games  = 0;
@@ -83,7 +95,7 @@ class Analyze : public pgn::Visitor {
 
     void header(std::string_view key, std::string_view value) override {
         if (key == "FEN") {
-            std::regex p("^(.+) 0 1$");
+            std::regex p("^(.+) - 0 1$");
             std::smatch match;
             std::string value_str(value);
 
@@ -95,9 +107,9 @@ class Analyze : public pgn::Visitor {
                     std::cerr << "Could not find FEN " << fen << " in fixFENsource." << std::endl;
                     std::exit(1);
                 }
-                const auto &pair = it->second;
-                std::string fixed_value =
-                    fen + " " + std::to_string(pair.first) + " " + std::to_string(pair.second);
+                const auto &fix         = it->second;
+                std::string fixed_value = fen + " " + fix.ep + " " + std::to_string(fix.halfmove) +
+                                          " " + std::to_string(fix.fullmove);
                 board.setFen(fixed_value);
             } else {
                 board.setFen(value);
@@ -279,19 +291,20 @@ void ana_files(const std::vector<std::string> &files, const std::string &regex_e
         std::string line;
         while (std::getline(iss, line)) {
             std::istringstream iss(line);
-            std::string key, f1, f2, f3, f4;
-            int halfmoveCounter, fullmoveCounter = 0;
+            std::string key, f1, f2, f3, ep;
+            int halfmove, fullmove = 0;
 
-            iss >> f1 >> f2 >> f3 >> f4 >> halfmoveCounter >> fullmoveCounter;
-            key = f1 + ' ' + f2 + ' ' + f3 + ' ' + f4;
+            iss >> f1 >> f2 >> f3 >> ep >> halfmove >> fullmove;
+            key = f1 + ' ' + f2 + ' ' + f3;
+            FixFenData fixfen_data(ep, halfmove, fullmove);
 
             if (fixfen_map.find(key) != fixfen_map.end()) {
-                // for duplicate FENs, prefer the one with lower full move conuter
-                if (fullmoveCounter && fullmoveCounter < fixfen_map[key].second) {
-                    fixfen_map[key] = std::make_pair(halfmoveCounter, fullmoveCounter);
+                // for duplicate FENs, prefer the one with lower full move counter
+                if (fullmove && fullmove < fixfen_map[key].fullmove) {
+                    fixfen_map[key] = fixfen_data;
                 }
             } else {
-                fixfen_map[key] = std::make_pair(halfmoveCounter, fullmoveCounter);
+                fixfen_map[key] = fixfen_data;
             }
         }
     };
