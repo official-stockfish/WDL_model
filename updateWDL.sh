@@ -9,25 +9,32 @@ echo "started at: " $(date)
 firstrev=70ba9de85cddc5460b1ec53e0a99bee271e26ece
 lastrev=HEAD
 
-# regex for book name
+# "regex" for book name, TODO: only works for single book name for now!
 bookname=UHO_4060_v3.epd
 
 # path for PGN files
 pgnpath=pgns
 
-# clone SF if needed
-if [[ ! -e Stockfish ]]; then
-    git clone https://github.com/official-stockfish/Stockfish.git >&clone.log
+# clone repos if needed, and pull latest revisions
+for repo in "Stockfish" "books"; do
+    if [[ ! -e "$repo" ]]; then
+        git clone https://github.com/official-stockfish/"$repo".git >&clone.log
+    fi
+    cd "$repo"
+    git checkout master >&checkout.log
+    git fetch origin >&fetch.log
+    git pull >&pull.log
+    cd ..
+done
+
+# get the book necessary for the move counter fixing, TODO: deal with several books
+if [[ ! -e "$bookname.gz" ]]; then
+    unzip "books/$bookname.zip"
+    gzip "$bookname"
 fi
 
-# compile scoreWDLstat if needed
-make >&make.log
-
-# update SF and get a revision list
+# get a SF revision list
 cd Stockfish
-git checkout master >&checkout.log
-git fetch origin >&fetch.log
-git pull >&pull.log
 revs=$(git rev-list $firstrev^..$lastrev)
 
 # get the currently valid value of NormalizeToPawnValue
@@ -50,6 +57,9 @@ done
 regex_pattern="${regex_pattern%|}"
 
 cd ..
+
+# compile scoreWDLstat if needed
+make >&make.log
 
 echo "Look recursively in directory $pgnpath for games from SPRT tests using" \
     "books matching \"$bookname\" for SF revisions between $firstrev (from" \

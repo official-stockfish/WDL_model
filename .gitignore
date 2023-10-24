@@ -1,7 +1,7 @@
 *.png
 *.json
 *.pgn
-*.pgn.gz
+*.gz
 *.log
 
 pgns*

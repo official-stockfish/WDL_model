@@ -32,8 +32,9 @@ using map_t =
 
 map_t pos_map = {};
 
-// map to collect metadata for tests
+// maps to collect metadata for tests, and move counters for fix FENs
 using map_meta = std::unordered_map<std::string, TestMetaData>;
+using map_fens = std::unordered_map<std::string, std::pair<int, int>>;
 
 std::atomic<std::size_t> total_chunks = 0;
 std::atomic<std::size_t> total_games  = 0;
@@ -286,6 +287,41 @@ void ana_files(const std::vector<std::string> &files, const std::string &regex_e
 
 }  // namespace analysis
 
+[[nodiscard]] map_fens get_fixfens(std::string file) {
+    map_fens fixfens_map;
+
+    const auto fen_iterator = [&](std::istream &iss) {
+        std::string line;
+        while (std::getline(iss, line)) {
+            std::istringstream iss(line);
+            std::string key, f1, f2, f3, f4;
+            int halfmoveCounter, fullmoveCounter = 0;
+
+            iss >> f1 >> f2 >> f3 >> f4 >> halfmoveCounter >> fullmoveCounter;
+            key = f1 + ' ' + f2 + ' ' + f3 + ' ' + f4;
+
+            if (fixfens_map.find(key) != fixfens_map.end()) {
+                // for duplicate FENs, prefer the one with lower full move conuter
+                if (fullmoveCounter && fullmoveCounter < fixfens_map[key].second) {
+                    fixfens_map[key] = std::make_pair(halfmoveCounter, fullmoveCounter);
+                }
+            } else {
+                fixfens_map[key] = std::make_pair(halfmoveCounter, fullmoveCounter);
+            }
+        }
+    };
+
+    if (file.size() >= 3 && file.substr(file.size() - 3) == ".gz") {
+        igzstream input(file.c_str());
+        fen_iterator(input);
+    } else {
+        std::ifstream input(file);
+        fen_iterator(input);
+    }
+
+    return fixfens_map;
+}
+
 [[nodiscard]] map_meta get_metadata(const std::vector<std::string> &file_list,
                                     bool allow_duplicates) {
     map_meta meta_map;
@@ -465,7 +501,7 @@ void print_usage(char const *program_name) {
     ss << "  --matchBook <regex>   Filter data based on book name in metadata" << "\n";
     ss << "  --matchBookInvert     Invert the filter" << "\n";
     ss << "  --SPRTonly            Analyse only pgns from SPRT tests" << "\n";
-    ss << "  --fixFEN              Patch move counters lost by cutechess-cli" << "\n";
+    ss << "  --fixFENsource        Patch move counters lost by cutechess-cli based on FENs in this file" << "\n";
     ss << "  -o <path>             Path to output json file (default: scoreWDLstat.json)" << "\n";
     ss << "  --help                Print this help message" << "\n";
     // clang-format on
@@ -556,6 +592,9 @@ int main(int argc, char const *argv[]) {
     }
 
     bool fix_fens = find_argument(args, pos, "--fixFEN", true);
+    if (find_argument(args, pos, "--fixFENsource")) {
+        auto fixfens_map = get_fixfens(*std::next(pos));
+    }
 
     if (find_argument(args, pos, "--matchEngine")) {
         regex_engine = *std::next(pos);
