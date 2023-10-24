@@ -35,12 +35,12 @@ map_t pos_map = {};
 // map to collect metadata for tests
 using map_meta = std::unordered_map<std::string, TestMetaData>;
 
-// class (and map) to hold data that cutechess-cli lost from original FENs
+// class (and map) to hold data that cutechess-cli changed from original FENs
 class FixFenData {
    public:
-    std::string ep;
-    int halfmove;
-    int fullmove;
+    std::string ep;  // possibly changed to '-' by cutechess-cli
+    int halfmove;    // for .epd books changed to 0 by cutechess-cli
+    int fullmove;    // for .epd books changed to 1 by cutechess-cli
 
     FixFenData() {}
     FixFenData(const std::string &ep, int halfmove, int fullmove)
