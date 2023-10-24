@@ -3,8 +3,10 @@
 *.pgn
 *.gz
 *.log
+*.exe
+
+scoreWDLstat
 
 pgns*
-scoreWDLstat
-*.exe
 Stockfish
+books

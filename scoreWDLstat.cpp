@@ -95,11 +95,11 @@ class Analyze : public pgn::Visitor {
 
     void header(std::string_view key, std::string_view value) override {
         if (key == "FEN") {
-            std::regex p("^(.+) - 0 1$");
+            std::regex p("^(.+) .+ 0 1$");
             std::smatch match;
             std::string value_str(value);
 
-            // revert change by cutechess-cli of move counters in .epd books to "0 1"
+            // revert changes by cutechess-cli to ep square and move counters
             if (!fixfen_map.empty() && std::regex_search(value_str, match, p) && match.size() > 1) {
                 std::string fen = match[1];
                 auto it         = fixfen_map.find(fen);
