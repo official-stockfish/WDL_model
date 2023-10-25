@@ -9,8 +9,8 @@ echo "started at: " $(date)
 firstrev=70ba9de85cddc5460b1ec53e0a99bee271e26ece
 lastrev=HEAD
 
-# "regex" for book name, TODO: only works for single book name for now!
-bookname=UHO_4060_v3.epd
+# regex for book name
+bookname="UHO_4060_v3.epd|UHO_Lichess_4852_v1.epd"
 
 # path for PGN files
 pgnpath=pgns
@@ -27,10 +27,19 @@ for repo in "Stockfish" "books"; do
     cd ..
 done
 
-# get the book necessary for the move counter fixing, TODO: deal with several books
-if [[ ! -e "$bookname.gz" ]]; then
-    unzip "books/$bookname.zip"
-    gzip "$bookname"
+# get the books necessary for the move counter fixing
+bookhash=$(echo -n "$bookname" | md5sum | cut -d ' ' -f 1)
+fixfen=fixfen_"$bookhash".epd
+if [[ ! -e "$fixfen.gz" ]]; then
+    for file in books/*.zip; do
+        book=$(basename "$file" .zip)
+        if [[ $book =~ $bookname ]]; then
+            unzip "$file" >&unzip.log
+            cat "$book" >>"$fixfen"
+            rm "$book"
+        fi
+    done
+    gzip "$fixfen"
 fi
 
 # get a SF revision list
@@ -66,7 +75,7 @@ echo "Look recursively in directory $pgnpath for games from SPRT tests using" \
     "$oldepoch) and $lastrev (from $newepoch)."
 
 # obtain the WDL data from games of SPRT tests of the SF revisions of interest
-./scoreWDLstat --dir $pgnpath -r --matchRev $regex_pattern --matchBook "$bookname" --fixFENsource "$bookname.gz" --SPRTonly -o updateWDL.json >&scoreWDLstat.log
+./scoreWDLstat --dir $pgnpath -r --matchRev $regex_pattern --matchBook "$bookname" --fixFENsource "$fixfen.gz" --SPRTonly -o updateWDL.json >&scoreWDLstat.log
 
 # fit the new WDL model, keeping anchor at move 32
 # we ignore the first 2 full moves out of book for fitting (11=8+1+2), and the first 9 for (contour) plotting (18=8+1+9)
