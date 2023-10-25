@@ -35,18 +35,8 @@ map_t pos_map = {};
 // map to collect metadata for tests
 using map_meta = std::unordered_map<std::string, TestMetaData>;
 
-// class (and map) to hold data that cutechess-cli changed from original FENs
-class FixFenData {
-   public:
-    std::string ep;  // possibly changed to '-' by cutechess-cli
-    int halfmove;    // for .epd books changed to 0 by cutechess-cli
-    int fullmove;    // for .epd books changed to 1 by cutechess-cli
-
-    FixFenData() {}
-    FixFenData(const std::string &ep, int halfmove, int fullmove)
-        : ep(ep), halfmove(halfmove), fullmove(fullmove) {}
-};
-using map_fens = std::unordered_map<std::string, FixFenData>;
+// map to hold move counters that cutechess-cli changed from original FENs
+using map_fens = std::unordered_map<std::string, std::pair<int, int>>;
 
 std::atomic<std::size_t> total_chunks = 0;
 std::atomic<std::size_t> total_games  = 0;
@@ -109,8 +99,8 @@ class Analyze : public pgn::Visitor {
                 }
                 const auto &fix         = it->second;
                 std::string ep          = match[2];  // trust cutechess-cli on this one
-                std::string fixed_value = fen + " " + ep + " " + std::to_string(fix.halfmove) +
-                                          " " + std::to_string(fix.fullmove);
+                std::string fixed_value = fen + " " + ep + " " + std::to_string(fix.first) + " " +
+                                          std::to_string(fix.second);
                 board.setFen(fixed_value);
             } else {
                 board.setFen(value);
@@ -296,12 +286,12 @@ void ana_files(const std::vector<std::string> &files, const std::string &regex_e
             int halfmove, fullmove = 0;
 
             iss >> f1 >> f2 >> f3 >> ep >> halfmove >> fullmove;
-            key = f1 + ' ' + f2 + ' ' + f3;
-            FixFenData fixfen_data(ep, halfmove, fullmove);
+            key              = f1 + ' ' + f2 + ' ' + f3;
+            auto fixfen_data = std::pair<int, int>(halfmove, fullmove);
 
             if (fixfen_map.find(key) != fixfen_map.end()) {
                 // for duplicate FENs, prefer the one with lower full move counter
-                if (fullmove && fullmove < fixfen_map[key].fullmove) {
+                if (fullmove && fullmove < fixfen_map[key].second) {
                     fixfen_map[key] = fixfen_data;
                 }
             } else {
