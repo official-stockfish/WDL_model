@@ -10,7 +10,7 @@ firstrev=70ba9de85cddc5460b1ec53e0a99bee271e26ece
 lastrev=HEAD
 
 # regex for book name
-bookname="UHO_4060_v3.epd|UHO_Lichess_4852_v1.epd"
+bookname="UHO_4060_v..epd|UHO_Lichess_4852_v1.epd"
 
 # path for PGN files
 pgnpath=pgns
@@ -31,14 +31,16 @@ done
 bookhash=$(echo -n "$bookname" | md5sum | cut -d ' ' -f 1)
 fixfen=fixfen_"$bookhash".epd
 if [[ ! -e "$fixfen.gz" ]]; then
+    rm -f "$fixfen"
     for file in books/*.zip; do
         book=$(basename "$file" .zip)
         if [[ $book =~ $bookname ]]; then
-            unzip "$file" >&unzip.log
-            cat "$book" >>"$fixfen"
+            unzip -o "$file" >&unzip.log
+            awk 'NF >= 6' "$book" >>"$fixfen"
             rm "$book"
         fi
     done
+    sort -u "$fixfen" -o _tmp_"$fixfen" && mv _tmp_"$fixfen" "$fixfen"
     gzip "$fixfen"
 fi
 
