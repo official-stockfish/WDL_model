@@ -286,12 +286,15 @@ void ana_files(const std::vector<std::string> &files, const std::string &regex_e
             int halfmove, fullmove = 0;
 
             iss >> f1 >> f2 >> f3 >> ep >> halfmove >> fullmove;
+
+            if (!fullmove) continue;
+
             key              = f1 + ' ' + f2 + ' ' + f3;
             auto fixfen_data = std::pair<int, int>(halfmove, fullmove);
 
             if (fixfen_map.find(key) != fixfen_map.end()) {
                 // for duplicate FENs, prefer the one with lower full move counter
-                if (fullmove && fullmove < fixfen_map[key].second) {
+                if (fullmove < fixfen_map[key].second) {
                     fixfen_map[key] = fixfen_data;
                 }
             } else {
