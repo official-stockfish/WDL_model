@@ -11,16 +11,16 @@ parser.add_argument(
     help="Downloaded .pgn.gz files will be stored in PATH/date/test-id/.",
 )
 parser.add_argument(
-    "--ltc_only",
-    type=bool,
-    default=True,
-    help="A flag for LTC tests only.",
-)
-parser.add_argument(
     "--time_delta",
     type=float,
     default=168.0,  # 1 week
     help="Delta of hours from now since the desired tests are last updated.",
+)
+parser.add_argument(
+    "--ltc_only",
+    type=bool,
+    default=True,
+    help="A flag for LTC tests only.",
 )
 parser.add_argument(
     "--success_only",
