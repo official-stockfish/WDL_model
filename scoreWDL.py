@@ -263,6 +263,8 @@ class WdlModel:
 
             popt: tuple[float, float]
 
+            # TODO : this should probably be done different, i.e. maximize the likelihood
+            # of the observed outcome rather than fitting the observed curve.
             popt, pcov = curve_fit(
                 ModelFit.winmodel,
                 xdata,
