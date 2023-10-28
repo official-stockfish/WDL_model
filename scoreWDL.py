@@ -119,7 +119,7 @@ class ModelFit:
         self.y_data_target = y_data_target
         self.normalize_to_pawn_value = normalize_to_pawn_value
 
-    def winmodel(x: int, a: int, b: int) -> float:
+    def winmodel(x: float, a: float, b: float) -> float:
         return 1.0 / (1.0 + np.exp(-(x - a) / b))
 
     def normalized_axis(ax, normalize_to_pawn_value: int):
@@ -260,6 +260,8 @@ class WdlModel:
             if len(ywindata) < 10:
                 continue
 
+            # TODO : this should probably be done different, i.e. maximize the likelihood
+            # of the observed outcome rather than fitting the observed curve.
             popt, pcov = curve_fit(
                 ModelFit.winmodel,
                 xdata,

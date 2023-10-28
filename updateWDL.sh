@@ -11,6 +11,7 @@ lastrev=HEAD
 
 # regex for book name
 bookname="UHO_4060_v..epd|UHO_Lichess_4852_v1.epd"
+bookname="UHO_Lichess_4852_v1.epd"
 
 # path for PGN files
 pgnpath=pgns
