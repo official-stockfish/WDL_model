@@ -12,13 +12,10 @@ class WdlPlot:
         self.title = title
         self.pgnName = pgnName
 
-        self.fig = None
-        self.axs = None
-
-    def create_fig(self):
         self.fig, self.axs = plt.subplots(
             2, 3, figsize=(11.69 * 1.5, 8.27 * 1.5), constrained_layout=True
         )
+
         self.fig.suptitle(self.title, fontsize="x-large")
 
     def save(self, plot_setting: Literal["save+show", "save", "no"]):
@@ -32,7 +29,7 @@ class WdlPlot:
 @dataclass
 class RawModelData:
     xs: list[float]
-    ys: list[float]
+    ys: list[int]
     zwins: list[float]
     zdraws: list[float]
     zlosses: list[float]
@@ -43,7 +40,7 @@ class DataLoader:
         self.filenames = filenames
 
     def load_json(self) -> dict[str, int]:
-        inputdata = {}
+        inputdata: dict[str, int] = {}
         for filename in self.filenames:
             print(f"Reading score stats from {filename}.")
             with open(filename) as infile:
@@ -65,8 +62,13 @@ class DataLoader:
         Counter[tuple[float, int]],
         Counter[tuple[float, int]],
     ]:
-        inpdict = {literal_eval(k): v for k, v in inputdata.items()}
-        win, draw, loss = Counter(), Counter(), Counter()
+        inpdict: dict[tuple[str, int, int, int], int] = {
+            literal_eval(k): v for k, v in inputdata.items()
+        }
+
+        win: Counter[tuple[float, int]] = Counter()
+        draw: Counter[tuple[float, int]] = Counter()
+        loss: Counter[tuple[float, int]] = Counter()
         # filter out (score, yData) WDL data (i.e. material or move summed out)
         for (result, move, material, score), v in inpdict.items():
             # exclude large scores and unwanted move numbers
@@ -74,16 +76,16 @@ class DataLoader:
                 continue
 
             # convert the cp score to the internal value
-            score = score * NormalizeToPawnValue / 100
+            score_int = score * NormalizeToPawnValue / 100
 
             yData = move if yDataFormat == "move" else material
 
             if result == "W":
-                win[score, yData] += v
+                win[score_int, yData] += v
             elif result == "D":
-                draw[score, yData] += v
+                draw[score_int, yData] += v
             elif result == "L":
-                loss[score, yData] += v
+                loss[score_int, yData] += v
 
         print(
             f"Retained (W,D,L) = ({sum(win.values())}, {sum(draw.values())}, {sum(loss.values())}) positions."
@@ -119,9 +121,11 @@ class ModelFit:
         self.y_data_target = y_data_target
         self.normalize_to_pawn_value = normalize_to_pawn_value
 
-    def winmodel(x: int, a: int, b: int) -> float:
+    @staticmethod
+    def winmodel(x: float, a: float, b: float) -> float:
         return 1.0 / (1.0 + np.exp(-(x - a) / b))
 
+    @staticmethod
     def normalized_axis(ax, normalize_to_pawn_value: int):
         ax2 = ax.twiny()
         tickmin = int(np.ceil(ax.get_xlim()[0] / normalize_to_pawn_value)) * 2
@@ -138,7 +142,7 @@ class ModelFit:
         ax2.set_xticks(new_tick_locations)
         ax2.set_xticklabels(tick_function(new_tick_locations))
 
-    def poly3(self, x: int, a, b, c, d) -> float:
+    def poly3(self, x: float | list[float], a, b, c, d) -> float:
         xnp = np.asarray(x) / self.y_data_target
         return ((a * xnp + b) * xnp + c) * xnp + d
 
@@ -180,9 +184,6 @@ class WdlModel:
     def __init__(self, args, plot: WdlPlot):
         self.args = args
         self.plot = plot
-
-        if self.args.plot != "no":
-            self.plot.create_fig()
 
     def sample_curve_y(
         self,
@@ -232,12 +233,12 @@ class WdlModel:
     def extract_model_data(
         self,
         xs: list[float],
-        ys: list[float],
+        ys: list[int],
         zwins: list[float],
         zdraws: list[float],
         zlosses: list[float],
         func: Callable[[list[float], list[float], list[float], list[float], Any], None],
-    ) -> tuple[list[float], list[float], list[float]]:
+    ):
         scores, moms, winrate, drawrate, lossrate = xs, ys, zwins, zdraws, zlosses
 
         model_ms, model_as, model_bs = [], [], []
@@ -260,6 +261,8 @@ class WdlModel:
             if len(ywindata) < 10:
                 continue
 
+            popt: tuple[float, float]
+
             popt, pcov = curve_fit(
                 ModelFit.winmodel,
                 xdata,
@@ -278,7 +281,7 @@ class WdlModel:
     def fit_model(
         self,
         xs: list[float],
-        ys: list[float],
+        ys: list[int],
         zwins: list[float],
         zdraws: list[float],
         zlosses: list[float],
@@ -344,26 +347,27 @@ class WdlModel:
 
         fit = ModelFit(self.args.yDataTarget, self.args.NormalizeToPawnValue)
 
-        self.plot.axs[1, 0].plot(model.model_ms, model.model_as, "b.", label="as")
-        self.plot.axs[1, 0].plot(
-            model.model_ms,
-            fit.poly3(model.model_ms, *model.popt_as),
-            "r-",
-            label="fit: " + model.label_as,
-        )
-        self.plot.axs[1, 0].plot(model.model_ms, model.model_bs, "g.", label="bs")
-        self.plot.axs[1, 0].plot(
-            model.model_ms,
-            fit.poly3(model.model_ms, *model.popt_bs),
-            "m-",
-            label="fit: " + model.label_bs,
-        )
+        if self.args.fit:
+            self.plot.axs[1, 0].plot(model.model_ms, model.model_as, "b.", label="as")
+            self.plot.axs[1, 0].plot(
+                model.model_ms,
+                fit.poly3(model.model_ms, *model.popt_as),
+                "r-",
+                label="fit: " + model.label_as,
+            )
+            self.plot.axs[1, 0].plot(model.model_ms, model.model_bs, "g.", label="bs")
+            self.plot.axs[1, 0].plot(
+                model.model_ms,
+                fit.poly3(model.model_ms, *model.popt_bs),
+                "m-",
+                label="fit: " + model.label_bs,
+            )
 
-        self.plot.axs[1, 0].set_xlabel(self.args.yData)
-        self.plot.axs[1, 0].set_ylabel("parameters (in internal value units)")
-        self.plot.axs[1, 0].legend(fontsize="x-small")
-        self.plot.axs[1, 0].set_title("Winrate model parameters")
-        self.plot.axs[1, 0].set_ylim(bottom=0.0)
+            self.plot.axs[1, 0].set_xlabel(self.args.yData)
+            self.plot.axs[1, 0].set_ylabel("parameters (in internal value units)")
+            self.plot.axs[1, 0].legend(fontsize="x-small")
+            self.plot.axs[1, 0].set_title("Winrate model parameters")
+            self.plot.axs[1, 0].set_ylim(bottom=0.0)
 
         # now generate contour plots
         contourlines = [0, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.97, 1.0]
@@ -372,7 +376,7 @@ class WdlModel:
         ylabelStr = self.args.yData + " (1,3,3,5,9)" * bool(
             self.args.yData == "material"
         )
-        for i in [0, 1]:
+        for i in [0, 1] if self.args.fit else [0]:
             for j in [1, 2]:
                 self.plot.axs[i, j].yaxis.grid(True)
                 self.plot.axs[i, j].xaxis.grid(True)
@@ -589,7 +593,7 @@ if __name__ == "__main__":
             raw_model_data.zlosses,
         )
         if args.fit
-        else (None, None)
+        else ModelData([], [], [], [], [], "", "")
     )
 
     if args.plot != "no":
