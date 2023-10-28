@@ -347,27 +347,32 @@ class WdlModel:
 
         fit = ModelFit(self.args.yDataTarget, self.args.NormalizeToPawnValue)
 
-        if self.args.fit and model is not None:
-            self.plot.axs[1, 0].plot(model.model_ms, model.model_as, "b.", label="as")
-            self.plot.axs[1, 0].plot(
-                model.model_ms,
-                fit.poly3(model.model_ms, *model.popt_as),
-                "r-",
-                label="fit: " + model.label_as,
-            )
-            self.plot.axs[1, 0].plot(model.model_ms, model.model_bs, "g.", label="bs")
-            self.plot.axs[1, 0].plot(
-                model.model_ms,
-                fit.poly3(model.model_ms, *model.popt_bs),
-                "m-",
-                label="fit: " + model.label_bs,
-            )
+        if self.args.fit:
+            if model is not None:
+                self.plot.axs[1, 0].plot(
+                    model.model_ms, model.model_as, "b.", label="as"
+                )
+                self.plot.axs[1, 0].plot(
+                    model.model_ms,
+                    fit.poly3(model.model_ms, *model.popt_as),
+                    "r-",
+                    label="fit: " + model.label_as,
+                )
+                self.plot.axs[1, 0].plot(
+                    model.model_ms, model.model_bs, "g.", label="bs"
+                )
+                self.plot.axs[1, 0].plot(
+                    model.model_ms,
+                    fit.poly3(model.model_ms, *model.popt_bs),
+                    "m-",
+                    label="fit: " + model.label_bs,
+                )
 
-        self.plot.axs[1, 0].set_xlabel(self.args.yData)
-        self.plot.axs[1, 0].set_ylabel("parameters (in internal value units)")
-        self.plot.axs[1, 0].legend(fontsize="x-small")
-        self.plot.axs[1, 0].set_title("Winrate model parameters")
-        self.plot.axs[1, 0].set_ylim(bottom=0.0)
+            self.plot.axs[1, 0].set_xlabel(self.args.yData)
+            self.plot.axs[1, 0].set_ylabel("parameters (in internal value units)")
+            self.plot.axs[1, 0].legend(fontsize="x-small")
+            self.plot.axs[1, 0].set_title("Winrate model parameters")
+            self.plot.axs[1, 0].set_ylim(bottom=0.0)
 
         # now generate contour plots
         contourlines = [0, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.97, 1.0]
@@ -376,7 +381,7 @@ class WdlModel:
         ylabelStr = self.args.yData + " (1,3,3,5,9)" * bool(
             self.args.yData == "material"
         )
-        for i in [0, 1]:
+        for i in [0, 1] if self.args.fit else [0]:
             for j in [1, 2]:
                 self.plot.axs[i, j].yaxis.grid(True)
                 self.plot.axs[i, j].xaxis.grid(True)
