@@ -341,32 +341,27 @@ class WdlModel:
             popt_as, popt_bs, model_ms, model_as, model_bs, label_as, label_bs
         )
 
-    def create_plot(self, raw_model_data: RawModelData, model: ModelData | None):
+    def create_plot(self, raw_model_data: RawModelData, model: ModelData):
         # graphs of a and b as a function of move/material
         print("Plotting move/material dependence of model parameters.")
 
         fit = ModelFit(self.args.yDataTarget, self.args.NormalizeToPawnValue)
 
         if self.args.fit:
-            if model is not None:
-                self.plot.axs[1, 0].plot(
-                    model.model_ms, model.model_as, "b.", label="as"
-                )
-                self.plot.axs[1, 0].plot(
-                    model.model_ms,
-                    fit.poly3(model.model_ms, *model.popt_as),
-                    "r-",
-                    label="fit: " + model.label_as,
-                )
-                self.plot.axs[1, 0].plot(
-                    model.model_ms, model.model_bs, "g.", label="bs"
-                )
-                self.plot.axs[1, 0].plot(
-                    model.model_ms,
-                    fit.poly3(model.model_ms, *model.popt_bs),
-                    "m-",
-                    label="fit: " + model.label_bs,
-                )
+            self.plot.axs[1, 0].plot(model.model_ms, model.model_as, "b.", label="as")
+            self.plot.axs[1, 0].plot(
+                model.model_ms,
+                fit.poly3(model.model_ms, *model.popt_as),
+                "r-",
+                label="fit: " + model.label_as,
+            )
+            self.plot.axs[1, 0].plot(model.model_ms, model.model_bs, "g.", label="bs")
+            self.plot.axs[1, 0].plot(
+                model.model_ms,
+                fit.poly3(model.model_ms, *model.popt_bs),
+                "m-",
+                label="fit: " + model.label_bs,
+            )
 
             self.plot.axs[1, 0].set_xlabel(self.args.yData)
             self.plot.axs[1, 0].set_ylabel("parameters (in internal value units)")
@@ -410,7 +405,7 @@ class WdlModel:
         ModelFit.normalized_axis(self.plot.axs[0, 1], self.args.NormalizeToPawnValue)
 
         # model
-        if self.args.fit and model is not None:
+        if self.args.fit:
             zwins = []
             for i in range(0, len(raw_model_data.xs)):
                 zwins.append(
@@ -452,7 +447,7 @@ class WdlModel:
         ModelFit.normalized_axis(self.plot.axs[0, 2], self.args.NormalizeToPawnValue)
 
         # model
-        if self.args.fit and model is not None:
+        if self.args.fit:
             zwins = []
             for i in range(0, len(raw_model_data.xs)):
                 zwins.append(
@@ -598,7 +593,7 @@ if __name__ == "__main__":
             raw_model_data.zlosses,
         )
         if args.fit
-        else None
+        else ModelData([], [], [], [], [], "", "")
     )
 
     if args.plot != "no":
