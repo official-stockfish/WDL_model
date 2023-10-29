@@ -10,6 +10,48 @@ depend on the engine's evaluation and the move number, and are computed
 from a WDL model that can be generated from fishtest data with the help of
 the scripts in this repository.
 
+## Background
+
+The underlying assumption of WDL model is that the win rate for a position
+can be well modeled as a function of the evaluation of that position.
+The data shows a [logistic function](https://en.wikipedia.org/wiki/Logistic_function) (see also logistic regression)
+gives a good approximation of the win rate as a function of the evaluation.
+
+```
+win_rate(x) = 1 / ( 1 + exp(-(x-a)/b))
+```
+In this equation, the parameters a and b need to be fitted to the data,
+which is the purpose of this repository. a is the evaluation for which a 50% win rate is observed,
+While b indicates how quickly this rate changes with evaluation. A small b indicates that small
+changes in eval quickly turn a 'game on the edge' (i.e. 50% win rate) into a dead draw or a near certain win.
+
+The model furthermore assumes symmetry in evaluation, so that the following quantities follow as well:
+```
+loss_rate(x) = win_rate(-x)
+draw_rate(x) = 1 - win_rate(x) - loss_rate(x)
+```
+
+This information also allows for estimating the game score
+```
+score(x) = 1 * win_rate(x) + 0.5 * draw_rate(x) + 0 * loss_rate(x)
+```
+
+The model is made more accurate by not only taking the evaluation,
+but also the material or game move counter (mom) into account. This dependency is modeled by making the
+parameters a and b a function of mom. The win/draw/loss rates are now 2D functions, while a and b are 1D functions.
+For simplicity the 1D functions a and b are represented as a polynomial of 3rd degree.
+
+The parameters that need to be fit to represent the model completely are thus the 8 parameters that
+determine these two polynomials. For example:
+```
+a(x) = ((-1.719 * x / 32 + 12.448) * x / 32 + -12.855) * x / 32 + 331.883
+b(x) = ((-3.001 * x / 32 + 22.505) * x / 32 + -51.253) * x / 32 + 93.209
+```
+
+Two fit these parameters various approaches exist, ranging from a simple fit of the observed win rate,
+to a somewhat more elaborate maximization of the probability of predicting the correct game outcome
+for the available data.
+
 ## Install
 
 Python 3.9 or higher is required.
