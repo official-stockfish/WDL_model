@@ -157,7 +157,7 @@ class Analyze : public pgn::Visitor {
 
         Move m;
 
-        m = uci::parseSanInternal(board, move.data(), moves);
+        m = uci::parseSanInternal(board, move, moves);
 
         const size_t delimiter_pos = comment.find('/');
 
