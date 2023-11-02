@@ -40,6 +40,9 @@ class DataLoader:
         self.filenames = filenames
 
     def load_json(self) -> dict[str, int]:
+        """Load the json, in which the key describes the position (result, move, material, eval),
+        and in which the value is the observed count of these positions
+        """
         inputdata: dict[str, int] = {}
         for filename in self.filenames:
             print(f"Reading score stats from {filename}.")
@@ -62,6 +65,7 @@ class DataLoader:
         Counter[tuple[float, int]],
         Counter[tuple[float, int]],
     ]:
+        """Extract three arrays, win draw and loss, counting positions with a given score (float) and move/material (int) that are wdl"""
         inpdict: dict[tuple[str, int, int, int], int] = {
             literal_eval(k): v for k, v in inputdata.items()
         }
@@ -76,16 +80,16 @@ class DataLoader:
                 continue
 
             # convert the cp score to the internal value
-            score_int = score * NormalizeToPawnValue / 100
+            score_internal = score * NormalizeToPawnValue / 100
 
             yData = move if yDataFormat == "move" else material
 
             if result == "W":
-                win[score_int, yData] += v
+                win[score_internal, yData] += v
             elif result == "D":
-                draw[score_int, yData] += v
+                draw[score_internal, yData] += v
             elif result == "L":
-                loss[score_int, yData] += v
+                loss[score_internal, yData] += v
 
         print(
             f"Retained (W,D,L) = ({sum(win.values())}, {sum(draw.values())}, {sum(loss.values())}) positions."
@@ -98,6 +102,11 @@ class DataLoader:
         draw: Counter[tuple[float, int]],
         loss: Counter[tuple[float, int]],
     ) -> RawModelData:
+        """Turns the counts of positions in densities/frequencies
+
+        x and y will contain all coordinate values for which data is available.
+        Here the counts are normalized to frequencies.
+        """
         coords = sorted(set(list(win.keys()) + list(draw.keys()) + list(loss.keys())))
         xs, ys, zwins, zdraws, zlosses = [], [], [], [], []
         for x, y in coords:
@@ -143,6 +152,7 @@ class ModelFit:
         ax2.set_xticklabels(tick_function(new_tick_locations))
 
     def poly3(self, x: float | list[float], a, b, c, d) -> float:
+        """compute the value of a polynomial of 3rd order in a point x"""
         xnp = np.asarray(x) / self.y_data_target
         return ((a * xnp + b) * xnp + c) * xnp + d
 
@@ -161,6 +171,7 @@ class ModelFit:
         popt_as: list[float],
         popt_bs: list[float],
     ) -> tuple[int, int, int]:
+        """Compute the integer wdl (per-mille) using polynomial approximation for a and b"""
         a = self.poly3(move_or_material, *popt_as)
         b = self.poly3(move_or_material, *popt_bs)
         w = int(1000 * ModelFit.winmodel(score, a, b))
