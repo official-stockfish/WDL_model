@@ -2,9 +2,10 @@ import json, argparse, numpy as np, matplotlib.pyplot as plt
 from collections import Counter
 from ast import literal_eval
 from scipy.interpolate import griddata
-from scipy.optimize import curve_fit
+from scipy.optimize import curve_fit, minimize
 from dataclasses import dataclass
 from typing import Literal, Callable, Any
+import math
 
 
 class WdlPlot:
@@ -27,12 +28,14 @@ class WdlPlot:
 
 
 @dataclass
-class RawModelData:
-    xs: list[float]
-    ys: list[int]
-    zwins: list[float]
-    zdraws: list[float]
-    zlosses: list[float]
+class ModelDataDensity:
+    """Count data converted to densities"""
+
+    xs: list[float]  # scores
+    ys: list[int]  # moves or material
+    zwins: list[float]  # corresponding win probability
+    zdraws: list[float]  # draw prob
+    zlosses: list[float]  # loss prob
 
 
 class DataLoader:
@@ -96,12 +99,12 @@ class DataLoader:
         )
         return win, draw, loss
 
-    def get_raw_model_data(
+    def get_model_data_density(
         self,
         win: Counter[tuple[float, int]],
         draw: Counter[tuple[float, int]],
         loss: Counter[tuple[float, int]],
-    ) -> RawModelData:
+    ) -> ModelDataDensity:
         """Turns the counts of positions in densities/frequencies
 
         x and y will contain all coordinate values for which data is available.
@@ -116,23 +119,36 @@ class DataLoader:
             zwins.append(win[x, y] / total)
             zdraws.append(draw[x, y] / total)
             zlosses.append(loss[x, y] / total)
-        return RawModelData(xs, ys, zwins, zdraws, zlosses)
+        return ModelDataDensity(xs, ys, zwins, zdraws, zlosses)
 
 
 #
-# fit a model to predict winrate from score and move
-# define model functions
+# Model to be fitted in order to predict the winrate from score and move (or material).
 #
-
-
+# This defines the model functions
+#
 class ModelFit:
     def __init__(self, y_data_target: int, normalize_to_pawn_value: int):
         self.y_data_target = y_data_target
         self.normalize_to_pawn_value = normalize_to_pawn_value
 
     @staticmethod
-    def winmodel(x: float, a: float, b: float) -> float:
-        return 1.0 / (1.0 + np.exp(-(x - a) / b))
+    def winmodel(x, a, b):
+        def skip_overflow(arg):
+           if (arg > 0):
+              return np.exp(-arg) / (1.0 + np.exp(-arg))
+           else:
+              return 1.0 / (1.0 + np.exp(arg))
+
+        if type(x) == np.ndarray:
+           res = []
+           for xs in x:
+               arg = -(xs - a) / b
+               res.append(skip_overflow(arg))
+           return np.array(res)
+        else:
+           arg = -(x - a) / b
+           return skip_overflow(arg)
 
     @staticmethod
     def normalized_axis(ax, normalize_to_pawn_value: int):
@@ -178,6 +194,96 @@ class ModelFit:
         l = int(1000 * ModelFit.winmodel(-score, a, b))
         d = 1000 - w - l
         return w, d, l
+
+
+class ObjectiveFunctions:
+    """Collects objective functions that can be minimized to fit the win draw loss data"""
+
+    def __init__(self, win, draw, loss, fit):
+        self.win = win
+        self.draw = draw
+        self.loss = loss
+        self.fit = fit
+
+    def get_ab(self, asbs: list[float], mom):
+        if len(asbs) == 8:
+            popt_as = asbs[0:4]
+            popt_bs = asbs[4:8]
+            a = self.fit.poly3(mom, *popt_as)
+            b = self.fit.poly3(mom, *popt_bs)
+        else:
+            a = asbs[0]
+            b = asbs[1]
+
+        return a, b
+
+    def estimateScore(self, asbs: list[float], score, mom):
+        """Estimate game score based on probability of WDL"""
+
+        a, b = self.get_ab(asbs, mom)
+
+        # guard against unphysical stuff
+        if a <= 0 or b <= 0:
+            return 4
+
+        probw = ModelFit.winmodel(score, a, b)
+        probl = ModelFit.winmodel(-score, a, b)
+        probd = 1 - probw - probl
+        return probw + 0.5 * probd + 0
+
+    def scoreError(self, asbs: list[float]):
+        """Sum of the squared error on the game score"""
+        scoreErr = 0
+
+        for score, mom in self.win.keys():
+            scoreErr += (
+                self.win[score, mom] * (self.estimateScore(asbs, score, mom) - 1) ** 2
+            )
+
+        for score, mom in self.loss.keys():
+            scoreErr += (
+                self.loss[score, mom] * (self.estimateScore(asbs, score, mom) - 0) ** 2
+            )
+
+        for score, mom in self.draw.keys():
+            scoreErr += (
+                self.draw[score, mom]
+                * (self.estimateScore(asbs, score, mom) - 0.5) ** 2
+            )
+
+        return scoreErr
+
+    def evalLogProbability(self, asbs: list[float]):
+        """-log(product of game outcome probability)"""
+        evalLogProb = 0
+
+        for score, mom in self.win.keys():
+            count = self.win[score, mom]
+            a, b = self.get_ab(asbs, mom)
+            prob = ModelFit.winmodel(score, a, b)
+            if prob < 1e-14:
+                prob = 1e-14
+            evalLogProb += count * math.log(prob)
+
+        for score, mom in self.loss.keys():
+            count = self.loss[score, mom]
+            a, b = self.get_ab(asbs, mom)
+            prob = ModelFit.winmodel(-score, a, b)
+            if prob < 1e-14:
+                prob = 1e-14
+            evalLogProb += count * math.log(prob)
+
+        for score, mom in self.draw.keys():
+            count = self.draw[score, mom]
+            a, b = self.get_ab(asbs, mom)
+            probw = ModelFit.winmodel(score, a, b)
+            probl = ModelFit.winmodel(-score, a, b)
+            prob = 1 - (probw + probl)
+            if prob < 1e-14:
+                prob = 1e-14
+            evalLogProb += count * math.log(prob)
+
+        return -evalLogProb
 
 
 @dataclass
@@ -248,6 +354,10 @@ class WdlModel:
         zwins: list[float],
         zdraws: list[float],
         zlosses: list[float],
+        win: Counter[tuple[float, int]],
+        draw: Counter[tuple[float, int]],
+        loss: Counter[tuple[float, int]],
+        fit,
         func: Callable[[list[float], list[float], list[float], list[float], Any], None],
     ):
         scores, moms, winrate, drawrate, lossrate = xs, ys, zwins, zdraws, zlosses
@@ -274,18 +384,61 @@ class WdlModel:
 
             popt: tuple[float, float]
 
-            # TODO : this should probably be done different, i.e. maximize the likelihood
-            # of the observed outcome rather than fitting the observed curve.
+            # Get initial values based on a simple fit of the curve.
             popt, pcov = curve_fit(
                 ModelFit.winmodel,
                 xdata,
                 ywindata,
                 p0=[self.args.NormalizeToPawnValue, self.args.NormalizeToPawnValue / 6],
             )
+
+            # Refine result based on data, optimizing an objective function
+
+            # get the subset of data relevant for this mom
+            if self.args.modelFitting != "fitDensity":
+                winsubset: Counter[tuple[float, int]] = Counter()
+                drawsubset: Counter[tuple[float, int]] = Counter()
+                losssubset: Counter[tuple[float, int]] = Counter()
+                for score, momkey in win.keys():
+                    if momkey < mmin or momkey >= mmax:
+                        continue
+                    winsubset[score, momkey] = win[score, momkey]
+                for score, momkey in loss.keys():
+                    if momkey < mmin or momkey >= mmax:
+                        continue
+                    losssubset[score, momkey] = loss[score, momkey]
+                for score, momkey in draw.keys():
+                    if momkey < mmin or momkey >= mmax:
+                        continue
+                    drawsubset[score, momkey] = draw[score, momkey]
+
+                # Miniminize the objective function
+                OF = ObjectiveFunctions(winsubset, drawsubset, losssubset, fit)
+
+                if self.args.modelFitting == "optimizeScore":
+                    objectiveFunction = OF.scoreError
+                else:
+                    if self.args.modelFitting == "optimizeProbability":
+                        objectiveFunction = OF.evalLogProbability
+                    else:
+                        objectiveFunction = None
+                res = minimize(
+                    objectiveFunction,
+                    popt,
+                    method="Powell",
+                    options={"maxiter": 100000, "disp": False, "xtol": 1e-6},
+                )
+                popt = res.x
+
+            # Prepare output
+
+            # store result.
             model_ms.append(mom)
             model_as.append(popt[0])
             model_bs.append(popt[1])
 
+            # TODO ... this shows the 'local fit, it probably would be interesting to show the final result,
+            # based on the a,b obtained from the fit.
             if self.args.plot != "no" and mom == self.args.yDataTarget and func != None:
                 func(xdata, ywindata, ydrawdata, ylossdata, popt)
 
@@ -298,6 +451,9 @@ class WdlModel:
         zwins: list[float],
         zdraws: list[float],
         zlosses: list[float],
+        win: Counter[tuple[float, int]],
+        draw: Counter[tuple[float, int]],
+        loss: Counter[tuple[float, int]],
     ) -> ModelData:
         print(f"Fit WDL model based on {self.args.yData}.")
         #
@@ -308,7 +464,7 @@ class WdlModel:
         fit = ModelFit(self.args.yDataTarget, self.args.NormalizeToPawnValue)
 
         model_as, model_bs, model_ms = self.extract_model_data(
-            xs, ys, zwins, zdraws, zlosses, self.sample_curve_y
+            xs, ys, zwins, zdraws, zlosses, win, draw, loss, fit, self.sample_curve_y
         )
 
         #
@@ -319,6 +475,39 @@ class WdlModel:
         # fit a and b
         popt_as, pcov = curve_fit(fit.poly3, model_ms, model_as)
         popt_bs, pcov = curve_fit(fit.poly3, model_ms, model_bs)
+
+        # Refinement phase
+        #
+        # optimize the likelihood of seeing the data ...
+        #    our model_as, model_bs / popt_as, popt_bs are just initial guesses.
+        #
+
+        if self.args.modelFitting != "fitDensity":
+            OF = ObjectiveFunctions(win, draw, loss, fit)
+
+            if self.args.modelFitting == "optimizeScore":
+                objectiveFunction = OF.scoreError
+            else:
+                if self.args.modelFitting == "optimizeProbability":
+                    objectiveFunction = OF.evalLogProbability
+                else:
+                    objectiveFunction = None
+
+            popt_all = popt_as.tolist() + popt_bs.tolist()
+            print("Initial objective function: ", objectiveFunction(popt_all))
+            res = minimize(
+                objectiveFunction,
+                popt_all,
+                method="Powell",
+                options={"maxiter": 100000, "disp": False, "xtol": 1e-6},
+            )
+            popt_as = res.x[0:4]
+            popt_bs = res.x[4:8]
+            popt_all = res.x
+            print("Final objective function:   ", objectiveFunction(popt_all))
+            print(res.message)
+
+        # Prepare output
         label_as, label_bs = "as = " + fit.poly3_str(popt_as), "bs = " + fit.poly3_str(
             popt_bs
         )
@@ -354,7 +543,7 @@ class WdlModel:
             popt_as, popt_bs, model_ms, model_as, model_bs, label_as, label_bs
         )
 
-    def create_plot(self, raw_model_data: RawModelData, model: ModelData):
+    def create_plot(self, model_data_density: ModelDataDensity, model: ModelData):
         # graphs of a and b as a function of move/material
         print("Plotting move/material dependence of model parameters.")
 
@@ -403,10 +592,12 @@ class WdlModel:
         xmax = ((3 * self.args.NormalizeToPawnValue) // 100 + 1) * 100
         ymin, ymax = self.args.yPlotMin, self.args.yDataMax
         grid_x, grid_y = np.mgrid[xmin:xmax:30j, ymin:ymax:22j]
-        points = np.array(list(zip(raw_model_data.xs, raw_model_data.ys)))
+        points = np.array(list(zip(model_data_density.xs, model_data_density.ys)))
 
         # data
-        zz = griddata(points, raw_model_data.zwins, (grid_x, grid_y), method="linear")
+        zz = griddata(
+            points, model_data_density.zwins, (grid_x, grid_y), method="linear"
+        )
         cp = self.plot.axs[0, 1].contourf(grid_x, grid_y, zz, contourlines)
         self.plot.fig.colorbar(cp, ax=self.plot.axs[:, -1], shrink=0.618)
         CS = self.plot.axs[0, 1].contour(
@@ -420,11 +611,11 @@ class WdlModel:
         # model
         if self.args.fit:
             zwins = []
-            for i in range(0, len(raw_model_data.xs)):
+            for i in range(0, len(model_data_density.xs)):
                 zwins.append(
                     fit.wdl(
-                        raw_model_data.xs[i],
-                        raw_model_data.ys[i],
+                        model_data_density.xs[i],
+                        model_data_density.ys[i],
                         model.popt_as,
                         model.popt_bs,
                     )[0]
@@ -447,10 +638,12 @@ class WdlModel:
         xmin = -((2 * self.args.NormalizeToPawnValue) // 100 + 1) * 100
         xmax = ((2 * self.args.NormalizeToPawnValue) // 100 + 1) * 100
         grid_x, grid_y = np.mgrid[xmin:xmax:30j, ymin:ymax:22j]
-        points = np.array(list(zip(raw_model_data.xs, raw_model_data.ys)))
+        points = np.array(list(zip(model_data_density.xs, model_data_density.ys)))
 
         # data
-        zz = griddata(points, raw_model_data.zdraws, (grid_x, grid_y), method="linear")
+        zz = griddata(
+            points, model_data_density.zdraws, (grid_x, grid_y), method="linear"
+        )
         cp = self.plot.axs[0, 2].contourf(grid_x, grid_y, zz, contourlines)
         CS = self.plot.axs[0, 2].contour(
             grid_x, grid_y, zz, contourlines, colors="black"
@@ -462,11 +655,11 @@ class WdlModel:
         # model
         if self.args.fit:
             zwins = []
-            for i in range(0, len(raw_model_data.xs)):
+            for i in range(0, len(model_data_density.xs)):
                 zwins.append(
                     fit.wdl(
-                        raw_model_data.xs[i],
-                        raw_model_data.ys[i],
+                        model_data_density.xs[i],
+                        model_data_density.ys[i],
                         model.popt_as,
                         model.popt_bs,
                     )[1]
@@ -560,6 +753,12 @@ if __name__ == "__main__":
         default="save+show",
         help="Save/show graphics or not. Useful for batch processing.",
     )
+    parser.add_argument(
+        "--modelFitting",
+        choices=["fitDensity", "optimizeProbability", "optimizeScore"],
+        default="fitDensity",
+        help="Choice of model fitting. fit the win rate curves, maximimize the probability of predicting the outcome, minimize the squared error in predicted score.",
+    )
 
     args = parser.parse_args()
 
@@ -595,15 +794,18 @@ if __name__ == "__main__":
 
     wdl_model = WdlModel(args, WdlPlot(title, pgnName))
 
-    raw_model_data = data_loader.get_raw_model_data(win, draw, loss)
+    model_data_density = data_loader.get_model_data_density(win, draw, loss)
 
     model = (
         wdl_model.fit_model(
-            raw_model_data.xs,
-            raw_model_data.ys,
-            raw_model_data.zwins,
-            raw_model_data.zdraws,
-            raw_model_data.zlosses,
+            model_data_density.xs,
+            model_data_density.ys,
+            model_data_density.zwins,
+            model_data_density.zdraws,
+            model_data_density.zlosses,
+            win,
+            draw,
+            loss,
         )
         if args.fit
         else ModelData([], [], [], [], [], "", "")
@@ -611,6 +813,6 @@ if __name__ == "__main__":
 
     if args.plot != "no":
         wdl_model.create_plot(
-            raw_model_data,
+            model_data_density,
             model,
         )
