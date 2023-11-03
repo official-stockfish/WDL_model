@@ -27,18 +27,30 @@ for repo in "Stockfish" "books"; do
     cd ..
 done
 
-# get the books necessary for the move counter fixing
-bookhash=$(echo -n "$bookname" | md5sum | cut -d ' ' -f 1)
-fixfen=fixfen_"$bookhash".epd
+# create a sorted list of all the books matching the regex
+matching_books=()
+for file in $(find books -type f -name "*.zip" | sort); do
+    book=$(basename "$file" .zip)
+    if [[ $book =~ $bookname ]]; then
+        matching_books+=("$book")
+    fi
+done
+
+if [ ${#matching_books[@]} -eq 0 ]; then
+    echo "No matching books found for the regex $bookname."
+    exit 1
+fi
+
+# refetch books if the list of matching books is new
+bookhash=$(echo -n "${matching_books[@]}" | md5sum | cut -d ' ' -f 1)
+fixfen="fixfen_$bookhash.epd"
+
 if [[ ! -e "$fixfen.gz" ]]; then
     rm -f "$fixfen"
-    for file in books/*.zip; do
-        book=$(basename "$file" .zip)
-        if [[ $book =~ $bookname ]]; then
-            unzip -o "$file" >&unzip.log
-            awk 'NF >= 6' "$book" >>"$fixfen"
-            rm "$book"
-        fi
+    for book in "${matching_books[@]}"; do
+        unzip -o books/"$book".zip >&unzip.log
+        awk 'NF >= 6' "$book" >>"$fixfen"
+        rm "$book"
     done
     sort -u "$fixfen" -o _tmp_"$fixfen" && mv _tmp_"$fixfen" "$fixfen"
     gzip "$fixfen"
