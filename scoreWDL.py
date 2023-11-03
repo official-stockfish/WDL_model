@@ -6,6 +6,7 @@ from scipy.optimize import curve_fit, minimize
 from dataclasses import dataclass
 from typing import Literal, Callable, Any
 import math
+from time import time
 
 
 class WdlPlot:
@@ -135,20 +136,20 @@ class ModelFit:
     @staticmethod
     def winmodel(x, a, b):
         def skip_overflow(arg):
-           if (arg > 0):
-              return np.exp(-arg) / (1.0 + np.exp(-arg))
-           else:
-              return 1.0 / (1.0 + np.exp(arg))
+            if arg > 0:
+                return np.exp(-arg) / (1.0 + np.exp(-arg))
+            else:
+                return 1.0 / (1.0 + np.exp(arg))
 
         if type(x) == np.ndarray:
-           res = []
-           for xs in x:
-               arg = -(xs - a) / b
-               res.append(skip_overflow(arg))
-           return np.array(res)
+            res = []
+            for xs in x:
+                arg = -(xs - a) / b
+                res.append(skip_overflow(arg))
+            return np.array(res)
         else:
-           arg = -(x - a) / b
-           return skip_overflow(arg)
+            arg = -(x - a) / b
+            return skip_overflow(arg)
 
     @staticmethod
     def normalized_axis(ax, normalize_to_pawn_value: int):
@@ -549,7 +550,7 @@ class WdlModel:
 
         fit = ModelFit(self.args.yDataTarget, self.args.NormalizeToPawnValue)
 
-        if self.args.fit:
+        if self.args.modelFitting != "None":
             self.plot.axs[1, 0].plot(model.model_ms, model.model_as, "b.", label="as")
             self.plot.axs[1, 0].plot(
                 model.model_ms,
@@ -578,7 +579,7 @@ class WdlModel:
         ylabelStr = self.args.yData + " (1,3,3,5,9)" * bool(
             self.args.yData == "material"
         )
-        for i in [0, 1] if self.args.fit else [0]:
+        for i in [0, 1] if self.args.modelFitting != "None" else [0]:
             for j in [1, 2]:
                 self.plot.axs[i, j].yaxis.grid(True)
                 self.plot.axs[i, j].xaxis.grid(True)
@@ -609,7 +610,7 @@ class WdlModel:
         ModelFit.normalized_axis(self.plot.axs[0, 1], self.args.NormalizeToPawnValue)
 
         # model
-        if self.args.fit:
+        if self.args.modelFitting != "None":
             zwins = []
             for i in range(0, len(model_data_density.xs)):
                 zwins.append(
@@ -653,7 +654,7 @@ class WdlModel:
         ModelFit.normalized_axis(self.plot.axs[0, 2], self.args.NormalizeToPawnValue)
 
         # model
-        if self.args.fit:
+        if self.args.modelFitting != "None":
             zwins = []
             for i in range(0, len(model_data_density.xs)):
                 zwins.append(
@@ -742,12 +743,6 @@ if __name__ == "__main__":
         help="Overrides --yDataMin for plotting.",
     )
     parser.add_argument(
-        "--fit",
-        action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Fit WDL model or not. Data contour plots are always created.",
-    )
-    parser.add_argument(
         "--plot",
         choices=["save+show", "save", "no"],
         default="save+show",
@@ -755,9 +750,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--modelFitting",
-        choices=["fitDensity", "optimizeProbability", "optimizeScore"],
+        choices=["fitDensity", "optimizeProbability", "optimizeScore", "None"],
         default="fitDensity",
-        help="Choice of model fitting. fit the win rate curves, maximimize the probability of predicting the outcome, minimize the squared error in predicted score.",
+        help="Choice of model fitting: Fit the win rate curves, maximimize the probability of predicting the outcome, minimize the squared error in predicted score, or no fitting.",
     )
 
     args = parser.parse_args()
@@ -776,6 +771,7 @@ if __name__ == "__main__":
     data_loader = DataLoader(args.filename)
 
     print(f"Converting scores with NormalizeToPawnValue = {args.NormalizeToPawnValue}.")
+    tic = time()
 
     win, draw, loss = data_loader.extract_wdl(
         data_loader.load_json(),
@@ -785,7 +781,7 @@ if __name__ == "__main__":
         args.yData,
     )
 
-    if args.fit:
+    if args.modelFitting != "None":
         title = "Summary of win-draw-loss model analysis"
         pgnName = "WDL_model_summary.png"
     else:
@@ -807,7 +803,7 @@ if __name__ == "__main__":
             draw,
             loss,
         )
-        if args.fit
+        if args.modelFitting != "None"
         else ModelData([], [], [], [], [], "", "")
     )
 
@@ -816,3 +812,6 @@ if __name__ == "__main__":
             model_data_density,
             model,
         )
+
+    if args.plot != "save+show":
+        print(f"Total elapsed time = {time() - tic:.2f}s.")
