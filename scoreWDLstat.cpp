@@ -25,7 +25,7 @@ using json   = nlohmann::json;
 
 using namespace chess;
 
-// unordered map to count (outcome, move, material, score) tuples in pgns
+// unordered map to count (result, move, material, eval) tuples in pgns
 using map_t =
     phmap::parallel_flat_hash_map<Key, int, std::hash<Key>, std::equal_to<Key>,
                                   std::allocator<std::pair<const Key, int>>, 8, std::mutex>;
@@ -162,37 +162,37 @@ class Analyze : public pgn::Visitor {
         const size_t delimiter_pos = comment.find('/');
 
         Key key;
-        key.score = 1002;
+        key.eval = 1002;
 
         if (!do_filter || filter_side == board.sideToMove()) {
             if (delimiter_pos != std::string::npos && comment != "book") {
-                const auto match_score = comment.substr(0, delimiter_pos);
+                const auto match_eval = comment.substr(0, delimiter_pos);
 
-                if (match_score[1] == 'M') {
-                    if (match_score[0] == '+') {
-                        key.score = 1001;
+                if (match_eval[1] == 'M') {
+                    if (match_eval[0] == '+') {
+                        key.eval = 1001;
                     } else {
-                        key.score = -1001;
+                        key.eval = -1001;
                     }
 
                 } else {
-                    int score = 100 * fast_stof(match_score.data());
+                    int eval = 100 * fast_stof(match_eval.data());
 
-                    if (score > 1000) {
-                        score = 1000;
-                    } else if (score < -1000) {
-                        score = -1000;
+                    if (eval > 1000) {
+                        eval = 1000;
+                    } else if (eval < -1000) {
+                        eval = -1000;
                     }
 
-                    key.score =
-                        int(std::round(score / float(bin_width))) * bin_width;  // reduce precision
+                    key.eval =
+                        int(std::round(eval / float(bin_width))) * bin_width;  // reduce precision
                 }
             }
         }
 
-        if (key.score != 1002) {  // a score was found
-            key.outcome = board.sideToMove() == Color::WHITE ? resultkey.white : resultkey.black;
-            key.move    = board.fullMoveNumber();
+        if (key.eval != 1002) {  // an eval was found
+            key.result = board.sideToMove() == Color::WHITE ? resultkey.white : resultkey.black;
+            key.move   = board.fullMoveNumber();
             const auto knights = builtin::popcount(board.pieces(PieceType::KNIGHT));
             const auto bishops = builtin::popcount(board.pieces(PieceType::BISHOP));
             const auto rooks   = builtin::popcount(board.pieces(PieceType::ROOK));
