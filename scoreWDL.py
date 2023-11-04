@@ -122,9 +122,9 @@ class DataLoader:
 
 
 #
-# Model to be fitted in order to predict the winrate from eval and move (or material).
+# model to be fitted in order to predict the winrate from eval and move (or material)
 #
-# This defines the model functions
+# this defines the model functions
 #
 class ModelFit:
     def __init__(self, y_data_target: int, normalize_to_pawn_value: int):
@@ -132,7 +132,7 @@ class ModelFit:
         self.normalize_to_pawn_value = normalize_to_pawn_value
 
     @staticmethod
-    def winmodel(x, a, b):
+    def win_rate(x, a, b):
         def skip_overflow(arg):
             if arg > 0:
                 return np.exp(-arg) / (1.0 + np.exp(-arg))
@@ -189,8 +189,8 @@ class ModelFit:
         """Compute the integer wdl (per-mille) using polynomial approximation for a and b"""
         a = self.poly3(move_or_material, *popt_as)
         b = self.poly3(move_or_material, *popt_bs)
-        w = int(1000 * ModelFit.winmodel(eval, a, b))
-        l = int(1000 * ModelFit.winmodel(-eval, a, b))
+        w = int(1000 * ModelFit.win_rate(eval, a, b))
+        l = int(1000 * ModelFit.win_rate(-eval, a, b))
         d = 1000 - w - l
         return w, d, l
 
@@ -226,8 +226,8 @@ class ObjectiveFunctions:
         if a <= 0 or b <= 0:
             return 4
 
-        probw = ModelFit.winmodel(eval, a, b)
-        probl = ModelFit.winmodel(-eval, a, b)
+        probw = ModelFit.win_rate(eval, a, b)
+        probl = ModelFit.win_rate(-eval, a, b)
         probd = 1 - probw - probl
         return probw + 0.5 * probd + 0
 
@@ -251,19 +251,19 @@ class ObjectiveFunctions:
 
         for (eval, mom), count in self.win.items():
             a, b = self.get_ab(asbs, mom)
-            prob = ModelFit.winmodel(eval, a, b)
+            prob = ModelFit.win_rate(eval, a, b)
             evalLogProb += count * np.log(max(prob, 1e-14))
 
         for (eval, mom), count in self.draw.items():
             a, b = self.get_ab(asbs, mom)
-            probw = ModelFit.winmodel(eval, a, b)
-            probl = ModelFit.winmodel(-eval, a, b)
+            probw = ModelFit.win_rate(eval, a, b)
+            probl = ModelFit.win_rate(-eval, a, b)
             prob = 1 - (probw + probl)
             evalLogProb += count * np.log(max(prob, 1e-14))
 
         for (eval, mom), count in self.loss.items():
             a, b = self.get_ab(asbs, mom)
-            prob = ModelFit.winmodel(-eval, a, b)
+            prob = ModelFit.win_rate(-eval, a, b)
             evalLogProb += count * np.log(max(prob, 1e-14))
 
         return -evalLogProb
@@ -291,7 +291,7 @@ class WdlModel:
         ywindata: list[float],
         ydrawdata: list[float],
         ylossdata: list[float],
-        popt,
+        popt_ab,
     ):
         # plot sample curve at yDataTarget
         self.plot.axs[0, 0].plot(xdata, ywindata, "b.", label="Measured winrate")
@@ -300,20 +300,20 @@ class WdlModel:
 
         ymodel = []
         for x in xdata:
-            ymodel.append(ModelFit.winmodel(x, popt[0], popt[1]))
+            ymodel.append(ModelFit.win_rate(x, popt_ab[0], popt_ab[1]))
         self.plot.axs[0, 0].plot(xdata, ymodel, "r-", label="Model")
 
         ymodel = []
         for x in xdata:
-            ymodel.append(ModelFit.winmodel(-x, popt[0], popt[1]))
+            ymodel.append(ModelFit.win_rate(-x, popt_ab[0], popt_ab[1]))
         self.plot.axs[0, 0].plot(xdata, ymodel, "r-")
 
         ymodel = []
         for x in xdata:
             ymodel.append(
                 1
-                - ModelFit.winmodel(x, popt[0], popt[1])
-                - ModelFit.winmodel(-x, popt[0], popt[1])
+                - ModelFit.win_rate(x, popt_ab[0], popt_ab[1])
+                - ModelFit.win_rate(-x, popt_ab[0], popt_ab[1])
             )
         self.plot.axs[0, 0].plot(xdata, ymodel, "r-")
 
@@ -341,7 +341,9 @@ class WdlModel:
         draw: Counter[tuple[float, int]],
         loss: Counter[tuple[float, int]],
         fit,
-        func: Callable[[list[float], list[float], list[float], list[float], Any], None],
+        plotfunc: Callable[
+            [list[float], list[float], list[float], list[float], Any], None
+        ],
     ):
         evals, moms, winrate, drawrate, lossrate = xs, ys, zwins, zdraws, zlosses
 
@@ -361,15 +363,17 @@ class WdlModel:
                 ydrawdata.append(drawrate[i])
                 ylossdata.append(lossrate[i])
 
-            # skip fit for move counts with very few data points
             if len(ywindata) < 10:
+                print(
+                    f"Warning: Too little data for {self.args.yData} value {mom}, skip fitting."
+                )
                 continue
 
-            popt: tuple[float, float]
+            popt_ab: tuple[float, float]
 
             # get initial values for a(mom) and b(mom) based on a simple fit of the curve
-            popt, pcov = curve_fit(
-                ModelFit.winmodel,
+            popt_ab, _ = curve_fit(
+                ModelFit.win_rate,
                 xdata,
                 ywindata,
                 p0=[self.args.NormalizeToPawnValue, self.args.NormalizeToPawnValue / 6],
@@ -407,23 +411,23 @@ class WdlModel:
                         objectiveFunction = None
                 res = minimize(
                     objectiveFunction,
-                    popt,
+                    popt_ab,
                     method="Powell",
                     options={"maxiter": 100000, "disp": False, "xtol": 1e-6},
                 )
-                popt = res.x
+                popt_ab = res.x
 
             # prepare output
 
             # store result
             model_ms.append(mom)
-            model_as.append(popt[0])  # append a(mom)
-            model_bs.append(popt[1])  # append b(mom)
+            model_as.append(popt_ab[0])  # append a(mom)
+            model_bs.append(popt_ab[1])  # append b(mom)
 
             # this shows the "local" fit, using a(yDataTarget) and b(yDataTarget)
             # it probably would be interesting to show p_a and p_b at yDataTarget instead TODO (update Readme.md when done)
-            if self.args.plot != "no" and mom == self.args.yDataTarget and func != None:
-                func(xdata, ywindata, ydrawdata, ylossdata, popt)
+            if mom == self.args.yDataTarget and plotfunc != None:
+                plotfunc(xdata, ywindata, ydrawdata, ylossdata, popt_ab)
 
         return model_as, model_bs, model_ms
 
@@ -440,29 +444,37 @@ class WdlModel:
     ) -> ModelData:
         print(f"Fit WDL model based on {self.args.yData}.")
         #
-        # convert to model, fit the winmodel a and b,
-        # for a given value of the move/material counter
+        # for each value of mom of interest, find a(mom) and b(mom) so that the induced
+        # 1D win rate function best matches the observed win frequencies
         #
 
         fit = ModelFit(self.args.yDataTarget, self.args.NormalizeToPawnValue)
 
         model_as, model_bs, model_ms = self.extract_model_data(
-            xs, ys, zwins, zdraws, zlosses, win, draw, loss, fit, self.sample_curve_y
+            xs,
+            ys,
+            zwins,
+            zdraws,
+            zlosses,
+            win,
+            draw,
+            loss,
+            fit,
+            self.sample_curve_y if self.args.plot != "no" else None,
         )
 
         #
-        # now capture the functional behavior of a and b as a function of the move counter
-        # simple polynomial fit
+        # now capture the functional behavior of a and b as functions of mom
         #
 
-        # fit p_a and p_b
-        popt_as, pcov = curve_fit(fit.poly3, model_ms, model_as)
-        popt_bs, pcov = curve_fit(fit.poly3, model_ms, model_bs)
+        # simple polynomial fit to find p_a and p_b
+        popt_as, _ = curve_fit(fit.poly3, model_ms, model_as)
+        popt_bs, _ = curve_fit(fit.poly3, model_ms, model_bs)
 
         # refinement phase
         #
         # optimize the likelihood of seeing the data ...
-        #    our model_as, model_bs / popt_as, popt_bs are just initial guesses.
+        #    our model_as, model_bs / popt_as, popt_bs are just initial guesses
         #
 
         if self.args.modelFitting != "fitDensity":
@@ -490,7 +502,7 @@ class WdlModel:
             print("Final objective function:   ", objectiveFunction(popt_all))
             print(res.message)
 
-        # Prepare output
+        # prepare output
         label_as, label_bs = "as = " + fit.poly3_str(popt_as), "bs = " + fit.poly3_str(
             popt_bs
         )
@@ -510,7 +522,7 @@ class WdlModel:
 
         print("Parameters in internal value units: ")
 
-        # give as output as well
+        # output as and bs
         print(label_as)
         print(label_bs)
         print(
