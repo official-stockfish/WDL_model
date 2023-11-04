@@ -41,23 +41,23 @@ class DataLoader:
     def __init__(self, filenames: list[str]):
         self.filenames = filenames
 
-    def load_json(self) -> dict[str, int]:
+    def load_json(self) -> Counter[str]:
         """Load the json, in which the key describes the position (result, move, material, eval),
         and in which the value is the observed count of these positions
         """
-        inputdata: dict[str, int] = {}
+        inputdata: Counter[str] = Counter()
         for filename in self.filenames:
             print(f"Reading eval stats from {filename}.")
             with open(filename) as infile:
                 data = json.load(infile)
 
                 for key, value in data.items():
-                    inputdata[key] = inputdata.get(key, 0) + value
+                    inputdata[key] += value
         return inputdata
 
     def extract_wdl(
         self,
-        inputdata: dict[str, int],
+        inputdata: Counter[str],
         moveMin: int,
         moveMax: int,
         NormalizeToPawnValue: int,
@@ -68,15 +68,15 @@ class DataLoader:
         Counter[tuple[float, int]],
     ]:
         """Extract three arrays, win draw and loss, counting positions with a given eval (float) and move/material (int) that are wdl"""
-        inpdict: dict[tuple[str, int, int, int], int] = {
-            literal_eval(k): v for k, v in inputdata.items()
-        }
+        freq: Counter[tuple[str, int, int, int]] = Counter(
+            {literal_eval(k): v for k, v in inputdata.items()}
+        )
 
         win: Counter[tuple[float, int]] = Counter()
         draw: Counter[tuple[float, int]] = Counter()
         loss: Counter[tuple[float, int]] = Counter()
         # filter out (eval, yData) WDL data (i.e. material or move summed out)
-        for (result, move, material, eval), v in inpdict.items():
+        for (result, move, material, eval), v in freq.items():
             # exclude large evals and unwanted move numbers
             if abs(eval) > 400 or move < moveMin or move > moveMax:
                 continue
@@ -104,7 +104,7 @@ class DataLoader:
         draw: Counter[tuple[float, int]],
         loss: Counter[tuple[float, int]],
     ) -> ModelDataDensity:
-        """Turns the counts of positions in densities/frequencies
+        """Turn the counts of positions into densities/frequencies
 
         x and y will contain all coordinate values for which data is available.
         Here the counts are normalized to frequencies.
