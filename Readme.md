@@ -10,48 +10,6 @@ depend on the engine's evaluation and the move number, and are computed
 from a WDL model that can be generated from fishtest data with the help of
 the scripts in this repository.
 
-## Background
-
-The underlying assumption of WDL model is that the win rate for a position
-can be well modeled as a function of the evaluation of that position.
-The data shows a [logistic function](https://en.wikipedia.org/wiki/Logistic_function) (see also logistic regression)
-gives a good approximation of the win rate as a function of the evaluation.
-
-```
-win_rate(x) = 1 / ( 1 + exp(-(x-a)/b))
-```
-In this equation, the parameters a and b need to be fitted to the data,
-which is the purpose of this repository. a is the evaluation for which a 50% win rate is observed,
-While b indicates how quickly this rate changes with evaluation. A small b indicates that small
-changes in eval quickly turn a 'game on the edge' (i.e. 50% win rate) into a dead draw or a near certain win.
-
-The model furthermore assumes symmetry in evaluation, so that the following quantities follow as well:
-```
-loss_rate(x) = win_rate(-x)
-draw_rate(x) = 1 - win_rate(x) - loss_rate(x)
-```
-
-This information also allows for estimating the game score
-```
-score(x) = 1 * win_rate(x) + 0.5 * draw_rate(x) + 0 * loss_rate(x)
-```
-
-The model is made more accurate by not only taking the evaluation,
-but also the material or game move counter (mom) into account. This dependency is modeled by making the
-parameters a and b a function of mom. The win/draw/loss rates are now 2D functions, while a and b are 1D functions.
-For simplicity the 1D functions a and b are represented as a polynomial of 3rd degree.
-
-The parameters that need to be fit to represent the model completely are thus the 8 parameters that
-determine these two polynomials. For example:
-```
-a(x) = ((-1.719 * x / 32 + 12.448) * x / 32 + -12.855) * x / 32 + 331.883
-b(x) = ((-3.001 * x / 32 + 22.505) * x / 32 + -51.253) * x / 32 + 93.209
-```
-
-Two fit these parameters various approaches exist, ranging from a simple fit of the observed win rate,
-to a somewhat more elaborate maximization of the probability of predicting the correct game outcome
-for the available data.
-
 ## Install
 
 Python 3.9 or higher is required.
@@ -90,7 +48,7 @@ steps:
       pgn files. The computed WDL statistics will be stored in a file called 
       `updateWDL.json`. The file will have entries of the form 
       `"('D', 1, 78, 35)": 668132`, meaning this tuple for 
-      `(outcome, move, material, eval)` was seen a total of 668132 times in 
+      `(result, move, material, eval)` was seen a total of 668132 times in 
       the processed pgn files.
 
     - Run `python scoreWDL.py` with some custom parameters to compute the WDL 
@@ -122,5 +80,103 @@ programs. For example:
   as target move for the 100cp anchor
 - `python scoreWDL.py --yData material --yDataTarget 68` : bases the fitting
   on material (rather than move), with 100cp anchor a material count of 68
+
+## Background
+
+The underlying assumption of the WDL model is that the win rate for a position
+can be well modeled as a function of the evaluation of that position.
+The data shows that a [logistic function](https://en.wikipedia.org/wiki/Logistic_function) (see also logistic regression)
+gives a good approximation of the win rate (the probability of a win) as a function of the evaluation `x`:
+```
+win_rate(x) = 1 / ( 1 + exp(-(x-a)/b))
+```
+In this equation, the parameters `a` and `b` need to be fitted to the data,
+which is the purpose of this repository. `a` is the evaluation for which a 50% win rate is observed,
+while `b` indicates how quickly this rate changes with the evaluation. A small `b` indicates that small
+changes in the evaluation `x` quickly turn a game "on the edge" (i.e. a 50% win rate) into a dead draw or a near certain win.
+
+The model furthermore assumes symmetry in evaluation, so that the following quantities follow as well:
+```
+loss_rate(x) = win_rate(-x)
+draw_rate(x) = 1 - win_rate(x) - loss_rate(x)
+```
+
+This information also allows for estimating the game score
+```
+score(x) = 1 * win_rate(x) + 0.5 * draw_rate(x) + 0 * loss_rate(x)
+```
+
+The model is made more accurate by not only taking the evaluation,
+but also the material or game move counter (`mom`) into account. (The model
+currently employed in Stockfish uses the move counter.)
+This dependency is modeled by making the parameters `a` and `b` a function of 
+`mom`. The win/draw/loss rates are now 2D functions, while `a` and `b` are replaced by 1D functions. For example:
+```
+win_rate(x,mom) = 1 / ( 1 + exp(-(x-p_a(mom))/p_b(mom)))
+```
+Here for simplicity the 1D functions `p_a` and `p_b` are chosen to be polynomials of degree 3.
+
+The parameters that need to be fitted to represent the model completely are thus the 8 coefficients that
+determine these two polynomials. For example:
+```
+p_a(mom) = ((-1.719 * mom / 32 + 12.448) * mom / 32 + -12.855) * mom / 32 + 331.883
+p_b(mom) = ((-3.001 * mom / 32 + 22.505) * mom / 32 + -51.253) * mom / 32 + 93.209
+```
+
+In order to fit these 8 parameters three different approaches are provided:
+`fitDensity`, `optimizeProbability`, `optimizeScore`.
+The simplest one (`fitDensity`), 
+in a first step, and for each value of `mom` that is of 
+interest, estimates the best values of `a` and `b` to fit the logistic win 
+rate function `win_rate(x)` to the observed win densities. Note that this
+procedure, for each value of `mom`, fits a 1D curve to a horizontal slice of 
+the `(x,mom)` data. Denoting these obtained values by `a(mom)` and `b(mom)`, 
+a second step then consists of fitting the 1D polynomials `p_a` and `p_b`
+to these discrete values.
+The options `optimizeProbability` and `optimizeScore` are a bit more
+sophisticated. They first take, for each value of `mom`, 
+the discrete values `a(mom)` and `b(mom)` provided by the above described 
+simple 1D fitting as initial guesses for an iterative optimization procedure 
+that aims to either maximize the probability of predicting the correct game 
+outcome for the available data, or to minimize the squared error in the 
+predicted score. These improved values of `a(mom)` and `b(mom)` then
+yield newly fitted 1D polynomials `p_a` and `p_b`, which in turn form initial
+values for a final iterative optimization that aims to find the best
+polynomials `p_a` and `p_b` for the objective functions of interest,
+but now evaluated globally, over the whole 2D data `(x,mom)`.
+
+### Interplay with Stockfish
+
+Observe that `x` in the above formulas is the internal engine evaluation
+of a position, often also called non-normalized evaluation, which is in 
+general not exposed to the user. By definition
+`x = p_a(mom)` is the internal evaluation with a 50% win rate at material or
+game move counter `mom`. Ideally this `x` should be scaled to the displayed
+evalution `1.0` for every value of `mom`. But for computational simplicity,
+in Stockfish all values of `x`, irrespective of the value of `mom`, are 
+rescaled to `x/p_a(32)`, which thanks to the choice of `p_a` is just the sum 
+of the four coefficients of the polynomial `p_a`, and in rounded form is stored
+within `NormalizeToPawnValue`.
+
+In turn, this repository needs the value of `NormalizeToPawnValue` to recover
+the internal engine evaluations from the normalized evaluations stored in the 
+pgn files.
+
+### Interpretation 
+
+The three plots in the graphic displayed above can be interpreted in the
+following way. The middle and right plot in the first row show contour plots
+in the `(x,mom)` domain
+of the observed win and draw frequencies in the data, respectively.
+Below them are the corresponding contour plots for the fitted model, i.e.
+for the 2D functions `win_rate(x,mom)` and `draw_rate(x,mom)` based on the 
+found optimal 8 parameters. 
+The top left plot shows a slice of the data at the chosen anchor `mom=32`,
+together with plots of `win_rate(x)`, `draw_rate(x)` and `loss_rate(x)`
+for the locally fitted `a=a(32)` and `b=b(32)`. 
+Finally, the bottom left plot shows the collection of
+all the values of `a(mom)` and `b(mom)`, together with plots of the two
+polynomials `p_a` and `p_b`.
+
 ---
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)

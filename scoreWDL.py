@@ -207,6 +207,7 @@ class ObjectiveFunctions:
         self.fit = fit
 
     def get_ab(self, asbs: list[float], mom):
+        # returns p_a(mom), p_b(mom) or a(mom), b(mom) depending on optimization stage
         if len(asbs) == 8:
             popt_as = asbs[0:4]
             popt_bs = asbs[4:8]
@@ -385,7 +386,7 @@ class WdlModel:
 
             popt: tuple[float, float]
 
-            # Get initial values based on a simple fit of the curve.
+            # get initial values for a(mom) and b(mom) based on a simple fit of the curve
             popt, pcov = curve_fit(
                 ModelFit.winmodel,
                 xdata,
@@ -393,7 +394,7 @@ class WdlModel:
                 p0=[self.args.NormalizeToPawnValue, self.args.NormalizeToPawnValue / 6],
             )
 
-            # Refine result based on data, optimizing an objective function
+            # refine the local result based on data, optimizing an objective function
 
             # get the subset of data relevant for this mom
             if self.args.modelFitting != "fitDensity":
@@ -413,7 +414,7 @@ class WdlModel:
                         continue
                     drawsubset[score, momkey] = draw[score, momkey]
 
-                # Miniminize the objective function
+                # miniminize the objective function
                 OF = ObjectiveFunctions(winsubset, drawsubset, losssubset, fit)
 
                 if self.args.modelFitting == "optimizeScore":
@@ -431,15 +432,15 @@ class WdlModel:
                 )
                 popt = res.x
 
-            # Prepare output
+            # prepare output
 
-            # store result.
+            # store result
             model_ms.append(mom)
-            model_as.append(popt[0])
-            model_bs.append(popt[1])
+            model_as.append(popt[0])  # append a(mom)
+            model_bs.append(popt[1])  # append b(mom)
 
-            # TODO ... this shows the 'local fit, it probably would be interesting to show the final result,
-            # based on the a,b obtained from the fit.
+            # this shows the "local" fit, using a(yDataTarget) and b(yDataTarget)
+            # it probably would be interesting to show p_a and p_b at yDataTarget instead TODO (update Readme.md when done)
             if self.args.plot != "no" and mom == self.args.yDataTarget and func != None:
                 func(xdata, ywindata, ydrawdata, ylossdata, popt)
 
@@ -473,11 +474,11 @@ class WdlModel:
         # simple polynomial fit
         #
 
-        # fit a and b
+        # fit p_a and p_b
         popt_as, pcov = curve_fit(fit.poly3, model_ms, model_as)
         popt_bs, pcov = curve_fit(fit.poly3, model_ms, model_bs)
 
-        # Refinement phase
+        # refinement phase
         #
         # optimize the likelihood of seeing the data ...
         #    our model_as, model_bs / popt_as, popt_bs are just initial guesses.
@@ -502,8 +503,8 @@ class WdlModel:
                 method="Powell",
                 options={"maxiter": 100000, "disp": False, "xtol": 1e-6},
             )
-            popt_as = res.x[0:4]
-            popt_bs = res.x[4:8]
+            popt_as = res.x[0:4]  # store final p_a
+            popt_bs = res.x[4:8]  # store final p_b
             popt_all = res.x
             print("Final objective function:   ", objectiveFunction(popt_all))
             print(res.message)
