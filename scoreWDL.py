@@ -1,12 +1,10 @@
-import json, argparse, numpy as np, matplotlib.pyplot as plt
-from collections import Counter
+import argparse, json, matplotlib.pyplot as plt, numpy as np, time
 from ast import literal_eval
+from collections import Counter
+from dataclasses import dataclass
 from scipy.interpolate import griddata
 from scipy.optimize import curve_fit, minimize
-from dataclasses import dataclass
 from typing import Literal, Callable, Any
-import math
-from time import time
 
 
 class WdlPlot:
@@ -32,7 +30,7 @@ class WdlPlot:
 class ModelDataDensity:
     """Count data converted to densities"""
 
-    xs: list[float]  # scores
+    xs: list[float]  # evals
     ys: list[int]  # moves or material
     zwins: list[float]  # corresponding win probability
     zdraws: list[float]  # draw prob
@@ -49,7 +47,7 @@ class DataLoader:
         """
         inputdata: dict[str, int] = {}
         for filename in self.filenames:
-            print(f"Reading score stats from {filename}.")
+            print(f"Reading eval stats from {filename}.")
             with open(filename) as infile:
                 data = json.load(infile)
 
@@ -69,7 +67,7 @@ class DataLoader:
         Counter[tuple[float, int]],
         Counter[tuple[float, int]],
     ]:
-        """Extract three arrays, win draw and loss, counting positions with a given score (float) and move/material (int) that are wdl"""
+        """Extract three arrays, win draw and loss, counting positions with a given eval (float) and move/material (int) that are wdl"""
         inpdict: dict[tuple[str, int, int, int], int] = {
             literal_eval(k): v for k, v in inputdata.items()
         }
@@ -77,23 +75,23 @@ class DataLoader:
         win: Counter[tuple[float, int]] = Counter()
         draw: Counter[tuple[float, int]] = Counter()
         loss: Counter[tuple[float, int]] = Counter()
-        # filter out (score, yData) WDL data (i.e. material or move summed out)
-        for (result, move, material, score), v in inpdict.items():
-            # exclude large scores and unwanted move numbers
-            if abs(score) > 400 or move < moveMin or move > moveMax:
+        # filter out (eval, yData) WDL data (i.e. material or move summed out)
+        for (result, move, material, eval), v in inpdict.items():
+            # exclude large evals and unwanted move numbers
+            if abs(eval) > 400 or move < moveMin or move > moveMax:
                 continue
 
-            # convert the cp score to the internal value
-            score_internal = score * NormalizeToPawnValue / 100
+            # convert the cp eval to the internal value
+            eval_internal = eval * NormalizeToPawnValue / 100
 
             yData = move if yDataFormat == "move" else material
 
             if result == "W":
-                win[score_internal, yData] += v
+                win[eval_internal, yData] += v
             elif result == "D":
-                draw[score_internal, yData] += v
+                draw[eval_internal, yData] += v
             elif result == "L":
-                loss[score_internal, yData] += v
+                loss[eval_internal, yData] += v
 
         print(
             f"Retained (W,D,L) = ({sum(win.values())}, {sum(draw.values())}, {sum(loss.values())}) positions."
@@ -124,7 +122,7 @@ class DataLoader:
 
 
 #
-# Model to be fitted in order to predict the winrate from score and move (or material).
+# Model to be fitted in order to predict the winrate from eval and move (or material).
 #
 # This defines the model functions
 #
@@ -183,7 +181,7 @@ class ModelFit:
 
     def wdl(
         self,
-        score: float,
+        eval: float,
         move_or_material: int,
         popt_as: list[float],
         popt_bs: list[float],
@@ -191,8 +189,8 @@ class ModelFit:
         """Compute the integer wdl (per-mille) using polynomial approximation for a and b"""
         a = self.poly3(move_or_material, *popt_as)
         b = self.poly3(move_or_material, *popt_bs)
-        w = int(1000 * ModelFit.winmodel(score, a, b))
-        l = int(1000 * ModelFit.winmodel(-score, a, b))
+        w = int(1000 * ModelFit.winmodel(eval, a, b))
+        l = int(1000 * ModelFit.winmodel(-eval, a, b))
         d = 1000 - w - l
         return w, d, l
 
@@ -219,7 +217,7 @@ class ObjectiveFunctions:
 
         return a, b
 
-    def estimateScore(self, asbs: list[float], score, mom):
+    def estimateScore(self, asbs: list[float], eval, mom):
         """Estimate game score based on probability of WDL"""
 
         a, b = self.get_ab(asbs, mom)
@@ -228,8 +226,8 @@ class ObjectiveFunctions:
         if a <= 0 or b <= 0:
             return 4
 
-        probw = ModelFit.winmodel(score, a, b)
-        probl = ModelFit.winmodel(-score, a, b)
+        probw = ModelFit.winmodel(eval, a, b)
+        probl = ModelFit.winmodel(-eval, a, b)
         probd = 1 - probw - probl
         return probw + 0.5 * probd + 0
 
@@ -237,21 +235,13 @@ class ObjectiveFunctions:
         """Sum of the squared error on the game score"""
         scoreErr = 0
 
-        for score, mom in self.win.keys():
-            scoreErr += (
-                self.win[score, mom] * (self.estimateScore(asbs, score, mom) - 1) ** 2
-            )
-
-        for score, mom in self.loss.keys():
-            scoreErr += (
-                self.loss[score, mom] * (self.estimateScore(asbs, score, mom) - 0) ** 2
-            )
-
-        for score, mom in self.draw.keys():
-            scoreErr += (
-                self.draw[score, mom]
-                * (self.estimateScore(asbs, score, mom) - 0.5) ** 2
-            )
+        for d, score in [
+            (self.win.items(), 1),
+            (self.draw.items(), 0.5),
+            (self.loss.items(), 0),
+        ]:
+            for (eval, mom), count in d:
+                scoreErr += count * (self.estimateScore(asbs, eval, mom) - score) ** 2
 
         return scoreErr
 
@@ -259,31 +249,22 @@ class ObjectiveFunctions:
         """-log(product of game outcome probability)"""
         evalLogProb = 0
 
-        for score, mom in self.win.keys():
-            count = self.win[score, mom]
+        for (eval, mom), count in self.win.items():
             a, b = self.get_ab(asbs, mom)
-            prob = ModelFit.winmodel(score, a, b)
-            if prob < 1e-14:
-                prob = 1e-14
-            evalLogProb += count * math.log(prob)
+            prob = ModelFit.winmodel(eval, a, b)
+            evalLogProb += count * np.log(max(prob, 1e-14))
 
-        for score, mom in self.loss.keys():
-            count = self.loss[score, mom]
+        for (eval, mom), count in self.draw.items():
             a, b = self.get_ab(asbs, mom)
-            prob = ModelFit.winmodel(-score, a, b)
-            if prob < 1e-14:
-                prob = 1e-14
-            evalLogProb += count * math.log(prob)
-
-        for score, mom in self.draw.keys():
-            count = self.draw[score, mom]
-            a, b = self.get_ab(asbs, mom)
-            probw = ModelFit.winmodel(score, a, b)
-            probl = ModelFit.winmodel(-score, a, b)
+            probw = ModelFit.winmodel(eval, a, b)
+            probl = ModelFit.winmodel(-eval, a, b)
             prob = 1 - (probw + probl)
-            if prob < 1e-14:
-                prob = 1e-14
-            evalLogProb += count * math.log(prob)
+            evalLogProb += count * np.log(max(prob, 1e-14))
+
+        for (eval, mom), count in self.loss.items():
+            a, b = self.get_ab(asbs, mom)
+            prob = ModelFit.winmodel(-eval, a, b)
+            evalLogProb += count * np.log(max(prob, 1e-14))
 
         return -evalLogProb
 
@@ -362,7 +343,7 @@ class WdlModel:
         fit,
         func: Callable[[list[float], list[float], list[float], list[float], Any], None],
     ):
-        scores, moms, winrate, drawrate, lossrate = xs, ys, zwins, zdraws, zlosses
+        evals, moms, winrate, drawrate, lossrate = xs, ys, zwins, zdraws, zlosses
 
         model_ms, model_as, model_bs = [], [], []
 
@@ -375,7 +356,7 @@ class WdlModel:
             for i in range(0, len(moms)):
                 if moms[i] < mmin or moms[i] >= mmax:
                     continue
-                xdata.append(scores[i])
+                xdata.append(evals[i])
                 ywindata.append(winrate[i])
                 ydrawdata.append(drawrate[i])
                 ylossdata.append(lossrate[i])
@@ -401,18 +382,18 @@ class WdlModel:
                 winsubset: Counter[tuple[float, int]] = Counter()
                 drawsubset: Counter[tuple[float, int]] = Counter()
                 losssubset: Counter[tuple[float, int]] = Counter()
-                for score, momkey in win.keys():
+                for (eval, momkey), count in win.items():
                     if momkey < mmin or momkey >= mmax:
                         continue
-                    winsubset[score, momkey] = win[score, momkey]
-                for score, momkey in loss.keys():
+                    winsubset[eval, momkey] = count
+                for (eval, momkey), count in draw.items():
                     if momkey < mmin or momkey >= mmax:
                         continue
-                    losssubset[score, momkey] = loss[score, momkey]
-                for score, momkey in draw.keys():
+                    drawsubset[eval, momkey] = count
+                for (eval, momkey), count in loss.items():
                     if momkey < mmin or momkey >= mmax:
                         continue
-                    drawsubset[score, momkey] = draw[score, momkey]
+                    losssubset[eval, momkey] = count
 
                 # miniminize the objective function
                 OF = ObjectiveFunctions(winsubset, drawsubset, losssubset, fit)
@@ -515,8 +496,8 @@ class WdlModel:
         )
 
         #
-        # now we can define the conversion factor from internal score to centipawn such that
-        # an expected win score of 50% is for a score of 'a', we pick this value for the yDataTarget
+        # now we can define the conversion factor from internal eval to centipawn such that
+        # an expected win score of 50% is for an eval of 'a', we pick this value for the yDataTarget
         # (where the sum of the a coefs is equal to the interpolated a).
         fsum_a = sum(popt_as)
         fsum_b = sum(popt_bs)
@@ -700,7 +681,7 @@ if __name__ == "__main__":
         "--NormalizeToPawnValue",
         type=int,
         default=328,
-        help="Value needed for converting the games' cp scores to the SF's internal score.",
+        help="Value needed for converting the games' cp evals to the SF's internal eval.",
     )
     parser.add_argument(
         "--moveMin",
@@ -771,8 +752,8 @@ if __name__ == "__main__":
 
     data_loader = DataLoader(args.filename)
 
-    print(f"Converting scores with NormalizeToPawnValue = {args.NormalizeToPawnValue}.")
-    tic = time()
+    print(f"Converting evals with NormalizeToPawnValue = {args.NormalizeToPawnValue}.")
+    tic = time.time()
 
     win, draw, loss = data_loader.extract_wdl(
         data_loader.load_json(),
@@ -815,4 +796,4 @@ if __name__ == "__main__":
         )
 
     if args.plot != "save+show":
-        print(f"Total elapsed time = {time() - tic:.2f}s.")
+        print(f"Total elapsed time = {time.time() - tic:.2f}s.")
