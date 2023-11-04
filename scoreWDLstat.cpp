@@ -49,8 +49,8 @@ static constexpr int map_size = 1200000;
 /// @brief Analyze a file with pgn games and update the position map, apply filter if present
 class Analyze : public pgn::Visitor {
    public:
-    Analyze(const std::string &regex_engine, const map_fens &fixfen_map)
-        : regex_engine(regex_engine), fixfen_map(fixfen_map) {}
+    Analyze(const std::string &regex_engine, const map_fens &fixfen_map, const int bin_width)
+        : regex_engine(regex_engine), fixfen_map(fixfen_map), bin_width(bin_width) {}
 
     virtual ~Analyze() {}
 
@@ -184,7 +184,8 @@ class Analyze : public pgn::Visitor {
                         score = -1000;
                     }
 
-                    key.score = int(std::floor(score / 5.0)) * 5;  // reduce precision
+                    key.score =
+                        int(std::round(score / float(bin_width))) * bin_width;  // reduce precision
                 }
             }
         }
@@ -224,6 +225,7 @@ class Analyze : public pgn::Visitor {
    private:
     const std::string &regex_engine;
     const map_fens &fixfen_map;
+    const int bin_width;
 
     Board board;
     Movelist moves;
@@ -244,10 +246,10 @@ class Analyze : public pgn::Visitor {
 };
 
 void ana_files(const std::vector<std::string> &files, const std::string &regex_engine,
-               const map_fens &fixfen_map) {
+               const map_fens &fixfen_map, const int bin_width) {
     for (const auto &file : files) {
         const auto pgn_iterator = [&](std::istream &iss) {
-            auto vis = std::make_unique<Analyze>(regex_engine, fixfen_map);
+            auto vis = std::make_unique<Analyze>(regex_engine, fixfen_map, bin_width);
 
             pgn::StreamParser parser(iss);
 
@@ -415,7 +417,7 @@ void filter_files_sprt(std::vector<std::string> &file_list, const map_meta &meta
 }
 
 void process(const std::vector<std::string> &files_pgn, const std::string &regex_engine,
-             const map_meta &meta_map, const map_fens &fixfen_map, int concurrency) {
+             const map_meta &meta_map, const map_fens &fixfen_map, int concurrency, int bin_width) {
     // Create more chunks than threads to prevent threads from idling.
     int target_chunks = 4 * concurrency;
 
@@ -434,21 +436,21 @@ void process(const std::vector<std::string> &files_pgn, const std::string &regex
     std::cout << "\rProgress: " << total_chunks << "/" << files_chunked.size() << std::flush;
 
     for (const auto &files : files_chunked) {
-        pool.enqueue(
-            [&files, &regex_engine, &meta_map, &fixfen_map, &progress_mutex, &files_chunked]() {
-                analysis::ana_files(files, regex_engine, fixfen_map);
+        pool.enqueue([&files, &regex_engine, &meta_map, &fixfen_map, &progress_mutex,
+                      &files_chunked, &bin_width]() {
+            analysis::ana_files(files, regex_engine, fixfen_map, bin_width);
 
-                total_chunks++;
+            total_chunks++;
 
-                // Limit the scope of the lock
-                {
-                    const std::lock_guard<std::mutex> lock(progress_mutex);
+            // Limit the scope of the lock
+            {
+                const std::lock_guard<std::mutex> lock(progress_mutex);
 
-                    // Print progress
-                    std::cout << "\rProgress: " << total_chunks << "/" << files_chunked.size()
-                              << std::flush;
-                }
-            });
+                // Print progress
+                std::cout << "\rProgress: " << total_chunks << "/" << files_chunked.size()
+                          << std::flush;
+            }
+        });
     }
 
     // Wait for all threads to finish
@@ -494,6 +496,7 @@ void print_usage(char const *program_name) {
     ss << "  --matchBookInvert     Invert the filter" << "\n";
     ss << "  --SPRTonly            Analyse only pgns from SPRT tests" << "\n";
     ss << "  --fixFENsource        Patch move counters lost by cutechess-cli based on FENs in this file" << "\n";
+    ss << "  --binWidth            bin position scores for faster processing and smoother densities (default 5)" << "\n";
     ss << "  -o <path>             Path to output json file (default: scoreWDLstat.json)" << "\n";
     ss << "  --help                Print this help message" << "\n";
     // clang-format on
@@ -515,6 +518,8 @@ int main(int argc, char const *argv[]) {
 
     int concurrency = std::max(1, int(std::thread::hardware_concurrency()));
 
+    int bin_width = 5;
+
     if (std::find(args.begin(), args.end(), "--help") != args.end()) {
         print_usage(argv[0]);
         return 0;
@@ -522,6 +527,10 @@ int main(int argc, char const *argv[]) {
 
     if (find_argument(args, pos, "--concurrency")) {
         concurrency = std::stoi(*std::next(pos));
+    }
+
+    if (find_argument(args, pos, "--binWidth")) {
+        bin_width = std::stoi(*std::next(pos));
     }
 
     if (find_argument(args, pos, "--file")) {
@@ -601,7 +610,7 @@ int main(int argc, char const *argv[]) {
 
     const auto t0 = std::chrono::high_resolution_clock::now();
 
-    process(files_pgn, regex_engine, meta_map, fixfen_map, concurrency);
+    process(files_pgn, regex_engine, meta_map, fixfen_map, concurrency, bin_width);
 
     const auto t1 = std::chrono::high_resolution_clock::now();
 
