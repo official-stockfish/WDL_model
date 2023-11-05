@@ -38,8 +38,22 @@ class ModelDataDensity:
 
 
 class DataLoader:
-    def __init__(self, filenames: list[str]):
+    def __init__(
+        self, filenames: list[str], NormalizeToPawnValue: int, NormalizeData: str
+    ):
         self.filenames = filenames
+        self.NormalizeToPawnValue = NormalizeToPawnValue
+        if NormalizeData is not None:
+            self.NormalizeData = json.loads(NormalizeData)
+            self.NormalizeData["as"] = [float(x) for x in self.NormalizeData["as"]]
+        print(
+            "Converting evals with "
+            + (
+                f"NormalizeToPawnValue = {self.NormalizeToPawnValue}."
+                if self.NormalizeToPawnValue is not None
+                else f"NormalizeData = {self.NormalizeData}."
+            )
+        )
 
     def load_json(self) -> Counter[str]:
         """Load the json, in which the key describes the position (result, move, material, eval),
@@ -55,12 +69,18 @@ class DataLoader:
                     inputdata[key] += value
         return inputdata
 
+    def poly3(self, x: float | list[float], a, b, c, d) -> float:
+        """compute the value of a polynomial of 3rd order in a point x"""
+        xnp = np.asarray(x) / self.NormalizeData["yDataTarget"]
+        return ((a * xnp + b) * xnp + c) * xnp + d
+
     def extract_wdl(
         self,
         inputdata: Counter[str],
         moveMin: int,
         moveMax: int,
         NormalizeToPawnValue: int,
+        NormalizeData: str,
         yDataFormat: Literal["move", "material"],
     ) -> tuple[
         Counter[tuple[float, int]],
@@ -81,10 +101,18 @@ class DataLoader:
             if abs(eval) > 400 or move < moveMin or move > moveMax:
                 continue
 
-            # convert the cp eval to the internal value
-            eval_internal = eval * NormalizeToPawnValue / 100
-
             yData = move if yDataFormat == "move" else material
+
+            # convert the cp eval to the internal value
+            if NormalizeToPawnValue is not None:
+                eval_internal = eval * NormalizeToPawnValue / 100
+            else:
+                yDataClamped = min(
+                    max(yData, self.NormalizeData["yDataMin"]),
+                    self.NormalizeData["yDataMax"],
+                )
+                a = self.poly3(yDataClamped, *self.NormalizeData["as"])
+                eval_internal = eval * a / 100
 
             if result == "W":
                 win[eval_internal, yData] += v
@@ -96,7 +124,14 @@ class DataLoader:
         print(
             f"Retained (W,D,L) = ({sum(win.values())}, {sum(draw.values())}, {sum(loss.values())}) positions."
         )
-        return win, draw, loss
+
+        ntpv = (
+            self.NormalizeToPawnValue
+            if NormalizeToPawnValue is not None
+            else int(sum(self.NormalizeData["as"]))
+        )
+
+        return win, draw, loss, ntpv
 
     def get_model_data_density(
         self,
@@ -692,8 +727,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--NormalizeToPawnValue",
         type=int,
-        default=328,
         help="Value needed for converting the games' cp evals to the SF's internal eval.",
+    )
+    parser.add_argument(
+        "--NormalizeData",
+        type=str,
+        help='Allow dynamic conversion. E.g. {"yDataMin": 11, "yDataMax": 120, "yDataTarget": 32, "as": [0.38036525, -2.82015070, 23.17882135, 307.36768407]}.',
     )
     parser.add_argument(
         "--moveMin",
@@ -756,6 +795,14 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    if args.NormalizeToPawnValue is None:
+        if args.NormalizeData is None:
+            args.NormalizeToPawnValue = 328
+    else:
+        assert (
+            args.NormalizeData is None
+        ), "Error: Can only specify one of --NormalizeToPawnValue and --NormalizeData."
+
     if args.yData == "material":
         # fix default values for material
         if args.yDataMax == 120 and args.yDataMin == 3:
@@ -767,16 +814,18 @@ if __name__ == "__main__":
             max(10, args.yDataMin) if args.yData == "move" else args.yDataMin
         )
 
-    data_loader = DataLoader(args.filename)
-
-    print(f"Converting evals with NormalizeToPawnValue = {args.NormalizeToPawnValue}.")
     tic = time.time()
 
-    win, draw, loss = data_loader.extract_wdl(
+    data_loader = DataLoader(
+        args.filename, args.NormalizeToPawnValue, args.NormalizeData
+    )
+
+    win, draw, loss, ntpv = data_loader.extract_wdl(
         data_loader.load_json(),
         args.moveMin,
         args.moveMax,
         args.NormalizeToPawnValue,
+        args.NormalizeData,
         args.yData,
     )
 
@@ -784,6 +833,9 @@ if __name__ == "__main__":
         title = "Summary of win-draw-loss model analysis"
     else:
         title = "Summary of win-draw-loss data"
+
+    # a hack to pass NormalizeToPawnValue to WdlModel TODO
+    args.NormalizeToPawnValue = ntpv
 
     wdl_model = WdlModel(args, WdlPlot(title, args.pgnName))
 
