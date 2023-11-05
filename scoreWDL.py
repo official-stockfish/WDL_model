@@ -782,6 +782,11 @@ if __name__ == "__main__":
         help="Save/show graphics or not. Useful for batch processing.",
     )
     parser.add_argument(
+        "--pgnName",
+        default="scoreWDL.png",
+        help="Name of saved graphics file.",
+    )
+    parser.add_argument(
         "--modelFitting",
         choices=["fitDensity", "optimizeProbability", "optimizeScore", "None"],
         default="fitDensity",
@@ -826,15 +831,13 @@ if __name__ == "__main__":
 
     if args.modelFitting != "None":
         title = "Summary of win-draw-loss model analysis"
-        pgnName = "WDL_model_summary.png"
     else:
         title = "Summary of win-draw-loss data"
-        pgnName = f"WDL_data_{args.yData}.png"
 
     # a hack to pass NormalizeToPawnValue to WdlModel TODO
     args.NormalizeToPawnValue = ntpv
 
-    wdl_model = WdlModel(args, WdlPlot(title, pgnName))
+    wdl_model = WdlModel(args, WdlPlot(title, args.pgnName))
 
     model_data_density = data_loader.get_model_data_density(win, draw, loss)
 
