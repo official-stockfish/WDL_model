@@ -322,35 +322,22 @@ class WdlModel:
 
     def sample_curve_y(
         self,
-        xdata: list[float],
+        xdata: np.ndarray,
         ywindata: list[float],
         ydrawdata: list[float],
         ylossdata: list[float],
         popt_ab,
     ):
-        # plot sample curve at yDataTarget
+        # plot sample curves at yDataTarget
         self.plot.axs[0, 0].plot(xdata, ywindata, "b.", label="Measured winrate")
         self.plot.axs[0, 0].plot(xdata, ydrawdata, "g.", label="Measured drawrate")
         self.plot.axs[0, 0].plot(xdata, ylossdata, "c.", label="Measured lossrate")
 
-        ymodel = []
-        for x in xdata:
-            ymodel.append(ModelFit.win_rate(x, popt_ab[0], popt_ab[1]))
-        self.plot.axs[0, 0].plot(xdata, ymodel, "r-", label="Model")
-
-        ymodel = []
-        for x in xdata:
-            ymodel.append(ModelFit.win_rate(-x, popt_ab[0], popt_ab[1]))
-        self.plot.axs[0, 0].plot(xdata, ymodel, "r-")
-
-        ymodel = []
-        for x in xdata:
-            ymodel.append(
-                1
-                - ModelFit.win_rate(x, popt_ab[0], popt_ab[1])
-                - ModelFit.win_rate(-x, popt_ab[0], popt_ab[1])
-            )
-        self.plot.axs[0, 0].plot(xdata, ymodel, "r-")
+        winmodel = ModelFit.win_rate(xdata, popt_ab[0], popt_ab[1])
+        lossmodel = ModelFit.win_rate(-xdata, popt_ab[0], popt_ab[1])
+        self.plot.axs[0, 0].plot(xdata, winmodel, "r-", label="Model")
+        self.plot.axs[0, 0].plot(xdata, lossmodel, "r-")
+        self.plot.axs[0, 0].plot(xdata, 1 - winmodel - lossmodel, "r-")
 
         self.plot.axs[0, 0].set_xlabel(
             "Evaluation [lower: Internal Value units, upper: Pawns]"
@@ -462,7 +449,7 @@ class WdlModel:
             # this shows the "local" fit, using a(yDataTarget) and b(yDataTarget)
             # it probably would be interesting to show p_a and p_b at yDataTarget instead TODO (update Readme.md when done)
             if mom == self.args.yDataTarget and plotfunc != None:
-                plotfunc(xdata, ywindata, ydrawdata, ylossdata, popt_ab)
+                plotfunc(np.asarray(xdata), ywindata, ydrawdata, ylossdata, popt_ab)
 
         return model_as, model_bs, model_ms
 
