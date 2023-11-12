@@ -7,6 +7,11 @@ from scipy.optimize import curve_fit, minimize
 from typing import Literal, Callable, Any
 
 
+def poly3(x: float | np.ndarray, a, b, c, d) -> float:
+    """compute the value of a polynomial of 3rd order in a point x"""
+    return ((a * x + b) * x + c) * x + d
+
+
 class WdlPlot:
     def __init__(self, title: str, pgnName: str):
         self.title = title
@@ -69,11 +74,6 @@ class DataLoader:
                     inputdata[key] += value
         return inputdata
 
-    def poly3(self, x: float | list[float], a, b, c, d) -> float:
-        """compute the value of a polynomial of 3rd order in a point x"""
-        xnp = np.asarray(x) / self.NormalizeData["yDataTarget"]
-        return ((a * xnp + b) * xnp + c) * xnp + d
-
     def extract_wdl(
         self,
         inputdata: Counter[str],
@@ -111,7 +111,10 @@ class DataLoader:
                     max(yData, self.NormalizeData["yDataMin"]),
                     self.NormalizeData["yDataMax"],
                 )
-                a = self.poly3(yDataClamped, *self.NormalizeData["as"])
+                a = poly3(
+                    yDataClamped / self.NormalizeData["yDataTarget"],
+                    *self.NormalizeData["as"],
+                )
                 eval_internal = eval * a / 100
 
             if result == "W":
@@ -201,11 +204,6 @@ class ModelFit:
         ax2.set_xticks(new_tick_locations)
         ax2.set_xticklabels(tick_function(new_tick_locations))
 
-    def poly3(self, x: float | list[float], a, b, c, d) -> float:
-        """compute the value of a polynomial of 3rd order in a point x"""
-        xnp = np.asarray(x) / self.y_data_target
-        return ((a * xnp + b) * xnp + c) * xnp + d
-
     def poly3_str(self, coeffs) -> str:
         return (
             "((%5.3f * x / %d + %5.3f) * x / %d + %5.3f) * x / %d + %5.3f"
@@ -222,8 +220,8 @@ class ModelFit:
         popt_bs: list[float],
     ) -> tuple[int, int, int]:
         """Compute the integer wdl (per-mille) using polynomial approximation for a and b"""
-        a = self.poly3(move_or_material, *popt_as)
-        b = self.poly3(move_or_material, *popt_bs)
+        a = poly3(move_or_material / self.y_data_target, *popt_as)
+        b = poly3(move_or_material / self.y_data_target, *popt_bs)
         w = int(1000 * ModelFit.win_rate(eval, a, b))
         l = int(1000 * ModelFit.win_rate(-eval, a, b))
         d = 1000 - w - l
@@ -244,8 +242,8 @@ class ObjectiveFunctions:
         if len(asbs) == 8:
             popt_as = asbs[0:4]
             popt_bs = asbs[4:8]
-            a = self.fit.poly3(mom, *popt_as)
-            b = self.fit.poly3(mom, *popt_bs)
+            a = poly3(mom / self.fit.y_data_target, *popt_as)
+            b = poly3(mom / self.fit.y_data_target, *popt_bs)
         else:
             a = asbs[0]
             b = asbs[1]
@@ -308,7 +306,7 @@ class ObjectiveFunctions:
 class ModelData:
     popt_as: list[float]
     popt_bs: list[float]
-    model_ms: list[float]
+    model_ms: np.ndarray
     model_as: list[float]
     model_bs: list[float]
     label_as: str
@@ -464,7 +462,7 @@ class WdlModel:
             if mom == self.args.yDataTarget and plotfunc != None:
                 plotfunc(xdata, ywindata, ydrawdata, ylossdata, popt_ab)
 
-        return model_as, model_bs, model_ms
+        return model_as, model_bs, np.asarray(model_ms)
 
     def fit_model(
         self,
@@ -503,8 +501,8 @@ class WdlModel:
         #
 
         # simple polynomial fit to find p_a and p_b
-        popt_as, _ = curve_fit(fit.poly3, model_ms, model_as)
-        popt_bs, _ = curve_fit(fit.poly3, model_ms, model_bs)
+        popt_as, _ = curve_fit(poly3, model_ms / fit.y_data_target, model_as)
+        popt_bs, _ = curve_fit(poly3, model_ms / fit.y_data_target, model_bs)
 
         # refinement phase
         #
@@ -583,14 +581,14 @@ class WdlModel:
             self.plot.axs[1, 0].plot(model.model_ms, model.model_as, "b.", label="as")
             self.plot.axs[1, 0].plot(
                 model.model_ms,
-                fit.poly3(model.model_ms, *model.popt_as),
+                poly3(model.model_ms / fit.y_data_target, *model.popt_as),
                 "r-",
                 label="fit: " + model.label_as,
             )
             self.plot.axs[1, 0].plot(model.model_ms, model.model_bs, "g.", label="bs")
             self.plot.axs[1, 0].plot(
                 model.model_ms,
-                fit.poly3(model.model_ms, *model.popt_bs),
+                poly3(model.model_ms / fit.y_data_target, *model.popt_bs),
                 "m-",
                 label="fit: " + model.label_bs,
             )
