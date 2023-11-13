@@ -170,22 +170,14 @@ class ModelFit:
         self.normalize_to_pawn_value = normalize_to_pawn_value
 
     @staticmethod
-    def win_rate(x, a, b):
-        def skip_overflow(arg):
-            if arg > 0:
-                return np.exp(-arg) / (1.0 + np.exp(-arg))
-            else:
-                return 1.0 / (1.0 + np.exp(arg))
+    def win_rate(x: float | np.ndarray, a, b):
+        def stable_logistic(z):
+            # returns 1 / (1 + exp(-z)) avoiding possible overflows
+            return np.where(
+                z < 0, np.exp(z) / (1.0 + np.exp(z)), 1.0 / (1.0 + np.exp(-z))
+            )
 
-        if type(x) == np.ndarray:
-            res = []
-            for xs in x:
-                arg = -(xs - a) / b
-                res.append(skip_overflow(arg))
-            return np.array(res)
-        else:
-            arg = -(x - a) / b
-            return skip_overflow(arg)
+        return stable_logistic((x - a) / b)
 
     @staticmethod
     def normalized_axis(ax, normalize_to_pawn_value: int):
