@@ -361,14 +361,11 @@ class WdlModel:
 
         model_ms, model_as, model_bs = [], [], []
 
-        grouping = 1
-
         # mom = move or material, depending on self.args.yData
-        for mom in range(self.args.yDataMin, self.args.yDataMax + 1, grouping):
-            mmin, mmax = mom, mom + grouping
+        for mom in range(self.args.yDataMin, self.args.yDataMax + 1):
             xdata, ywindata, ydrawdata, ylossdata = [], [], [], []
             for i in range(0, len(moms)):
-                if moms[i] < mmin or moms[i] >= mmax:
+                if not moms[i] == mom:
                     continue
                 xdata.append(evals[i])
                 ywindata.append(winrate[i])
@@ -399,15 +396,15 @@ class WdlModel:
                 drawsubset: Counter[tuple[float, int]] = Counter()
                 losssubset: Counter[tuple[float, int]] = Counter()
                 for (eval, momkey), count in win.items():
-                    if momkey < mmin or momkey >= mmax:
+                    if not momkey == mom:
                         continue
                     winsubset[eval, momkey] = count
                 for (eval, momkey), count in draw.items():
-                    if momkey < mmin or momkey >= mmax:
+                    if not momkey == mom:
                         continue
                     drawsubset[eval, momkey] = count
                 for (eval, momkey), count in loss.items():
-                    if momkey < mmin or momkey >= mmax:
+                    if not momkey == mom:
                         continue
                     losssubset[eval, momkey] = count
 
