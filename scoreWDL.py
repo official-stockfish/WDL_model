@@ -88,7 +88,7 @@ class DataLoader:
         Counter[tuple[int, int]],
         int,
     ]:
-        """Extract three arrays, win draw and loss, counting positions with a given eval (float) and move/material (int) that are wdl"""
+        """Extract three arrays, win draw and loss, counting positions with a given eval (int) and move/material (int) that are wdl"""
         freq: Counter[tuple[str, int, int, int]] = Counter(
             {literal_eval(k): v for k, v in inputdata.items()}
         )
