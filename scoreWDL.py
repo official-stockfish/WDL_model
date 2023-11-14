@@ -106,7 +106,7 @@ class DataLoader:
 
             # convert the cp eval to the internal value
             if NormalizeToPawnValue is not None:
-                eval_internal = eval * NormalizeToPawnValue // 100
+                eval_internal = round(eval * NormalizeToPawnValue / 100)
             else:
                 yDataClamped = min(
                     max(yData, self.NormalizeData["yDataMin"]),
@@ -116,7 +116,7 @@ class DataLoader:
                     yDataClamped / self.NormalizeData["yDataTarget"],
                     *self.NormalizeData["as"],
                 )
-                eval_internal = eval * a // 100
+                eval_internal = round(eval * a / 100)
 
             if result == "W":
                 win[eval_internal, yData] += v
