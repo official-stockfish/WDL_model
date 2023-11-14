@@ -35,7 +35,7 @@ class WdlPlot:
 class ModelDataDensity:
     """Count data converted to densities"""
 
-    xs: list[float]  # evals
+    xs: list[int]  # internal evals
     ys: list[int]  # moves or material
     zwins: list[float]  # corresponding win probability
     zdraws: list[float]  # draw prob
@@ -83,18 +83,19 @@ class DataLoader:
         NormalizeData: str,
         yDataFormat: Literal["move", "material"],
     ) -> tuple[
-        Counter[tuple[float, int]],
-        Counter[tuple[float, int]],
-        Counter[tuple[float, int]],
+        Counter[tuple[int, int]],
+        Counter[tuple[int, int]],
+        Counter[tuple[int, int]],
+        int,
     ]:
-        """Extract three arrays, win draw and loss, counting positions with a given eval (float) and move/material (int) that are wdl"""
+        """Extract three arrays, win draw and loss, counting positions with a given eval (int) and move/material (int) that are wdl"""
         freq: Counter[tuple[str, int, int, int]] = Counter(
             {literal_eval(k): v for k, v in inputdata.items()}
         )
 
-        win: Counter[tuple[float, int]] = Counter()
-        draw: Counter[tuple[float, int]] = Counter()
-        loss: Counter[tuple[float, int]] = Counter()
+        win: Counter[tuple[int, int]] = Counter()
+        draw: Counter[tuple[int, int]] = Counter()
+        loss: Counter[tuple[int, int]] = Counter()
         # filter out (eval, yData) WDL data (i.e. material or move summed out)
         for (result, move, material, eval), v in freq.items():
             # exclude large evals and unwanted move numbers
@@ -105,7 +106,7 @@ class DataLoader:
 
             # convert the cp eval to the internal value
             if NormalizeToPawnValue is not None:
-                eval_internal = eval * NormalizeToPawnValue / 100
+                eval_internal = round(eval * NormalizeToPawnValue / 100)
             else:
                 yDataClamped = min(
                     max(yData, self.NormalizeData["yDataMin"]),
@@ -115,7 +116,7 @@ class DataLoader:
                     yDataClamped / self.NormalizeData["yDataTarget"],
                     *self.NormalizeData["as"],
                 )
-                eval_internal = eval * a / 100
+                eval_internal = round(eval * a / 100)
 
             if result == "W":
                 win[eval_internal, yData] += v
@@ -138,9 +139,9 @@ class DataLoader:
 
     def get_model_data_density(
         self,
-        win: Counter[tuple[float, int]],
-        draw: Counter[tuple[float, int]],
-        loss: Counter[tuple[float, int]],
+        win: Counter[tuple[int, int]],
+        draw: Counter[tuple[int, int]],
+        loss: Counter[tuple[int, int]],
     ) -> ModelDataDensity:
         """Turn the counts of positions into densities/frequencies
 
@@ -170,14 +171,14 @@ class ModelFit:
         self.normalize_to_pawn_value = normalize_to_pawn_value
 
     @staticmethod
-    def win_rate(x: float | np.ndarray, a, b):
+    def win_rate(eval: int | np.ndarray, a, b):
         def stable_logistic(z):
             # returns 1 / (1 + exp(-z)) avoiding possible overflows
             return np.where(
                 z < 0, np.exp(z) / (1.0 + np.exp(z)), 1.0 / (1.0 + np.exp(-z))
             )
 
-        return stable_logistic((x - a) / b)
+        return stable_logistic((eval - a) / b)
 
     @staticmethod
     def normalized_axis(ax, normalize_to_pawn_value: int):
@@ -206,7 +207,7 @@ class ModelFit:
 
     def wdl(
         self,
-        eval: float,
+        eval: int,
         move_or_material: int,
         popt_as: list[float],
         popt_bs: list[float],
@@ -316,7 +317,7 @@ class WdlModel:
         ywindata: list[float],
         ydrawdata: list[float],
         ylossdata: list[float],
-        popt_ab,
+        popt_ab: tuple[float, float],
     ):
         # plot sample curves at yDataTarget
         self.plot.axs[0, 0].plot(xdata, ywindata, "b.", label="Measured winrate")
@@ -344,17 +345,18 @@ class WdlModel:
 
     def extract_model_data(
         self,
-        xs: list[float],
+        xs: list[int],
         ys: list[int],
         zwins: list[float],
         zdraws: list[float],
         zlosses: list[float],
-        win: Counter[tuple[float, int]],
-        draw: Counter[tuple[float, int]],
-        loss: Counter[tuple[float, int]],
+        win: Counter[tuple[int, int]],
+        draw: Counter[tuple[int, int]],
+        loss: Counter[tuple[int, int]],
         fit,
         plotfunc: Callable[
-            [list[float], list[float], list[float], list[float], Any], None
+            [np.ndarray, list[float], list[float], list[float], tuple[float, float]],
+            None,
         ],
     ):
         evals, moms, winrate, drawrate, lossrate = xs, ys, zwins, zdraws, zlosses
@@ -392,9 +394,9 @@ class WdlModel:
 
             # get the subset of data relevant for this mom
             if self.args.modelFitting != "fitDensity":
-                winsubset: Counter[tuple[float, int]] = Counter()
-                drawsubset: Counter[tuple[float, int]] = Counter()
-                losssubset: Counter[tuple[float, int]] = Counter()
+                winsubset: Counter[tuple[int, int]] = Counter()
+                drawsubset: Counter[tuple[int, int]] = Counter()
+                losssubset: Counter[tuple[int, int]] = Counter()
                 for (eval, momkey), count in win.items():
                     if not momkey == mom:
                         continue
@@ -442,14 +444,14 @@ class WdlModel:
 
     def fit_model(
         self,
-        xs: list[float],
+        xs: list[int],
         ys: list[int],
         zwins: list[float],
         zdraws: list[float],
         zlosses: list[float],
-        win: Counter[tuple[float, int]],
-        draw: Counter[tuple[float, int]],
-        loss: Counter[tuple[float, int]],
+        win: Counter[tuple[int, int]],
+        draw: Counter[tuple[int, int]],
+        loss: Counter[tuple[int, int]],
     ) -> ModelData:
         print(f"Fit WDL model based on {self.args.yData}.")
         #
@@ -827,7 +829,7 @@ if __name__ == "__main__":
             loss,
         )
         if args.modelFitting != "None"
-        else ModelData([], [], [], [], [], "", "")
+        else ModelData([], [], np.asarray([]), [], [], "", "")
     )
 
     if args.plot != "no":
