@@ -35,7 +35,7 @@ class WdlPlot:
 class ModelDataDensity:
     """Count data converted to densities"""
 
-    xs: list[int]  # internal evals in cp
+    xs: list[int]  # internal evals
     ys: list[int]  # moves or material
     zwins: list[float]  # corresponding win probability
     zdraws: list[float]  # draw prob
