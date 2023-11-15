@@ -7,9 +7,17 @@ from scipy.optimize import curve_fit, minimize
 from typing import Literal, Callable, Any
 
 
-def poly3(x: float | np.ndarray, a, b, c, d) -> float:
+def win_rate(eval: int | np.ndarray, a, b):
+    def stable_logistic(z):
+        # returns 1 / (1 + exp(-z)) avoiding possible overflows
+        return np.where(z < 0, np.exp(z) / (1.0 + np.exp(z)), 1.0 / (1.0 + np.exp(-z)))
+
+    return stable_logistic((eval - a) / b)
+
+
+def poly3(x: float | np.ndarray, c_3, c_2, c_1, c_0) -> float:
     """compute the value of a polynomial of 3rd order in a point x"""
-    return ((a * x + b) * x + c) * x + d
+    return ((c_3 * x + c_2) * x + c_1) * x + c_0
 
 
 class WdlPlot:
@@ -104,19 +112,19 @@ class DataLoader:
 
             yData = move if yDataFormat == "move" else material
 
-            # convert the cp eval to the internal value
+            # convert the cp eval to the internal value by undoing the normalization
             if NormalizeToPawnValue is not None:
-                eval_internal = round(eval * NormalizeToPawnValue / 100)
+                a_internal = NormalizeToPawnValue
             else:
                 yDataClamped = min(
                     max(yData, self.NormalizeData["yDataMin"]),
                     self.NormalizeData["yDataMax"],
                 )
-                a = poly3(
+                a_internal = poly3(
                     yDataClamped / self.NormalizeData["yDataTarget"],
                     *self.NormalizeData["as"],
                 )
-                eval_internal = round(eval * a / 100)
+            eval_internal = round(eval * a_internal / 100)
 
             if result == "W":
                 win[eval_internal, yData] += v
@@ -171,16 +179,6 @@ class ModelFit:
         self.normalize_to_pawn_value = normalize_to_pawn_value
 
     @staticmethod
-    def win_rate(eval: int | np.ndarray, a, b):
-        def stable_logistic(z):
-            # returns 1 / (1 + exp(-z)) avoiding possible overflows
-            return np.where(
-                z < 0, np.exp(z) / (1.0 + np.exp(z)), 1.0 / (1.0 + np.exp(-z))
-            )
-
-        return stable_logistic((eval - a) / b)
-
-    @staticmethod
     def normalized_axis(ax, normalize_to_pawn_value: int):
         ax2 = ax.twiny()
         tickmin = int(np.ceil(ax.get_xlim()[0] / normalize_to_pawn_value)) * 2
@@ -215,8 +213,8 @@ class ModelFit:
         """Compute the integer wdl (per-mille) using polynomial approximation for a and b"""
         a = poly3(move_or_material / self.y_data_target, *popt_as)
         b = poly3(move_or_material / self.y_data_target, *popt_bs)
-        w = int(1000 * ModelFit.win_rate(eval, a, b))
-        l = int(1000 * ModelFit.win_rate(-eval, a, b))
+        w = int(1000 * win_rate(eval, a, b))
+        l = int(1000 * win_rate(-eval, a, b))
         d = 1000 - w - l
         return w, d, l
 
@@ -252,8 +250,8 @@ class ObjectiveFunctions:
         if a <= 0 or b <= 0:
             return 4
 
-        probw = ModelFit.win_rate(eval, a, b)
-        probl = ModelFit.win_rate(-eval, a, b)
+        probw = win_rate(eval, a, b)
+        probl = win_rate(-eval, a, b)
         probd = 1 - probw - probl
         return probw + 0.5 * probd + 0
 
@@ -277,19 +275,19 @@ class ObjectiveFunctions:
 
         for (eval, mom), count in self.win.items():
             a, b = self.get_ab(asbs, mom)
-            prob = ModelFit.win_rate(eval, a, b)
+            prob = win_rate(eval, a, b)
             evalLogProb += count * np.log(max(prob, 1e-14))
 
         for (eval, mom), count in self.draw.items():
             a, b = self.get_ab(asbs, mom)
-            probw = ModelFit.win_rate(eval, a, b)
-            probl = ModelFit.win_rate(-eval, a, b)
+            probw = win_rate(eval, a, b)
+            probl = win_rate(-eval, a, b)
             prob = 1 - (probw + probl)
             evalLogProb += count * np.log(max(prob, 1e-14))
 
         for (eval, mom), count in self.loss.items():
             a, b = self.get_ab(asbs, mom)
-            prob = ModelFit.win_rate(-eval, a, b)
+            prob = win_rate(-eval, a, b)
             evalLogProb += count * np.log(max(prob, 1e-14))
 
         return -evalLogProb
@@ -317,15 +315,16 @@ class WdlModel:
         ywindata: list[float],
         ydrawdata: list[float],
         ylossdata: list[float],
-        popt_ab: tuple[float, float],
+        a,
+        b,
     ):
         # plot sample curves at yDataTarget
         self.plot.axs[0, 0].plot(xdata, ywindata, "b.", label="Measured winrate")
         self.plot.axs[0, 0].plot(xdata, ydrawdata, "g.", label="Measured drawrate")
         self.plot.axs[0, 0].plot(xdata, ylossdata, "c.", label="Measured lossrate")
 
-        winmodel = ModelFit.win_rate(xdata, popt_ab[0], popt_ab[1])
-        lossmodel = ModelFit.win_rate(-xdata, popt_ab[0], popt_ab[1])
+        winmodel = win_rate(xdata, a, b)
+        lossmodel = win_rate(-xdata, a, b)
         self.plot.axs[0, 0].plot(xdata, winmodel, "r-", label="Model")
         self.plot.axs[0, 0].plot(xdata, lossmodel, "r-")
         self.plot.axs[0, 0].plot(xdata, 1 - winmodel - lossmodel, "r-")
@@ -380,15 +379,9 @@ class WdlModel:
                 )
                 continue
 
-            popt_ab: tuple[float, float]
-
             # get initial values for a(mom) and b(mom) based on a simple fit of the curve
-            popt_ab, _ = curve_fit(
-                ModelFit.win_rate,
-                xdata,
-                ywindata,
-                p0=[self.args.NormalizeToPawnValue, self.args.NormalizeToPawnValue / 6],
-            )
+            popt_ab = self.args.NormalizeToPawnValue * np.array([1, 1 / 6])
+            popt_ab, _ = curve_fit(win_rate, xdata, ywindata, popt_ab)
 
             # refine the local result based on data, optimizing an objective function
 
@@ -438,7 +431,7 @@ class WdlModel:
             # this shows the "local" fit, using a(yDataTarget) and b(yDataTarget)
             # it probably would be interesting to show p_a and p_b at yDataTarget instead TODO (update Readme.md when done)
             if mom == self.args.yDataTarget and plotfunc != None:
-                plotfunc(np.asarray(xdata), ywindata, ydrawdata, ylossdata, popt_ab)
+                plotfunc(np.asarray(xdata), ywindata, ydrawdata, ylossdata, *popt_ab)
 
         return model_as, model_bs, np.asarray(model_ms)
 
