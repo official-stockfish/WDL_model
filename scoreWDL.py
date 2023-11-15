@@ -15,9 +15,9 @@ def win_rate(eval: int | np.ndarray, a, b):
     return stable_logistic((eval - a) / b)
 
 
-def poly3(x: float | np.ndarray, a_3, a_2, a_1, a_0) -> float:
+def poly3(x: float | np.ndarray, c_3, c_2, c_1, c_0) -> float:
     """compute the value of a polynomial of 3rd order in a point x"""
-    return ((a_3 * x + a_2) * x + a_1) * x + a_0
+    return ((c_3 * x + c_2) * x + c_1) * x + c_0
 
 
 class WdlPlot:
