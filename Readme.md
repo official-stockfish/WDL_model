@@ -173,7 +173,7 @@ for the 2D functions `win_rate(x,mom)` and `draw_rate(x,mom)` based on the
 found optimal 8 parameters. 
 The top left plot shows a slice of the data at the chosen anchor `mom=32`,
 together with plots of `win_rate(x)`, `draw_rate(x)` and `loss_rate(x)`
-for the locally fitted `a=a(32)` and `b=b(32)`. 
+for the fitted `a=p_a(32)` and `b=p_b(32)`. 
 Finally, the bottom left plot shows the collection of
 all the values of `a(mom)` and `b(mom)`, together with plots of the two
 polynomials `p_a` and `p_b`.

@@ -309,25 +309,17 @@ class WdlModel:
         self.args = args
         self.plot = plot
 
-    def sample_curve_y(
+    def plot_sample_data_y(
         self,
         xdata: np.ndarray,
         ywindata: list[float],
         ydrawdata: list[float],
         ylossdata: list[float],
-        a,
-        b,
     ):
-        # plot sample curves at yDataTarget
+        # plot sample data curves at yDataTarget
         self.plot.axs[0, 0].plot(xdata, ywindata, "b.", label="Measured winrate")
         self.plot.axs[0, 0].plot(xdata, ydrawdata, "g.", label="Measured drawrate")
         self.plot.axs[0, 0].plot(xdata, ylossdata, "c.", label="Measured lossrate")
-
-        winmodel = win_rate(xdata, a, b)
-        lossmodel = win_rate(-xdata, a, b)
-        self.plot.axs[0, 0].plot(xdata, winmodel, "r-", label="Model")
-        self.plot.axs[0, 0].plot(xdata, lossmodel, "r-")
-        self.plot.axs[0, 0].plot(xdata, 1 - winmodel - lossmodel, "r-")
 
         self.plot.axs[0, 0].set_xlabel(
             "Evaluation [lower: Internal Value units, upper: Pawns]"
@@ -342,6 +334,14 @@ class WdlModel:
 
         ModelFit.normalized_axis(self.plot.axs[0, 0], self.args.NormalizeToPawnValue)
 
+    def plot_sample_curve_y(self, a, b):
+        xdata = np.linspace(*self.plot.axs[0, 0].get_xlim(), num=1000)
+        winmodel = win_rate(xdata, a, b)
+        lossmodel = win_rate(-xdata, a, b)
+        self.plot.axs[0, 0].plot(xdata, winmodel, "r-", label="Model")
+        self.plot.axs[0, 0].plot(xdata, lossmodel, "r-")
+        self.plot.axs[0, 0].plot(xdata, 1 - winmodel - lossmodel, "r-")
+
     def extract_model_data(
         self,
         xs: list[int],
@@ -353,10 +353,7 @@ class WdlModel:
         draw: Counter[tuple[int, int]],
         loss: Counter[tuple[int, int]],
         fit,
-        plotfunc: Callable[
-            [np.ndarray, list[float], list[float], list[float], tuple[float, float]],
-            None,
-        ],
+        plotfunc: Callable[[np.ndarray, list[float], list[float], list[float]], None],
     ):
         evals, moms, winrate, drawrate, lossrate = xs, ys, zwins, zdraws, zlosses
 
@@ -428,10 +425,9 @@ class WdlModel:
             model_as.append(popt_ab[0])  # append a(mom)
             model_bs.append(popt_ab[1])  # append b(mom)
 
-            # this shows the "local" fit, using a(yDataTarget) and b(yDataTarget)
-            # it probably would be interesting to show p_a and p_b at yDataTarget instead TODO (update Readme.md when done)
+            # this shows the observed wdl data for mom=yDataTarget
             if mom == self.args.yDataTarget and plotfunc != None:
-                plotfunc(np.asarray(xdata), ywindata, ydrawdata, ylossdata, *popt_ab)
+                plotfunc(np.asarray(xdata), ywindata, ydrawdata, ylossdata)
 
         return model_as, model_bs, np.asarray(model_ms)
 
@@ -464,7 +460,7 @@ class WdlModel:
             draw,
             loss,
             fit,
-            self.sample_curve_y if self.args.plot != "no" else None,
+            self.plot_sample_data_y if self.args.plot != "no" else None,
         )
 
         #
@@ -517,6 +513,12 @@ class WdlModel:
         # (where the sum of the a coefs is equal to the interpolated a).
         fsum_a = sum(popt_as)
         fsum_b = sum(popt_bs)
+
+        if self.args.plot != "no":
+            # this shows the fit of the observed wdl data at mom=yDataTarget to
+            # the model wdl rates with a=p_a(yDataTarget) and b=p_b(yDataTarget)
+            self.plot_sample_curve_y(fsum_a, fsum_b)
+
         print(f"const int NormalizeToPawnValue = {int(fsum_a)};")
         print(f"Corresponding spread = {int(fsum_b)};")
         print(f"Corresponding normalized spread = {fsum_b / fsum_a};")
