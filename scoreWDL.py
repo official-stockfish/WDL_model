@@ -77,6 +77,8 @@ class DataLoader:
             print(f"Reading eval stats from {filename}.")
             with open(filename) as infile:
                 data = json.load(infile)
+                if not data:
+                    data = {}
 
                 for key, value in data.items():
                     inputdata[key] += value
@@ -799,6 +801,10 @@ if __name__ == "__main__":
         args.NormalizeData,
         args.yData,
     )
+
+    if len(win) + len(draw) + len(loss) == 0:
+        print("No data was found!")
+        exit(0)
 
     if args.modelFitting != "None":
         title = "Summary of win-draw-loss model analysis"
