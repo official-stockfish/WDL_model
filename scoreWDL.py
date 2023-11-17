@@ -120,7 +120,6 @@ class DataLoader:
         Counter[tuple[int, int]],
         Counter[tuple[int, int]],
         Counter[tuple[int, int]],
-        int,
     ]:
         """Extract three arrays, win draw and loss, counting positions with a given eval (int) and move/material (int) that are wdl"""
         freq: Counter[tuple[str, int, int, int]] = Counter(
@@ -323,7 +322,7 @@ class ModelData:
 class WdlModel:
     def __init__(
         self,
-        yData: int,
+        yData: str,
         yDataMin: int,
         yDataMax: int,
         yDataTarget: int,
@@ -385,7 +384,8 @@ class WdlModel:
         draw: Counter[tuple[int, int]],
         loss: Counter[tuple[int, int]],
         fit: ModelFit,
-        plotfunc: Callable[[np.ndarray, list[float], list[float], list[float]], None],
+        plotfunc: Callable[[np.ndarray, list[float], list[float], list[float]], None]
+        | None,
     ):
         evals, moms, winrate, drawrate, lossrate = xs, ys, zwins, zdraws, zlosses
 
@@ -514,25 +514,25 @@ class WdlModel:
 
             if self.modelFitting == "optimizeScore":
                 objectiveFunction = OF.scoreError
+            elif self.modelFitting == "optimizeProbability":
+                objectiveFunction = OF.evalLogProbability
             else:
-                if self.modelFitting == "optimizeProbability":
-                    objectiveFunction = OF.evalLogProbability
-                else:
-                    objectiveFunction = None
+                objectiveFunction = None
 
-            popt_all = popt_as.tolist() + popt_bs.tolist()
-            print("Initial objective function: ", objectiveFunction(popt_all))
-            res = minimize(
-                objectiveFunction,
-                popt_all,
-                method="Powell",
-                options={"maxiter": 100000, "disp": False, "xtol": 1e-6},
-            )
-            popt_as = res.x[0:4]  # store final p_a
-            popt_bs = res.x[4:8]  # store final p_b
-            popt_all = res.x
-            print("Final objective function:   ", objectiveFunction(popt_all))
-            print(res.message)
+            if objectiveFunction:
+                popt_all = popt_as.tolist() + popt_bs.tolist()
+                print("Initial objective function: ", objectiveFunction(popt_all))
+                res = minimize(
+                    objectiveFunction,
+                    popt_all,
+                    method="Powell",
+                    options={"maxiter": 100000, "disp": False, "xtol": 1e-6},
+                )
+                popt_as = res.x[0:4]  # store final p_a
+                popt_bs = res.x[4:8]  # store final p_b
+                popt_all = res.x
+                print("Final objective function:   ", objectiveFunction(popt_all))
+                print(res.message)
 
         # prepare output
         label_as, label_bs = "as = " + fit.poly3_str(popt_as), "bs = " + fit.poly3_str(
