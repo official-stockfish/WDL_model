@@ -82,7 +82,10 @@ class ModelDataDensity:
 
 class DataLoader:
     def __init__(
-        self, filenames: list[str], NormalizeToPawnValue: int, NormalizeData: str
+        self,
+        filenames: list[str],
+        NormalizeToPawnValue: int | None,
+        NormalizeData: str | None,
     ):
         self.filenames = filenames
         self.NormalizeToPawnValue = NormalizeToPawnValue
