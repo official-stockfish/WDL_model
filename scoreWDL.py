@@ -21,9 +21,19 @@ def poly3(x: float | np.ndarray, c_3, c_2, c_1, c_0) -> float:
 
 
 class WdlPlot:
-    def __init__(self, title: str, pgnName: str):
+    def __init__(
+        self,
+        title: str,
+        pgnName: str,
+        setting: Literal["save+show", "save", "no"],
+        normalize_to_pawn_value: int,
+        yPlotMin: int,
+    ):
         self.title = title
         self.pgnName = pgnName
+        self.setting = setting
+        self.normalize_to_pawn_value = normalize_to_pawn_value
+        self.yPlotMin = yPlotMin
 
         self.fig, self.axs = plt.subplots(
             2, 3, figsize=(11.69 * 1.5, 8.27 * 1.5), constrained_layout=True
@@ -31,9 +41,29 @@ class WdlPlot:
 
         self.fig.suptitle(self.title, fontsize="x-large")
 
-    def save(self, plot_setting: Literal["save+show", "save", "no"]):
+    def normalized_axis(self, i, j):
+        """provides a second x-axis in pawns, to go with the original axis in internal eval
+        if the engine used a dynamic normalization, the labels will only be exact for
+        the old yDataTarget value of move counter or material"""
+        ax = self.axs[i, j]
+        ax2 = ax.twiny()
+        tickmin = int(np.ceil(ax.get_xlim()[0] / self.normalize_to_pawn_value)) * 2
+        tickmax = int(np.floor(ax.get_xlim()[1] / self.normalize_to_pawn_value)) * 2 + 1
+        new_tick_locations = np.array(
+            [x / 2 * self.normalize_to_pawn_value for x in range(tickmin, tickmax)]
+        )
+
+        def tick_function(X):
+            V = X / self.normalize_to_pawn_value
+            return [(f"{z:.0f}" if z % 1 < 0.1 else "") for z in V]
+
+        ax2.set_xlim(ax.get_xlim())
+        ax2.set_xticks(new_tick_locations)
+        ax2.set_xticklabels(tick_function(new_tick_locations))
+
+    def save(self):
         plt.savefig(self.pgnName, dpi=300)
-        if plot_setting == "save+show":
+        if self.setting == "save+show":
             plt.show()
         plt.close()
         print(f"Saved graphics to {self.pgnName}.")
@@ -68,11 +98,9 @@ class DataLoader:
             )
         )
 
-    def load_json(self) -> Counter[str]:
-        """Load the json, in which the key describes the position (result, move, material, eval),
-        and in which the value is the observed count of these positions
-        """
-        inputdata: Counter[str] = Counter()
+        # Load the json, in which the key describes the position (result, move, material, eval),
+        # and in which the value is the observed count of these positions
+        self.inputdata: Counter[str] = Counter()
         for filename in self.filenames:
             print(f"Reading eval stats from {filename}.")
             with open(filename) as infile:
@@ -81,16 +109,12 @@ class DataLoader:
                     data = {}
 
                 for key, value in data.items():
-                    inputdata[key] += value
-        return inputdata
+                    self.inputdata[key] += value
 
     def extract_wdl(
         self,
-        inputdata: Counter[str],
         moveMin: int,
         moveMax: int,
-        NormalizeToPawnValue: int,
-        NormalizeData: str,
         yDataFormat: Literal["move", "material"],
     ) -> tuple[
         Counter[tuple[int, int]],
@@ -100,7 +124,7 @@ class DataLoader:
     ]:
         """Extract three arrays, win draw and loss, counting positions with a given eval (int) and move/material (int) that are wdl"""
         freq: Counter[tuple[str, int, int, int]] = Counter(
-            {literal_eval(k): v for k, v in inputdata.items()}
+            {literal_eval(k): v for k, v in self.inputdata.items()}
         )
 
         win: Counter[tuple[int, int]] = Counter()
@@ -115,9 +139,11 @@ class DataLoader:
             yData = move if yDataFormat == "move" else material
 
             # convert the cp eval to the internal value by undoing the normalization
-            if NormalizeToPawnValue is not None:
-                a_internal = NormalizeToPawnValue
+            if self.NormalizeToPawnValue is not None:
+                # undo static rescaling, that was constant in yData
+                a_internal = self.NormalizeToPawnValue
             else:
+                # undo dynamic rescaling, that was dependent on yData
                 yDataClamped = min(
                     max(yData, self.NormalizeData["yDataMin"]),
                     self.NormalizeData["yDataMax"],
@@ -139,13 +165,13 @@ class DataLoader:
             f"Retained (W,D,L) = ({sum(win.values())}, {sum(draw.values())}, {sum(loss.values())}) positions."
         )
 
-        ntpv = (
+        self.normalize_to_pawn_value = (
             self.NormalizeToPawnValue
-            if NormalizeToPawnValue is not None
+            if self.NormalizeToPawnValue is not None
             else int(sum(self.NormalizeData["as"]))
         )
 
-        return win, draw, loss, ntpv
+        return win, draw, loss
 
     def get_model_data_density(
         self,
@@ -176,28 +202,10 @@ class DataLoader:
 # this defines the model functions
 #
 class ModelFit:
-    def __init__(self, y_data_target: int, normalize_to_pawn_value: int):
+    def __init__(self, y_data_target: int):
         self.y_data_target = y_data_target
-        self.normalize_to_pawn_value = normalize_to_pawn_value
 
-    @staticmethod
-    def normalized_axis(ax, normalize_to_pawn_value: int):
-        ax2 = ax.twiny()
-        tickmin = int(np.ceil(ax.get_xlim()[0] / normalize_to_pawn_value)) * 2
-        tickmax = int(np.floor(ax.get_xlim()[1] / normalize_to_pawn_value)) * 2 + 1
-        new_tick_locations = np.array(
-            [x / 2 * normalize_to_pawn_value for x in range(tickmin, tickmax)]
-        )
-
-        def tick_function(X):
-            V = X / normalize_to_pawn_value
-            return [(f"{z:.0f}" if z % 1 < 0.1 else "") for z in V]
-
-        ax2.set_xlim(ax.get_xlim())
-        ax2.set_xticks(new_tick_locations)
-        ax2.set_xticklabels(tick_function(new_tick_locations))
-
-    def poly3_str(self, coeffs) -> str:
+    def poly3_str(self, coeffs: list[float]) -> str:
         return (
             "((%5.3f * x / %d + %5.3f) * x / %d + %5.3f) * x / %d + %5.3f"
             % tuple(
@@ -224,13 +232,19 @@ class ModelFit:
 class ObjectiveFunctions:
     """Collects objective functions that can be minimized to fit the win draw loss data"""
 
-    def __init__(self, win, draw, loss, fit):
+    def __init__(
+        self,
+        win: Counter[tuple[int, int]],
+        draw: Counter[tuple[int, int]],
+        loss: Counter[tuple[int, int]],
+        fit: ModelFit,
+    ):
         self.win = win
         self.draw = draw
         self.loss = loss
         self.fit = fit
 
-    def get_ab(self, asbs: list[float], mom):
+    def get_ab(self, asbs: list[float], mom: int):
         # returns p_a(mom), p_b(mom) or a(mom), b(mom) depending on optimization stage
         if len(asbs) == 8:
             popt_as = asbs[0:4]
@@ -243,7 +257,7 @@ class ObjectiveFunctions:
 
         return a, b
 
-    def estimateScore(self, asbs: list[float], eval, mom):
+    def estimateScore(self, asbs: list[float], eval: int, mom: int):
         """Estimate game score based on probability of WDL"""
 
         a, b = self.get_ab(asbs, mom)
@@ -307,8 +321,24 @@ class ModelData:
 
 
 class WdlModel:
-    def __init__(self, args, plot: WdlPlot):
-        self.args = args
+    def __init__(
+        self,
+        yData: int,
+        yDataMin: int,
+        yDataMax: int,
+        yDataTarget: int,
+        modelFitting: Literal[
+            "fitDensity", "optimizeProbability", "optimizeScore", "None"
+        ],
+        normalize_to_pawn_value: int,
+        plot: WdlPlot,
+    ):
+        self.yData = yData
+        self.yDataMin = yDataMin
+        self.yDataMax = yDataMax
+        self.yDataTarget = yDataTarget
+        self.modelFitting = modelFitting
+        self.normalize_to_pawn_value = normalize_to_pawn_value
         self.plot = plot
 
     def plot_sample_data_y(
@@ -329,12 +359,12 @@ class WdlModel:
         self.plot.axs[0, 0].set_ylabel("outcome")
         self.plot.axs[0, 0].legend(fontsize="small")
         self.plot.axs[0, 0].set_title(
-            f"Comparison of model and measured data at {self.args.yData} {self.args.yDataTarget}"
+            f"Comparison of model and measured data at {self.yData} {self.yDataTarget}"
         )
-        xmax = ((3 * self.args.NormalizeToPawnValue) // 100 + 1) * 100
+        xmax = ((3 * self.plot.normalize_to_pawn_value) // 100 + 1) * 100
         self.plot.axs[0, 0].set_xlim([-xmax, xmax])
 
-        ModelFit.normalized_axis(self.plot.axs[0, 0], self.args.NormalizeToPawnValue)
+        self.plot.normalized_axis(0, 0)
 
     def plot_sample_curve_y(self, a, b):
         xdata = np.linspace(*self.plot.axs[0, 0].get_xlim(), num=1000)
@@ -354,15 +384,15 @@ class WdlModel:
         win: Counter[tuple[int, int]],
         draw: Counter[tuple[int, int]],
         loss: Counter[tuple[int, int]],
-        fit,
+        fit: ModelFit,
         plotfunc: Callable[[np.ndarray, list[float], list[float], list[float]], None],
     ):
         evals, moms, winrate, drawrate, lossrate = xs, ys, zwins, zdraws, zlosses
 
         model_ms, model_as, model_bs = [], [], []
 
-        # mom = move or material, depending on self.args.yData
-        for mom in range(self.args.yDataMin, self.args.yDataMax + 1):
+        # mom = move or material, depending on self.yData
+        for mom in range(self.yDataMin, self.yDataMax + 1):
             xdata, ywindata, ydrawdata, ylossdata = [], [], [], []
             for i in range(0, len(moms)):
                 if not moms[i] == mom:
@@ -374,18 +404,18 @@ class WdlModel:
 
             if len(ywindata) < 10:
                 print(
-                    f"Warning: Too little data for {self.args.yData} value {mom}, skip fitting."
+                    f"Warning: Too little data for {self.yData} value {mom}, skip fitting."
                 )
                 continue
 
             # get initial values for a(mom) and b(mom) based on a simple fit of the curve
-            popt_ab = self.args.NormalizeToPawnValue * np.array([1, 1 / 6])
+            popt_ab = self.normalize_to_pawn_value * np.array([1, 1 / 6])
             popt_ab, _ = curve_fit(win_rate, xdata, ywindata, popt_ab)
 
             # refine the local result based on data, optimizing an objective function
 
             # get the subset of data relevant for this mom
-            if self.args.modelFitting != "fitDensity":
+            if self.modelFitting != "fitDensity":
                 winsubset: Counter[tuple[int, int]] = Counter()
                 drawsubset: Counter[tuple[int, int]] = Counter()
                 losssubset: Counter[tuple[int, int]] = Counter()
@@ -405,10 +435,10 @@ class WdlModel:
                 # miniminize the objective function
                 OF = ObjectiveFunctions(winsubset, drawsubset, losssubset, fit)
 
-                if self.args.modelFitting == "optimizeScore":
+                if self.modelFitting == "optimizeScore":
                     objectiveFunction = OF.scoreError
                 else:
-                    if self.args.modelFitting == "optimizeProbability":
+                    if self.modelFitting == "optimizeProbability":
                         objectiveFunction = OF.evalLogProbability
                     else:
                         objectiveFunction = None
@@ -428,7 +458,7 @@ class WdlModel:
             model_bs.append(popt_ab[1])  # append b(mom)
 
             # this shows the observed wdl data for mom=yDataTarget
-            if mom == self.args.yDataTarget and plotfunc != None:
+            if mom == self.yDataTarget and plotfunc != None:
                 plotfunc(np.asarray(xdata), ywindata, ydrawdata, ylossdata)
 
         return model_as, model_bs, np.asarray(model_ms)
@@ -444,13 +474,13 @@ class WdlModel:
         draw: Counter[tuple[int, int]],
         loss: Counter[tuple[int, int]],
     ) -> ModelData:
-        print(f"Fit WDL model based on {self.args.yData}.")
+        print(f"Fit WDL model based on {self.yData}.")
         #
         # for each value of mom of interest, find a(mom) and b(mom) so that the induced
         # 1D win rate function best matches the observed win frequencies
         #
 
-        fit = ModelFit(self.args.yDataTarget, self.args.NormalizeToPawnValue)
+        fit = ModelFit(self.yDataTarget)
 
         model_as, model_bs, model_ms = self.extract_model_data(
             xs,
@@ -462,7 +492,7 @@ class WdlModel:
             draw,
             loss,
             fit,
-            self.plot_sample_data_y if self.args.plot != "no" else None,
+            self.plot_sample_data_y if self.plot.setting != "no" else None,
         )
 
         #
@@ -479,13 +509,13 @@ class WdlModel:
         #    our model_as, model_bs / popt_as, popt_bs are just initial guesses
         #
 
-        if self.args.modelFitting != "fitDensity":
+        if self.modelFitting != "fitDensity":
             OF = ObjectiveFunctions(win, draw, loss, fit)
 
-            if self.args.modelFitting == "optimizeScore":
+            if self.modelFitting == "optimizeScore":
                 objectiveFunction = OF.scoreError
             else:
-                if self.args.modelFitting == "optimizeProbability":
+                if self.modelFitting == "optimizeProbability":
                     objectiveFunction = OF.evalLogProbability
                 else:
                     objectiveFunction = None
@@ -516,7 +546,7 @@ class WdlModel:
         fsum_a = sum(popt_as)
         fsum_b = sum(popt_bs)
 
-        if self.args.plot != "no":
+        if self.plot.setting != "no":
             # this shows the fit of the observed wdl data at mom=yDataTarget to
             # the model wdl rates with a=p_a(yDataTarget) and b=p_b(yDataTarget)
             self.plot_sample_curve_y(fsum_a, fsum_b)
@@ -525,7 +555,7 @@ class WdlModel:
         print(f"Corresponding spread = {int(fsum_b)};")
         print(f"Corresponding normalized spread = {fsum_b / fsum_a};")
         print(
-            f"Draw rate at 0.0 eval at move {self.args.yDataTarget} = {1 - 2 / (1 + np.exp(fsum_a / fsum_b))};"
+            f"Draw rate at 0.0 eval at move {self.yDataTarget} = {1 - 2 / (1 + np.exp(fsum_a / fsum_b))};"
         )
 
         print("Parameters in internal value units: ")
@@ -547,12 +577,15 @@ class WdlModel:
         )
 
     def create_plot(self, model_data_density: ModelDataDensity, model: ModelData):
-        # graphs of a and b as a function of move/material
-        print("Plotting move/material dependence of model parameters.")
+        if self.plot.setting == "no":
+            return
 
-        fit = ModelFit(self.args.yDataTarget, self.args.NormalizeToPawnValue)
+        print("Preparing contour plots and plots of model parameters.")
 
-        if self.args.modelFitting != "None":
+        fit = ModelFit(self.yDataTarget)
+
+        if self.modelFitting != "None":
+            # graphs of a and b as a function of move/material
             self.plot.axs[1, 0].plot(model.model_ms, model.model_as, "b.", label="as")
             self.plot.axs[1, 0].plot(
                 model.model_ms,
@@ -568,7 +601,7 @@ class WdlModel:
                 label="fit: " + model.label_bs,
             )
 
-            self.plot.axs[1, 0].set_xlabel(self.args.yData)
+            self.plot.axs[1, 0].set_xlabel(self.yData)
             self.plot.axs[1, 0].set_ylabel("parameters (in internal value units)")
             self.plot.axs[1, 0].legend(fontsize="x-small")
             self.plot.axs[1, 0].set_title("Winrate model parameters")
@@ -577,11 +610,8 @@ class WdlModel:
         # now generate contour plots
         contourlines = [0, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.97, 1.0]
 
-        print("Processing done, plotting 2D data.")
-        ylabelStr = self.args.yData + " (1,3,3,5,9)" * bool(
-            self.args.yData == "material"
-        )
-        for i in [0, 1] if self.args.modelFitting != "None" else [0]:
+        ylabelStr = self.yData + " (1,3,3,5,9)" * bool(self.yData == "material")
+        for i in [0, 1] if self.modelFitting != "None" else [0]:
             for j in [1, 2]:
                 self.plot.axs[i, j].yaxis.grid(True)
                 self.plot.axs[i, j].xaxis.grid(True)
@@ -591,9 +621,9 @@ class WdlModel:
                 self.plot.axs[i, j].set_ylabel(ylabelStr)
 
         # for wins, plot between -1 and 3 pawns, using a 30x22 grid
-        xmin = -((1 * self.args.NormalizeToPawnValue) // 100 + 1) * 100
-        xmax = ((3 * self.args.NormalizeToPawnValue) // 100 + 1) * 100
-        ymin, ymax = self.args.yPlotMin, self.args.yDataMax
+        xmin = -((1 * self.plot.normalize_to_pawn_value) // 100 + 1) * 100
+        xmax = ((3 * self.plot.normalize_to_pawn_value) // 100 + 1) * 100
+        ymin, ymax = self.plot.yPlotMin, self.yDataMax
         grid_x, grid_y = np.mgrid[xmin:xmax:30j, ymin:ymax:22j]
         points = np.array(list(zip(model_data_density.xs, model_data_density.ys)))
 
@@ -609,10 +639,10 @@ class WdlModel:
         self.plot.axs[0, 1].clabel(CS, inline=1, colors="black")
         self.plot.axs[0, 1].set_title("Data: Fraction of positions leading to a win")
 
-        ModelFit.normalized_axis(self.plot.axs[0, 1], self.args.NormalizeToPawnValue)
+        self.plot.normalized_axis(0, 1)
 
         # model
-        if self.args.modelFitting != "None":
+        if self.modelFitting != "None":
             zwins = []
             for i in range(0, len(model_data_density.xs)):
                 zwins.append(
@@ -633,13 +663,11 @@ class WdlModel:
             self.plot.axs[1, 1].set_title(
                 "Model: Fraction of positions leading to a win"
             )
-            ModelFit.normalized_axis(
-                self.plot.axs[1, 1], self.args.NormalizeToPawnValue
-            )
+            self.plot.normalized_axis(1, 1)
 
         # for draws, plot between -2 and 2 pawns, using a 30x22 grid
-        xmin = -((2 * self.args.NormalizeToPawnValue) // 100 + 1) * 100
-        xmax = ((2 * self.args.NormalizeToPawnValue) // 100 + 1) * 100
+        xmin = -((2 * self.plot.normalize_to_pawn_value) // 100 + 1) * 100
+        xmax = ((2 * self.plot.normalize_to_pawn_value) // 100 + 1) * 100
         grid_x, grid_y = np.mgrid[xmin:xmax:30j, ymin:ymax:22j]
         points = np.array(list(zip(model_data_density.xs, model_data_density.ys)))
 
@@ -653,10 +681,10 @@ class WdlModel:
         )
         self.plot.axs[0, 2].clabel(CS, inline=1, colors="black")
         self.plot.axs[0, 2].set_title("Data: Fraction of positions leading to a draw")
-        ModelFit.normalized_axis(self.plot.axs[0, 2], self.args.NormalizeToPawnValue)
+        self.plot.normalized_axis(0, 2)
 
         # model
-        if self.args.modelFitting != "None":
+        if self.modelFitting != "None":
             zwins = []
             for i in range(0, len(model_data_density.xs)):
                 zwins.append(
@@ -677,13 +705,10 @@ class WdlModel:
             self.plot.axs[1, 2].set_title(
                 "Model: Fraction of positions leading to a draw"
             )
-            ModelFit.normalized_axis(
-                self.plot.axs[1, 2], self.args.NormalizeToPawnValue
-            )
+            self.plot.normalized_axis(1, 2)
 
         self.plot.fig.align_labels()
-
-        self.plot.save(self.args.plot)
+        self.plot.save()
 
 
 if __name__ == "__main__":
@@ -782,7 +807,6 @@ if __name__ == "__main__":
             args.yDataMin, args.yDataMax = 10, 78
 
     if args.yPlotMin is None:
-        # hide ugly parts for now TODO
         args.yPlotMin = (
             max(10, args.yDataMin) if args.yData == "move" else args.yDataMin
         )
@@ -793,14 +817,7 @@ if __name__ == "__main__":
         args.filename, args.NormalizeToPawnValue, args.NormalizeData
     )
 
-    win, draw, loss, ntpv = data_loader.extract_wdl(
-        data_loader.load_json(),
-        args.moveMin,
-        args.moveMax,
-        args.NormalizeToPawnValue,
-        args.NormalizeData,
-        args.yData,
-    )
+    win, draw, loss = data_loader.extract_wdl(args.moveMin, args.moveMax, args.yData)
 
     if len(win) + len(draw) + len(loss) == 0:
         print("No data was found!")
@@ -811,10 +828,23 @@ if __name__ == "__main__":
     else:
         title = "Summary of win-draw-loss data"
 
-    # a hack to pass NormalizeToPawnValue to WdlModel TODO
-    args.NormalizeToPawnValue = ntpv
+    wdl_plot = WdlPlot(
+        title,
+        args.pgnName,
+        args.plot,
+        data_loader.normalize_to_pawn_value,
+        args.yPlotMin,
+    )
 
-    wdl_model = WdlModel(args, WdlPlot(title, args.pgnName))
+    wdl_model = WdlModel(
+        args.yData,
+        args.yDataMin,
+        args.yDataMax,
+        args.yDataTarget,
+        args.modelFitting,
+        data_loader.normalize_to_pawn_value,
+        wdl_plot,
+    )
 
     model_data_density = data_loader.get_model_data_density(win, draw, loss)
 
@@ -833,11 +863,7 @@ if __name__ == "__main__":
         else ModelData([], [], np.asarray([]), [], [], "", "")
     )
 
-    if args.plot != "no":
-        wdl_model.create_plot(
-            model_data_density,
-            model,
-        )
+    wdl_model.create_plot(model_data_density, model)
 
     if args.plot != "save+show":
         print(f"Total elapsed time = {time.time() - tic:.2f}s.")
