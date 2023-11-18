@@ -12,6 +12,10 @@ def win_rate(eval: int | np.ndarray, a, b):
         # returns 1 / (1 + exp(-z)) avoiding possible overflows
         return np.where(z < 0, np.exp(z) / (1.0 + np.exp(z)), 1.0 / (1.0 + np.exp(-z)))
 
+    # guard against unphysical values
+    if b < 1e-8:
+        return np.where(eval - a < 0, 0, 1)
+
     return stable_logistic((eval - a) / b)
 
 
@@ -254,11 +258,6 @@ class ObjectiveFunctions:
         """Estimate game score based on probability of WDL"""
 
         a, b = self.get_ab(asbs, mom)
-
-        # guard against unphysical stuff
-        if a <= 0 or b <= 0:
-            return 4
-
         probw = win_rate(eval, a, b)
         probl = win_rate(-eval, a, b)
         probd = 1 - probw - probl
