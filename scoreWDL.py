@@ -12,7 +12,8 @@ def win_rate(eval: int | np.ndarray, a, b):
         # returns 1 / (1 + exp(-z)) avoiding possible overflows
         return np.where(z < 0, np.exp(z) / (1.0 + np.exp(z)), 1.0 / (1.0 + np.exp(-z)))
 
-    # guard against unphysical values
+    # guard against unphysical values, treating small and negative values as 0
+    # during optimizations this will guide b (back) towards positive values
     if b < 1e-8:
         return np.where(eval - a < 0, 0, 1)
 
