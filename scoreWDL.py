@@ -627,17 +627,13 @@ class WdlModel:
 
         # model
         if self.modelFitting != "None":
-            zwins = []
-            for i in range(0, len(model_data_density.xs)):
-                zwins.append(
-                    model_wdl_tuple(
-                        model_data_density.xs[i],
-                        model_data_density.ys[i],
-                        self.yDataTarget,
-                        model.coeffs_a,
-                        model.coeffs_b,
-                    )[0]
-                )
+            zwins = model_wdl_tuple(
+                np.asarray(model_data_density.xs),
+                np.asarray(model_data_density.ys),
+                self.yDataTarget,
+                model.coeffs_a,
+                model.coeffs_b,
+            )[0]
             zz = griddata(points, zwins, (grid_x, grid_y), method="linear")
             cp = self.plot.axs[1, 1].contourf(grid_x, grid_y, zz, contourlines)
             CS = self.plot.axs[1, 1].contour(
@@ -669,18 +665,14 @@ class WdlModel:
 
         # model
         if self.modelFitting != "None":
-            zwins = []
-            for i in range(0, len(model_data_density.xs)):
-                zwins.append(
-                    model_wdl_tuple(
-                        model_data_density.xs[i],
-                        model_data_density.ys[i],
-                        self.yDataTarget,
-                        model.coeffs_a,
-                        model.coeffs_b,
-                    )[1]
-                )
-            zz = griddata(points, zwins, (grid_x, grid_y), method="linear")
+            zdraws = model_wdl_tuple(
+                np.asarray(model_data_density.xs),
+                np.asarray(model_data_density.ys),
+                self.yDataTarget,
+                model.coeffs_a,
+                model.coeffs_b,
+            )[1]
+            zz = griddata(points, zdraws, (grid_x, grid_y), method="linear")
             cp = self.plot.axs[1, 2].contourf(grid_x, grid_y, zz, contourlines)
             CS = self.plot.axs[1, 2].contour(
                 grid_x, grid_y, zz, contourlines, colors="black"
