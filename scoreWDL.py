@@ -591,9 +591,6 @@ class WdlModel:
             self.plot.axs[1, 0].set_title("Winrate model parameters")
             self.plot.axs[1, 0].set_ylim(bottom=0.0)
 
-        # now generate contour plots
-        contourlines = [0, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.97, 1.0]
-
         ylabelStr = self.yData + " (1,3,3,5,9)" * bool(self.yData == "material")
         for i in [0, 1] if self.modelFitting != "None" else [0]:
             for j in [1, 2]:
@@ -604,92 +601,53 @@ class WdlModel:
                 )
                 self.plot.axs[i, j].set_ylabel(ylabelStr)
 
-        # for wins, plot between -1 and 3 pawns, using a 30x22 grid
-        xmin = -((1 * self.plot.normalize_to_pawn_value) // 100 + 1) * 100
-        xmax = ((3 * self.plot.normalize_to_pawn_value) // 100 + 1) * 100
-        ymin, ymax = self.plot.yPlotMin, self.yDataMax
-        grid_x, grid_y = np.mgrid[xmin:xmax:30j, ymin:ymax:22j]
         points = np.array(list(zip(model_data_density.xs, model_data_density.ys)))
 
-        # data
-        zz = griddata(
-            points, model_data_density.zwins, (grid_x, grid_y), method="linear"
-        )
-        cp = self.plot.axs[0, 1].contourf(grid_x, grid_y, zz, contourlines)
-        self.plot.fig.colorbar(cp, ax=self.plot.axs[:, -1], shrink=0.618)
-        CS = self.plot.axs[0, 1].contour(
-            grid_x, grid_y, zz, contourlines, colors="black"
-        )
-        self.plot.axs[0, 1].clabel(CS, inline=1, colors="black")
-        self.plot.axs[0, 1].set_title("Data: Fraction of positions leading to a win")
+        # now generate contour plots
+        contourlines = [0, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.97, 1.0]
 
-        self.plot.normalized_axis(0, 1)
+        for j, s in enumerate(["win", "draw"]):
+            # for wins, plot between -1 and 3 pawns, for draws between -2 and 2 pawns
+            xmin = -(((1 + j) * self.plot.normalize_to_pawn_value) // 100 + 1) * 100
+            xmax = (((3 - j) * self.plot.normalize_to_pawn_value) // 100 + 1) * 100
+            ymin, ymax = self.plot.yPlotMin, self.yDataMax
+            grid_x, grid_y = np.mgrid[xmin:xmax:30j, ymin:ymax:22j]  # use a 30x22 grid
 
-        # model
-        if self.modelFitting != "None":
-            zwins = []
-            for i in range(0, len(model_data_density.xs)):
-                zwins.append(
-                    model_wdl_tuple(
-                        model_data_density.xs[i],
-                        model_data_density.ys[i],
-                        self.yDataTarget,
-                        model.coeffs_a,
-                        model.coeffs_b,
-                    )[0]
-                )
-            zz = griddata(points, zwins, (grid_x, grid_y), method="linear")
-            cp = self.plot.axs[1, 1].contourf(grid_x, grid_y, zz, contourlines)
-            CS = self.plot.axs[1, 1].contour(
+            # data
+            zz = model_data_density.zdraws if j else model_data_density.zwins
+            zz = griddata(points, zz, (grid_x, grid_y), method="linear")
+            cp = self.plot.axs[0, 1 + j].contourf(grid_x, grid_y, zz, contourlines)
+            if j == 0:
+                self.plot.fig.colorbar(cp, ax=self.plot.axs[:, -1], shrink=0.618)
+
+            CS = self.plot.axs[0, 1 + j].contour(
                 grid_x, grid_y, zz, contourlines, colors="black"
             )
-            self.plot.axs[1, 1].clabel(CS, inline=1, colors="black")
-            self.plot.axs[1, 1].set_title(
-                "Model: Fraction of positions leading to a win"
+            self.plot.axs[0, 1 + j].clabel(CS, inline=1, colors="black")
+            self.plot.axs[0, 1 + j].set_title(
+                "Data: Fraction of positions leading to a " + s
             )
-            self.plot.normalized_axis(1, 1)
+            self.plot.normalized_axis(0, 1 + j)
 
-        # for draws, plot between -2 and 2 pawns, using a 30x22 grid
-        xmin = -((2 * self.plot.normalize_to_pawn_value) // 100 + 1) * 100
-        xmax = ((2 * self.plot.normalize_to_pawn_value) // 100 + 1) * 100
-        grid_x, grid_y = np.mgrid[xmin:xmax:30j, ymin:ymax:22j]
-        points = np.array(list(zip(model_data_density.xs, model_data_density.ys)))
-
-        # data
-        zz = griddata(
-            points, model_data_density.zdraws, (grid_x, grid_y), method="linear"
-        )
-        cp = self.plot.axs[0, 2].contourf(grid_x, grid_y, zz, contourlines)
-        CS = self.plot.axs[0, 2].contour(
-            grid_x, grid_y, zz, contourlines, colors="black"
-        )
-        self.plot.axs[0, 2].clabel(CS, inline=1, colors="black")
-        self.plot.axs[0, 2].set_title("Data: Fraction of positions leading to a draw")
-        self.plot.normalized_axis(0, 2)
-
-        # model
-        if self.modelFitting != "None":
-            zwins = []
-            for i in range(0, len(model_data_density.xs)):
-                zwins.append(
-                    model_wdl_tuple(
-                        model_data_density.xs[i],
-                        model_data_density.ys[i],
-                        self.yDataTarget,
-                        model.coeffs_a,
-                        model.coeffs_b,
-                    )[1]
+            # model
+            if self.modelFitting != "None":
+                zz = model_wdl_tuple(
+                    np.asarray(model_data_density.xs),
+                    np.asarray(model_data_density.ys),
+                    self.yDataTarget,
+                    model.coeffs_a,
+                    model.coeffs_b,
+                )[j]
+                zz = griddata(points, zz, (grid_x, grid_y), method="linear")
+                cp = self.plot.axs[1, 1 + j].contourf(grid_x, grid_y, zz, contourlines)
+                CS = self.plot.axs[1, 1 + j].contour(
+                    grid_x, grid_y, zz, contourlines, colors="black"
                 )
-            zz = griddata(points, zwins, (grid_x, grid_y), method="linear")
-            cp = self.plot.axs[1, 2].contourf(grid_x, grid_y, zz, contourlines)
-            CS = self.plot.axs[1, 2].contour(
-                grid_x, grid_y, zz, contourlines, colors="black"
-            )
-            self.plot.axs[1, 2].clabel(CS, inline=1, colors="black")
-            self.plot.axs[1, 2].set_title(
-                "Model: Fraction of positions leading to a draw"
-            )
-            self.plot.normalized_axis(1, 2)
+                self.plot.axs[1, 1 + j].clabel(CS, inline=1, colors="black")
+                self.plot.axs[1, 1 + j].set_title(
+                    "Model: Fraction of positions leading to a " + s
+                )
+                self.plot.normalized_axis(1, 1 + j)
 
         self.plot.fig.align_labels()
         self.plot.save()
