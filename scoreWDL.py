@@ -24,13 +24,13 @@ def model_wdl_tuple(
     eval: int,
     mom: int,
     mom_target: int,
-    popt_as: list[float],
-    popt_bs: list[float],
+    coeffs_a: list[float],
+    coeffs_b: list[float],
 ) -> tuple[int, int, int]:
     """our wdl model is based on win_rate() with a and p polynomials in mom,
     where mom = move or material counter"""
-    a = poly3(mom / mom_target, *popt_as)
-    b = poly3(mom / mom_target, *popt_bs)
+    a = poly3(mom / mom_target, *coeffs_a)
+    b = poly3(mom / mom_target, *coeffs_b)
     w = int(1000 * win_rate(eval, a, b))
     l = int(1000 * win_rate(-eval, a, b))
     return w, 1000 - w - l, l
@@ -240,10 +240,10 @@ class ObjectiveFunctions:
     def get_ab(self, asbs: list[float], mom: int):
         # returns p_a(mom), p_b(mom) or a(mom), b(mom) depending on optimization stage
         if len(asbs) == 8:
-            popt_as = asbs[0:4]
-            popt_bs = asbs[4:8]
-            a = poly3(mom / self.y_data_target, *popt_as)
-            b = poly3(mom / self.y_data_target, *popt_bs)
+            coeffs_a = asbs[0:4]
+            coeffs_b = asbs[4:8]
+            a = poly3(mom / self.y_data_target, *coeffs_a)
+            b = poly3(mom / self.y_data_target, *coeffs_b)
         else:
             a = asbs[0]
             b = asbs[1]
@@ -304,8 +304,8 @@ class ObjectiveFunctions:
 
 @dataclass
 class ModelData:
-    popt_as: list[float]
-    popt_bs: list[float]
+    coeffs_a: list[float]
+    coeffs_b: list[float]
     model_ms: np.ndarray
     model_as: list[float]
     model_bs: list[float]
@@ -424,18 +424,17 @@ class WdlModel:
                         continue
                     losssubset[eval, momkey] = count
 
-                # miniminize the objective function
+                # minimize the objective function
                 OF = ObjectiveFunctions(
                     winsubset, drawsubset, losssubset, self.yDataTarget
                 )
 
                 if self.modelFitting == "optimizeScore":
                     objectiveFunction = OF.scoreError
+                elif self.modelFitting == "optimizeProbability":
+                    objectiveFunction = OF.evalLogProbability
                 else:
-                    if self.modelFitting == "optimizeProbability":
-                        objectiveFunction = OF.evalLogProbability
-                    else:
-                        objectiveFunction = None
+                    objectiveFunction = None
                 res = minimize(
                     objectiveFunction,
                     popt_ab,
@@ -490,28 +489,25 @@ class WdlModel:
         # now capture the functional behavior of a and b as functions of mom
         #
 
-        # simple polynomial fit to find p_a and p_b
-        popt_as, _ = curve_fit(poly3, model_ms / self.yDataTarget, model_as)
-        popt_bs, _ = curve_fit(poly3, model_ms / self.yDataTarget, model_bs)
+        # start with a simple polynomial fit to find p_a and p_b
+        coeffs_a, _ = curve_fit(poly3, model_ms / self.yDataTarget, model_as)
+        coeffs_b, _ = curve_fit(poly3, model_ms / self.yDataTarget, model_bs)
 
-        # refinement phase
-        #
-        # optimize the likelihood of seeing the data ...
-        #    our model_as, model_bs / popt_as, popt_bs are just initial guesses
-        #
-
+        # possibly refine p_a and p_b by optimizing a given objective function
         if self.modelFitting != "fitDensity":
             OF = ObjectiveFunctions(win, draw, loss, self.yDataTarget)
 
             if self.modelFitting == "optimizeScore":
+                # minimize the l2 error of the predicted score
                 objectiveFunction = OF.scoreError
             elif self.modelFitting == "optimizeProbability":
+                # maximize the likelihood of predicting the game outcome
                 objectiveFunction = OF.evalLogProbability
             else:
                 objectiveFunction = None
 
             if objectiveFunction:
-                popt_all = popt_as.tolist() + popt_bs.tolist()
+                popt_all = coeffs_a.tolist() + coeffs_b.tolist()
                 print("Initial objective function: ", objectiveFunction(popt_all))
                 res = minimize(
                     objectiveFunction,
@@ -519,22 +515,22 @@ class WdlModel:
                     method="Powell",
                     options={"maxiter": 100000, "disp": False, "xtol": 1e-6},
                 )
-                popt_as = res.x[0:4]  # store final p_a
-                popt_bs = res.x[4:8]  # store final p_b
+                coeffs_a = res.x[0:4]  # store final p_a
+                coeffs_b = res.x[4:8]  # store final p_b
                 popt_all = res.x
                 print("Final objective function:   ", objectiveFunction(popt_all))
                 print(res.message)
 
         # prepare output
-        label_as = "as = " + self.plot.poly3_str(popt_as, self.yDataTarget)
-        label_bs = "bs = " + self.plot.poly3_str(popt_bs, self.yDataTarget)
+        label_as = "as = " + self.plot.poly3_str(coeffs_a, self.yDataTarget)
+        label_bs = "bs = " + self.plot.poly3_str(coeffs_b, self.yDataTarget)
 
-        #
-        # now we can define the conversion factor from internal eval to centipawn such that
-        # an expected win score of 50% is for an eval of 'a', we pick this value for the yDataTarget
-        # (where the sum of the a coefs is equal to the interpolated a).
-        fsum_a = sum(popt_as)
-        fsum_b = sum(popt_bs)
+        # now we can report the new conversion factor p_a from internal eval to centipawn
+        # such that an expected win score of 50% is for an internal eval of p_a(mom)
+        # for a static conversion (independent of mom), we provide a constant value
+        # NormalizeToPawnValue = int(p_a(yDataTarget)) = int(sum(coeffs_a))
+        fsum_a = sum(coeffs_a)
+        fsum_b = sum(coeffs_b)
 
         if self.plot.setting != "no":
             # this shows the fit of the observed wdl data at mom=yDataTarget to
@@ -555,15 +551,15 @@ class WdlModel:
         print(label_bs)
         print(
             "     constexpr double as[] = {%13.8f, %13.8f, %13.8f, %13.8f};"
-            % tuple(popt_as)
+            % tuple(coeffs_a)
         )
         print(
             "     constexpr double bs[] = {%13.8f, %13.8f, %13.8f, %13.8f };"
-            % tuple(popt_bs)
+            % tuple(coeffs_b)
         )
 
         return ModelData(
-            popt_as, popt_bs, model_ms, model_as, model_bs, label_as, label_bs
+            coeffs_a, coeffs_b, model_ms, model_as, model_bs, label_as, label_bs
         )
 
     def create_plot(self, model_data_density: ModelDataDensity, model: ModelData):
@@ -577,14 +573,14 @@ class WdlModel:
             self.plot.axs[1, 0].plot(model.model_ms, model.model_as, "b.", label="as")
             self.plot.axs[1, 0].plot(
                 model.model_ms,
-                poly3(model.model_ms / self.yDataTarget, *model.popt_as),
+                poly3(model.model_ms / self.yDataTarget, *model.coeffs_a),
                 "r-",
                 label="fit: " + model.label_as,
             )
             self.plot.axs[1, 0].plot(model.model_ms, model.model_bs, "g.", label="bs")
             self.plot.axs[1, 0].plot(
                 model.model_ms,
-                poly3(model.model_ms / self.yDataTarget, *model.popt_bs),
+                poly3(model.model_ms / self.yDataTarget, *model.coeffs_b),
                 "m-",
                 label="fit: " + model.label_bs,
             )
@@ -638,8 +634,8 @@ class WdlModel:
                         model_data_density.xs[i],
                         model_data_density.ys[i],
                         self.yDataTarget,
-                        model.popt_as,
-                        model.popt_bs,
+                        model.coeffs_a,
+                        model.coeffs_b,
                     )[0]
                     / 1000.0
                 )
@@ -681,8 +677,8 @@ class WdlModel:
                         model_data_density.xs[i],
                         model_data_density.ys[i],
                         self.yDataTarget,
-                        model.popt_as,
-                        model.popt_bs,
+                        model.coeffs_a,
+                        model.coeffs_b,
                     )[1]
                     / 1000.0
                 )
