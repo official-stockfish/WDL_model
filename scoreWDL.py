@@ -20,6 +20,22 @@ def poly3(x: float | np.ndarray, c_3, c_2, c_1, c_0) -> float:
     return ((c_3 * x + c_2) * x + c_1) * x + c_0
 
 
+def model_wdl_tuple(
+    eval: int,
+    mom: int,
+    mom_target: int,
+    popt_as: list[float],
+    popt_bs: list[float],
+) -> tuple[int, int, int]:
+    """our wdl model is based on win_rate() with a and p polynomials in mom,
+    where mom = move or material counter"""
+    a = poly3(mom / mom_target, *popt_as)
+    b = poly3(mom / mom_target, *popt_bs)
+    w = int(1000 * win_rate(eval, a, b))
+    l = int(1000 * win_rate(-eval, a, b))
+    return w, 1000 - w - l, l
+
+
 class WdlPlot:
     def __init__(
         self,
@@ -44,7 +60,7 @@ class WdlPlot:
     def normalized_axis(self, i, j):
         """provides a second x-axis in pawns, to go with the original axis in internal eval
         if the engine used a dynamic normalization, the labels will only be exact for
-        the old yDataTarget value of move counter or material"""
+        the old yDataTarget value for mom (move or material counter)"""
         ax = self.axs[i, j]
         ax2 = ax.twiny()
         tickmin = int(np.ceil(ax.get_xlim()[0] / self.normalize_to_pawn_value)) * 2
@@ -61,6 +77,14 @@ class WdlPlot:
         ax2.set_xticks(new_tick_locations)
         ax2.set_xticklabels(tick_function(new_tick_locations))
 
+    def poly3_str(self, coeffs: list[float], y_data_target: int) -> str:
+        return (
+            "((%5.3f * x / %d + %5.3f) * x / %d + %5.3f) * x / %d + %5.3f"
+            % tuple(val for pair in zip(coeffs, [y_data_target] * 4) for val in pair)[
+                :-1
+            ]
+        )
+
     def save(self):
         plt.savefig(self.pgnName, dpi=300)
         if self.setting == "save+show":
@@ -74,10 +98,10 @@ class ModelDataDensity:
     """Count data converted to densities"""
 
     xs: list[int]  # internal evals
-    ys: list[int]  # moves or material
-    zwins: list[float]  # corresponding win probability
-    zdraws: list[float]  # draw prob
-    zlosses: list[float]  # loss prob
+    ys: list[int]  # mom counters (mom = move or material)
+    zwins: list[float]  # corresponding win probabilities
+    zdraws: list[float]  # draw probabilities
+    zlosses: list[float]  # loss probabilities
 
 
 class DataLoader:
@@ -124,7 +148,7 @@ class DataLoader:
         Counter[tuple[int, int]],
         Counter[tuple[int, int]],
     ]:
-        """Extract three arrays, win draw and loss, counting positions with a given eval (int) and move/material (int) that are wdl"""
+        """Extract three arrays, win draw and loss, each counting positions with a given eval (int) and move/material (int)"""
         freq: Counter[tuple[str, int, int, int]] = Counter(
             {literal_eval(k): v for k, v in self.inputdata.items()}
         )
@@ -198,39 +222,6 @@ class DataLoader:
         return ModelDataDensity(xs, ys, zwins, zdraws, zlosses)
 
 
-#
-# model to be fitted in order to predict the winrate from eval and move (or material)
-#
-# this defines the model functions
-#
-class ModelFit:
-    def __init__(self, y_data_target: int):
-        self.y_data_target = y_data_target
-
-    def poly3_str(self, coeffs: list[float]) -> str:
-        return (
-            "((%5.3f * x / %d + %5.3f) * x / %d + %5.3f) * x / %d + %5.3f"
-            % tuple(
-                val for pair in zip(coeffs, [self.y_data_target] * 4) for val in pair
-            )[:-1]
-        )
-
-    def wdl(
-        self,
-        eval: int,
-        move_or_material: int,
-        popt_as: list[float],
-        popt_bs: list[float],
-    ) -> tuple[int, int, int]:
-        """Compute the integer wdl (per-mille) using polynomial approximation for a and b"""
-        a = poly3(move_or_material / self.y_data_target, *popt_as)
-        b = poly3(move_or_material / self.y_data_target, *popt_bs)
-        w = int(1000 * win_rate(eval, a, b))
-        l = int(1000 * win_rate(-eval, a, b))
-        d = 1000 - w - l
-        return w, d, l
-
-
 class ObjectiveFunctions:
     """Collects objective functions that can be minimized to fit the win draw loss data"""
 
@@ -239,20 +230,20 @@ class ObjectiveFunctions:
         win: Counter[tuple[int, int]],
         draw: Counter[tuple[int, int]],
         loss: Counter[tuple[int, int]],
-        fit: ModelFit,
+        y_data_target: int,
     ):
         self.win = win
         self.draw = draw
         self.loss = loss
-        self.fit = fit
+        self.y_data_target = y_data_target
 
     def get_ab(self, asbs: list[float], mom: int):
         # returns p_a(mom), p_b(mom) or a(mom), b(mom) depending on optimization stage
         if len(asbs) == 8:
             popt_as = asbs[0:4]
             popt_bs = asbs[4:8]
-            a = poly3(mom / self.fit.y_data_target, *popt_as)
-            b = poly3(mom / self.fit.y_data_target, *popt_bs)
+            a = poly3(mom / self.y_data_target, *popt_as)
+            b = poly3(mom / self.y_data_target, *popt_bs)
         else:
             a = asbs[0]
             b = asbs[1]
@@ -386,7 +377,6 @@ class WdlModel:
         win: Counter[tuple[int, int]],
         draw: Counter[tuple[int, int]],
         loss: Counter[tuple[int, int]],
-        fit: ModelFit,
         plotfunc: Callable[[np.ndarray, list[float], list[float], list[float]], None]
         | None,
     ):
@@ -394,7 +384,6 @@ class WdlModel:
 
         model_ms, model_as, model_bs = [], [], []
 
-        # mom = move or material, depending on self.yData
         for mom in range(self.yDataMin, self.yDataMax + 1):
             xdata, ywindata, ydrawdata, ylossdata = [], [], [], []
             for i in range(0, len(moms)):
@@ -436,7 +425,9 @@ class WdlModel:
                     losssubset[eval, momkey] = count
 
                 # miniminize the objective function
-                OF = ObjectiveFunctions(winsubset, drawsubset, losssubset, fit)
+                OF = ObjectiveFunctions(
+                    winsubset, drawsubset, losssubset, self.yDataTarget
+                )
 
                 if self.modelFitting == "optimizeScore":
                     objectiveFunction = OF.scoreError
@@ -483,8 +474,6 @@ class WdlModel:
         # 1D win rate function best matches the observed win frequencies
         #
 
-        fit = ModelFit(self.yDataTarget)
-
         model_as, model_bs, model_ms = self.extract_model_data(
             xs,
             ys,
@@ -494,7 +483,6 @@ class WdlModel:
             win,
             draw,
             loss,
-            fit,
             self.plot_sample_data_y if self.plot.setting != "no" else None,
         )
 
@@ -503,8 +491,8 @@ class WdlModel:
         #
 
         # simple polynomial fit to find p_a and p_b
-        popt_as, _ = curve_fit(poly3, model_ms / fit.y_data_target, model_as)
-        popt_bs, _ = curve_fit(poly3, model_ms / fit.y_data_target, model_bs)
+        popt_as, _ = curve_fit(poly3, model_ms / self.yDataTarget, model_as)
+        popt_bs, _ = curve_fit(poly3, model_ms / self.yDataTarget, model_bs)
 
         # refinement phase
         #
@@ -513,7 +501,7 @@ class WdlModel:
         #
 
         if self.modelFitting != "fitDensity":
-            OF = ObjectiveFunctions(win, draw, loss, fit)
+            OF = ObjectiveFunctions(win, draw, loss, self.yDataTarget)
 
             if self.modelFitting == "optimizeScore":
                 objectiveFunction = OF.scoreError
@@ -538,9 +526,8 @@ class WdlModel:
                 print(res.message)
 
         # prepare output
-        label_as, label_bs = "as = " + fit.poly3_str(popt_as), "bs = " + fit.poly3_str(
-            popt_bs
-        )
+        label_as = "as = " + self.plot.poly3_str(popt_as, self.yDataTarget)
+        label_bs = "bs = " + self.plot.poly3_str(popt_bs, self.yDataTarget)
 
         #
         # now we can define the conversion factor from internal eval to centipawn such that
@@ -585,21 +572,19 @@ class WdlModel:
 
         print("Preparing contour plots and plots of model parameters.")
 
-        fit = ModelFit(self.yDataTarget)
-
         if self.modelFitting != "None":
             # graphs of a and b as a function of move/material
             self.plot.axs[1, 0].plot(model.model_ms, model.model_as, "b.", label="as")
             self.plot.axs[1, 0].plot(
                 model.model_ms,
-                poly3(model.model_ms / fit.y_data_target, *model.popt_as),
+                poly3(model.model_ms / self.yDataTarget, *model.popt_as),
                 "r-",
                 label="fit: " + model.label_as,
             )
             self.plot.axs[1, 0].plot(model.model_ms, model.model_bs, "g.", label="bs")
             self.plot.axs[1, 0].plot(
                 model.model_ms,
-                poly3(model.model_ms / fit.y_data_target, *model.popt_bs),
+                poly3(model.model_ms / self.yDataTarget, *model.popt_bs),
                 "m-",
                 label="fit: " + model.label_bs,
             )
@@ -649,9 +634,10 @@ class WdlModel:
             zwins = []
             for i in range(0, len(model_data_density.xs)):
                 zwins.append(
-                    fit.wdl(
+                    model_wdl_tuple(
                         model_data_density.xs[i],
                         model_data_density.ys[i],
+                        self.yDataTarget,
                         model.popt_as,
                         model.popt_bs,
                     )[0]
@@ -691,9 +677,10 @@ class WdlModel:
             zwins = []
             for i in range(0, len(model_data_density.xs)):
                 zwins.append(
-                    fit.wdl(
+                    model_wdl_tuple(
                         model_data_density.xs[i],
                         model_data_density.ys[i],
+                        self.yDataTarget,
                         model.popt_as,
                         model.popt_bs,
                     )[1]
