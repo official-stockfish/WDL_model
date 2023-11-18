@@ -291,7 +291,7 @@ class ObjectiveFunctions:
             a, b = self.get_ab(asbs, mom)
             probw = win_rate(eval, a, b)
             probl = win_rate(-eval, a, b)
-            prob = 1 - (probw + probl)
+            prob = 1 - probw - probl
             evalLogProb += count * np.log(max(prob, 1e-14))
 
         for (eval, mom), count in self.loss.items():
