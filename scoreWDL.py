@@ -26,14 +26,14 @@ def model_wdl_tuple(
     mom_target: int,
     coeffs_a: list[float],
     coeffs_b: list[float],
-) -> tuple[int, int, int]:
-    """our wdl model is based on win_rate() with a and p polynomials in mom,
+) -> tuple[float, float, float]:
+    """our wdl model is based on win_rate() with a and b polynomials in mom,
     where mom = move or material counter"""
     a = poly3(mom / mom_target, *coeffs_a)
     b = poly3(mom / mom_target, *coeffs_b)
-    w = int(1000 * win_rate(eval, a, b))
-    l = int(1000 * win_rate(-eval, a, b))
-    return w, 1000 - w - l, l
+    w = win_rate(eval, a, b)
+    l = win_rate(-eval, a, b)
+    return w, 1 - w - l, l
 
 
 class WdlPlot:
@@ -637,7 +637,6 @@ class WdlModel:
                         model.coeffs_a,
                         model.coeffs_b,
                     )[0]
-                    / 1000.0
                 )
             zz = griddata(points, zwins, (grid_x, grid_y), method="linear")
             cp = self.plot.axs[1, 1].contourf(grid_x, grid_y, zz, contourlines)
@@ -680,7 +679,6 @@ class WdlModel:
                         model.coeffs_a,
                         model.coeffs_b,
                     )[1]
-                    / 1000.0
                 )
             zz = griddata(points, zwins, (grid_x, grid_y), method="linear")
             cp = self.plot.axs[1, 2].contourf(grid_x, grid_y, zz, contourlines)
