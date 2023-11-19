@@ -10,12 +10,20 @@ from typing import Literal, Callable, Any
 def win_rate(eval: int | np.ndarray, a, b):
     def stable_logistic(z):
         # returns 1 / (1 + exp(-z)) avoiding possible overflows
-        return np.where(z < 0, np.exp(z) / (1.0 + np.exp(z)), 1.0 / (1.0 + np.exp(-z)))
+        if type(z) == np.ndarray:
+            mask = z < 0
+            res = np.empty_like(z)
+            res[mask] = np.exp(z[mask]) / (1.0 + np.exp(z[mask]))
+            res[~mask] = 1.0 / (1.0 + np.exp(-z[~mask]))
+            return res
+        return np.exp(z) / (1.0 + np.exp(z)) if z < 0 else 1.0 / (1.0 + np.exp(-z))
 
-    # guard against unphysical values, treating small and negative values as 0
+    # guard against unphysical values, treating negative values of b as "zero"
     # during optimizations this will guide b (back) towards positive values
-    if b < 1e-8:
-        return np.where(eval - a < 0, 0, 1)
+    if type(b) == np.ndarray:
+        b = np.maximum(b, 1e-8)
+    elif b < 1e-8:
+        b = 1e-8
 
     return stable_logistic((eval - a) / b)
 
