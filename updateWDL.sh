@@ -16,28 +16,28 @@ bookname="UHO_4060_v..epd|UHO_Lichess_4852_v1.epd"
 pgnpath=pgns
 
 outpath=update
-logdir=logs
-logpath="$outpath"/"$logdir"
 
 # create log directory if needed
-mkdir -p "$logpath"
+mkdir -p "$outpath"
+
+cd "$outpath"
 
 # clone repos if needed, and pull latest revisions
 for repo in "Stockfish" "books"; do
-    if [[ ! -e "$outpath"/"$repo" ]]; then
-        git clone https://github.com/official-stockfish/"$repo".git ./"$outpath"/"$repo" >& ./"$logdir"/clone.log
+    if [[ ! -e "$repo" ]]; then
+        git clone https://github.com/official-stockfish/"$repo".git >& clone-"$repo".log
     fi
-    cd ./"$outpath"/"$repo"
+    cd "$repo"
     echo $(pwd)
-    git checkout master >& ../"$logdir"/checkout-"$repo".log
-    git fetch origin >& ../"$logdir"/fetch-"$repo".log
-    git pull >& ../"$logdir"/pull-"$repo".log
-    cd ../..
+    git checkout master >& ../checkout-"$repo".log
+    git fetch origin >& ../fetch-"$repo".log
+    git pull >& ../pull-"$repo".log
+    cd ..
 done
 
 # create a sorted list of all the books matching the regex
 matching_books=()
-for file in $(find "$outpath"/books -type f -name "*.zip" | sort); do
+for file in $(find books -type f -name "*.zip" | sort); do
     book=$(basename "$file" .zip)
     if [[ $book =~ $bookname ]]; then
         matching_books+=("$book")
@@ -51,12 +51,12 @@ fi
 
 # refetch books if the list of matching books is new
 bookhash=$(echo -n "${matching_books[@]}" | md5sum | cut -d ' ' -f 1)
-fixfen="$outpath"/"fixfen_$bookhash.epd"
+fixfen="fixfen_$bookhash.epd"
 
 if [[ ! -e "$fixfen.gz" ]]; then
     rm -f "$fixfen"
     for book in "${matching_books[@]}"; do
-        unzip -o "$outpath"/books/"$book".zip >& ./"$logpath"/unzip"$book".log
+        unzip -o books/"$book".zip >& unzip"$book".log
         awk 'NF >= 6' "$book" >>"$fixfen"
         rm "$book"
     done
@@ -65,7 +65,7 @@ if [[ ! -e "$fixfen.gz" ]]; then
 fi
 
 # get a SF revision list
-cd "$outpath"/Stockfish
+cd Stockfish
 revs=$(git rev-list $firstrev^..$lastrev)
 
 # get the currently valid value of NormalizeToPawnValue
@@ -90,22 +90,22 @@ regex_pattern="${regex_pattern%|}"
 cd ../..
 
 # compile scoreWDLstat if needed
-make >& ./"$logpath"/make.log
+make >& ./"$outpath"/make.log
 
 echo "Look recursively in directory $pgnpath for games from SPRT tests using" \
     "books matching \"$bookname\" for SF revisions between $firstrev (from" \
     "$oldepoch) and $lastrev (from $newepoch)."
 
 # obtain the WDL data from games of SPRT tests of the SF revisions of interest
-./scoreWDLstat --dir $pgnpath -r --matchRev $regex_pattern --matchBook "$bookname" --fixFENsource "$fixfen.gz" --SPRTonly -o ./"$outpath"/updateWDL.json >& ./"$logpath"/scoreWDLstat.log
+./scoreWDLstat --dir $pgnpath -r --matchRev $regex_pattern --matchBook "$bookname" --fixFENsource "$fixfen.gz" --SPRTonly -o ./"$outpath"/updateWDL.json >& ./"$outpath"/scoreWDLstat.log
 
 # fit the new WDL model, keeping anchor at move 32
 # we ignore the first 2 full moves out of book for fitting (11=8+1+2), and the first 9 for (contour) plotting (18=8+1+9)
-python scoreWDL.py ./"$outpath"/updateWDL.json --plot save --pgnName ./"$outpath"/updateWDL.png --yDataTarget 32 --yDataMin 8 --yDataMax 120 --yPlotMin 8 --modelFitting optimizeProbability --NormalizeToPawnValue $oldpawn >& ./"$logpath"/scoreWDL.log
+python scoreWDL.py ./"$outpath"/updateWDL.json --plot save --pgnName ./"$outpath"/updateWDL.png --yDataTarget 32 --yDataMin 8 --yDataMax 120 --yPlotMin 8 --modelFitting optimizeProbability --NormalizeToPawnValue $oldpawn >& ./"$outpath"/scoreWDL.log
 
 # extract the total number of positions, and the new NormalizeToPawnValue
-poscount=$(awk -F '[() ,]' '/Retained \(W,D,L\)/ {sum = 0; for (i = 9; i <= NF; i++) sum += $i; print sum; exit}' ./$logpath/scoreWDL.log)
-newpawn=$(grep -oP 'const int NormalizeToPawnValue = \K\d+' ./$logpath/scoreWDL.log)
+poscount=$(awk -F '[() ,]' '/Retained \(W,D,L\)/ {sum = 0; for (i = 9; i <= NF; i++) sum += $i; print sum; exit}' ./$outpath/scoreWDL.log)
+newpawn=$(grep -oP 'const int NormalizeToPawnValue = \K\d+' ./$outpath/scoreWDL.log)
 
 if [[ $newpawn -ne $oldpawn ]]; then
     echo "Based on $poscount positions, NormalizeToPawnValue should change from $oldpawn to $newpawn."
