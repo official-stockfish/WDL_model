@@ -68,16 +68,10 @@ class ModelDataDensity:
 
 
 class DataLoader:
-    def __init__(
-        self,
-        filenames: list[str],
-        NormalizeToPawnValue: int | None,
-        NormalizeData: str | None,
-    ):
-        self.filenames = filenames
-        self.NormalizeToPawnValue = NormalizeToPawnValue
-        if NormalizeData is not None:
-            self.NormalizeData = json.loads(NormalizeData)
+    def __init__(self, args):
+        self.NormalizeToPawnValue = args.NormalizeToPawnValue
+        if args.NormalizeData is not None:
+            self.NormalizeData = json.loads(args.NormalizeData)
             self.NormalizeData["as"] = [float(x) for x in self.NormalizeData["as"]]
         print(
             "Converting evals with "
@@ -91,7 +85,7 @@ class DataLoader:
         # Load the json, in which the key describes the position (result, move, material, eval),
         # and in which the value is the observed count of these positions
         self.inputdata: Counter[str] = Counter()
-        for filename in self.filenames:
+        for filename in args.filename:
             print(f"Reading eval stats from {filename}.")
             with open(filename) as infile:
                 data = json.load(infile)
@@ -436,50 +430,33 @@ class WdlPlot:
 
 
 class WdlModel:
-    def __init__(
-        self,
-        yData: str,
-        yDataMin: int,
-        yDataMax: int,
-        yDataTarget: int,
-        modelFitting: Literal[
-            "fitDensity", "optimizeProbability", "optimizeScore", "None"
-        ],
-        normalize_to_pawn_value: int,
-        plot: WdlPlot,
-    ):
-        self.yData = yData
-        self.yDataMin = yDataMin
-        self.yDataMax = yDataMax
-        self.yDataTarget = yDataTarget
-        self.modelFitting = modelFitting
+    def __init__(self, args, normalize_to_pawn_value: int, plot: WdlPlot):
+        self.yData = args.yData
+        self.yDataMin = args.yDataMin
+        self.yDataMax = args.yDataMax
+        self.yDataTarget = args.yDataTarget
+        self.modelFitting = args.modelFitting
         self.normalize_to_pawn_value = normalize_to_pawn_value
         self.plot = plot
 
     def extract_model_data(
         self,
-        xs: list[int],
-        ys: list[int],
-        zwins: list[float],
-        zdraws: list[float],
-        zlosses: list[float],
+        model_data_density: ModelDataDensity,
         win: Counter[tuple[int, int]],
         draw: Counter[tuple[int, int]],
         loss: Counter[tuple[int, int]],
     ):
-        evals, moms, winrate, drawrate, lossrate = xs, ys, zwins, zdraws, zlosses
-
         model_ms, model_as, model_bs = [], [], []
 
         for mom in range(self.yDataMin, self.yDataMax + 1):
             xdata, ywindata, ydrawdata, ylossdata = [], [], [], []
-            for i in range(0, len(moms)):
-                if not moms[i] == mom:
+            for i, momkey in enumerate(model_data_density.ys):
+                if not momkey == mom:
                     continue
-                xdata.append(evals[i])
-                ywindata.append(winrate[i])
-                ydrawdata.append(drawrate[i])
-                ylossdata.append(lossrate[i])
+                xdata.append(model_data_density.xs[i])
+                ywindata.append(model_data_density.zwins[i])
+                ydrawdata.append(model_data_density.zdraws[i])
+                ylossdata.append(model_data_density.zlosses[i])
 
             if len(ywindata) < 10:
                 print(
@@ -547,15 +524,14 @@ class WdlModel:
 
     def fit_model(
         self,
-        xs: list[int],
-        ys: list[int],
-        zwins: list[float],
-        zdraws: list[float],
-        zlosses: list[float],
+        model_data_density: ModelDataDensity,
         win: Counter[tuple[int, int]],
         draw: Counter[tuple[int, int]],
         loss: Counter[tuple[int, int]],
     ) -> ModelData:
+        if self.modelFitting == "None":
+            return ModelData([], [], np.asarray([]), [], [], "", "")
+
         print(f"Fit WDL model based on {self.yData}.")
         #
         # for each value of mom of interest, find a(mom) and b(mom) so that the induced
@@ -563,14 +539,7 @@ class WdlModel:
         #
 
         model_as, model_bs, model_ms = self.extract_model_data(
-            xs,
-            ys,
-            zwins,
-            zdraws,
-            zlosses,
-            win,
-            draw,
-            loss,
+            model_data_density, win, draw, loss
         )
 
         #
@@ -753,9 +722,7 @@ if __name__ == "__main__":
 
     tic = time.time()
 
-    data_loader = DataLoader(
-        args.filename, args.NormalizeToPawnValue, args.NormalizeData
-    )
+    data_loader = DataLoader(args)
 
     win, draw, loss = data_loader.extract_wdl(args.moveMin, args.moveMax, args.yData)
 
@@ -765,32 +732,11 @@ if __name__ == "__main__":
 
     wdl_plot = WdlPlot(args, data_loader.normalize_to_pawn_value)
 
-    wdl_model = WdlModel(
-        args.yData,
-        args.yDataMin,
-        args.yDataMax,
-        args.yDataTarget,
-        args.modelFitting,
-        data_loader.normalize_to_pawn_value,
-        wdl_plot,
-    )
+    wdl_model = WdlModel(args, data_loader.normalize_to_pawn_value, wdl_plot)
 
     model_data_density = data_loader.get_model_data_density(win, draw, loss)
 
-    model = (
-        wdl_model.fit_model(
-            model_data_density.xs,
-            model_data_density.ys,
-            model_data_density.zwins,
-            model_data_density.zdraws,
-            model_data_density.zlosses,
-            win,
-            draw,
-            loss,
-        )
-        if args.modelFitting != "None"
-        else ModelData([], [], np.asarray([]), [], [], "", "")
-    )
+    model = wdl_model.fit_model(model_data_density, win, draw, loss)
 
     if args.plot != "no":
         wdl_plot.create_plots(model_data_density, model)
