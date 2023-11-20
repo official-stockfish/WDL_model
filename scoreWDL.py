@@ -297,21 +297,15 @@ class WdlPlot:
         """provides a second x-axis in pawns, to go with the original axis in internal eval
         if the engine used a dynamic normalization, the labels will only be exact for
         the old yDataTarget value for mom (move or material counter)"""
-        ax = self.axs[i, j]
-        ax2 = ax.twiny()
-        tickmin = int(np.ceil(ax.get_xlim()[0] / self.normalize_to_pawn_value)) * 2
-        tickmax = int(np.floor(ax.get_xlim()[1] / self.normalize_to_pawn_value)) * 2 + 1
-        new_tick_locations = np.array(
-            [x / 2 * self.normalize_to_pawn_value for x in range(tickmin, tickmax)]
+        eval_min, eval_max = self.axs[i, j].get_xlim()
+        halfpawn_value = self.normalize_to_pawn_value / 2
+        halfpawn_ticks = np.arange(
+            eval_min / halfpawn_value, eval_max / halfpawn_value + 1, dtype=int
         )
-
-        def tick_function(X):
-            V = X / self.normalize_to_pawn_value
-            return [(f"{z:.0f}" if z % 1 < 0.1 else "") for z in V]
-
-        ax2.set_xlim(ax.get_xlim())
-        ax2.set_xticks(new_tick_locations)
-        ax2.set_xticklabels(tick_function(new_tick_locations))
+        ax2 = self.axs[i, j].twiny()
+        ax2.set_xticks(halfpawn_ticks * halfpawn_value)  # ticks at full and half pawns
+        ax2.set_xticklabels(["" if z % 2 else str(z // 2) for z in halfpawn_ticks])
+        ax2.set_xlim(eval_min, eval_max)  # align the data range with original axis
 
     def poly3_str(self, coeffs: list[float], y_data_target: int) -> str:
         return (
