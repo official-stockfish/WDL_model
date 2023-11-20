@@ -25,7 +25,6 @@ for repo in "Stockfish" "books"; do
         git clone https://github.com/official-stockfish/"$repo".git >& clone-"$repo".log
     fi
     cd "$repo"
-    echo $(pwd)
     git checkout master >& ../checkout-"$repo".log
     git fetch origin >& ../fetch-"$repo".log
     git pull >& ../pull-"$repo".log
