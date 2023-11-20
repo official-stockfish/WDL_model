@@ -8,6 +8,8 @@ from typing import Literal, Callable, Any
 
 
 def win_rate(eval: int | np.ndarray, a, b):
+    """the win rate in our model is 1 / ( 1 + exp(-(eval - a) / b))"""
+
     def stable_logistic(z):
         # returns 1 / (1 + exp(-z)) avoiding possible overflows
         if type(z) == np.ndarray:
@@ -28,24 +30,29 @@ def win_rate(eval: int | np.ndarray, a, b):
     return stable_logistic((eval - a) / b)
 
 
+def loss_rate(eval: int | np.ndarray, a, b):
+    """our wdl model assumes symmetry in eval"""
+    return win_rate(-eval, a, b)
+
+
 def poly3(x: float | np.ndarray, c_3, c_2, c_1, c_0) -> float:
     """compute the value of a polynomial of 3rd order in a point x"""
     return ((c_3 * x + c_2) * x + c_1) * x + c_0
 
 
-def model_wdl_tuple(
+def model_wdl_rates(
     eval: int,
     mom: int,
     mom_target: int,
     coeffs_a: list[float],
     coeffs_b: list[float],
 ) -> tuple[float, float, float]:
-    """our wdl model is based on win_rate() with a and b polynomials in mom,
+    """our wdl model is based on win/loss rate with a and b polynomials in mom,
     where mom = move or material counter"""
     a = poly3(mom / mom_target, *coeffs_a)
     b = poly3(mom / mom_target, *coeffs_b)
     w = win_rate(eval, a, b)
-    l = win_rate(-eval, a, b)
+    l = loss_rate(eval, a, b)
     return w, 1 - w - l, l
 
 
@@ -268,7 +275,7 @@ class ObjectiveFunctions:
 
         a, b = self.get_ab(asbs, mom)
         probw = win_rate(eval, a, b)
-        probl = win_rate(-eval, a, b)
+        probl = loss_rate(eval, a, b)
         probd = 1 - probw - probl
         return probw + 0.5 * probd + 0
 
@@ -298,13 +305,13 @@ class ObjectiveFunctions:
         for (eval, mom), count in self.draw.items():
             a, b = self.get_ab(asbs, mom)
             probw = win_rate(eval, a, b)
-            probl = win_rate(-eval, a, b)
+            probl = loss_rate(eval, a, b)
             prob = 1 - probw - probl
             evalLogProb += count * np.log(max(prob, 1e-14))
 
         for (eval, mom), count in self.loss.items():
             a, b = self.get_ab(asbs, mom)
-            prob = win_rate(-eval, a, b)
+            prob = loss_rate(eval, a, b)
             evalLogProb += count * np.log(max(prob, 1e-14))
 
         return -evalLogProb
@@ -370,7 +377,7 @@ class WdlModel:
     def plot_sample_curve_y(self, a, b):
         xdata = np.linspace(*self.plot.axs[0, 0].get_xlim(), num=1000)
         winmodel = win_rate(xdata, a, b)
-        lossmodel = win_rate(-xdata, a, b)
+        lossmodel = loss_rate(xdata, a, b)
         self.plot.axs[0, 0].plot(xdata, winmodel, "r-", label="Model")
         self.plot.axs[0, 0].plot(xdata, lossmodel, "r-")
         self.plot.axs[0, 0].plot(xdata, 1 - winmodel - lossmodel, "r-")
@@ -638,7 +645,7 @@ class WdlModel:
             zwins = []
             for i in range(0, len(model_data_density.xs)):
                 zwins.append(
-                    model_wdl_tuple(
+                    model_wdl_rates(
                         model_data_density.xs[i],
                         model_data_density.ys[i],
                         self.yDataTarget,
@@ -680,7 +687,7 @@ class WdlModel:
             zwins = []
             for i in range(0, len(model_data_density.xs)):
                 zwins.append(
-                    model_wdl_tuple(
+                    model_wdl_rates(
                         model_data_density.xs[i],
                         model_data_density.ys[i],
                         self.yDataTarget,
