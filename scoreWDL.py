@@ -56,63 +56,6 @@ def model_wdl_rates(
     return w, 1 - w - l, l
 
 
-class WdlPlot:
-    def __init__(
-        self,
-        title: str,
-        pgnName: str,
-        setting: Literal["save+show", "save", "no"],
-        normalize_to_pawn_value: int,
-        yPlotMin: int,
-    ):
-        self.title = title
-        self.pgnName = pgnName
-        self.setting = setting
-        self.normalize_to_pawn_value = normalize_to_pawn_value
-        self.yPlotMin = yPlotMin
-
-        self.fig, self.axs = plt.subplots(
-            2, 3, figsize=(11.69 * 1.5, 8.27 * 1.5), constrained_layout=True
-        )
-
-        self.fig.suptitle(self.title, fontsize="x-large")
-
-    def normalized_axis(self, i, j):
-        """provides a second x-axis in pawns, to go with the original axis in internal eval
-        if the engine used a dynamic normalization, the labels will only be exact for
-        the old yDataTarget value for mom (move or material counter)"""
-        ax = self.axs[i, j]
-        ax2 = ax.twiny()
-        tickmin = int(np.ceil(ax.get_xlim()[0] / self.normalize_to_pawn_value)) * 2
-        tickmax = int(np.floor(ax.get_xlim()[1] / self.normalize_to_pawn_value)) * 2 + 1
-        new_tick_locations = np.array(
-            [x / 2 * self.normalize_to_pawn_value for x in range(tickmin, tickmax)]
-        )
-
-        def tick_function(X):
-            V = X / self.normalize_to_pawn_value
-            return [(f"{z:.0f}" if z % 1 < 0.1 else "") for z in V]
-
-        ax2.set_xlim(ax.get_xlim())
-        ax2.set_xticks(new_tick_locations)
-        ax2.set_xticklabels(tick_function(new_tick_locations))
-
-    def poly3_str(self, coeffs: list[float], y_data_target: int) -> str:
-        return (
-            "((%5.3f * x / %d + %5.3f) * x / %d + %5.3f) * x / %d + %5.3f"
-            % tuple(val for pair in zip(coeffs, [y_data_target] * 4) for val in pair)[
-                :-1
-            ]
-        )
-
-    def save(self):
-        plt.savefig(self.pgnName, dpi=300)
-        if self.setting == "save+show":
-            plt.show()
-        plt.close()
-        print(f"Saved graphics to {self.pgnName}.")
-
-
 @dataclass
 class ModelDataDensity:
     """Count data converted to densities"""
@@ -328,6 +271,177 @@ class ModelData:
     label_bs: str
 
 
+class WdlPlot:
+    def __init__(self, args, normalize_to_pawn_value: int):
+        self.setting = args.plot
+        if self.setting == "no":
+            return
+
+        self.pgnName = args.pgnName
+        self.normalize_to_pawn_value = normalize_to_pawn_value
+        self.yData = args.yData
+        self.yDataMax = args.yDataMax
+        self.yDataTarget = args.yDataTarget
+        self.yPlotMin = args.yPlotMin
+
+        self.fig, self.axs = plt.subplots(
+            2, 3, figsize=(11.69 * 1.5, 8.27 * 1.5), constrained_layout=True
+        )
+        self.fig.suptitle(
+            "Summary of win-draw-loss "
+            + ("data" if args.modelFitting == "None" else "model analysis"),
+            fontsize="x-large",
+        )
+
+    def normalized_axis(self, i, j):
+        """provides a second x-axis in pawns, to go with the original axis in internal eval
+        if the engine used a dynamic normalization, the labels will only be exact for
+        the old yDataTarget value for mom (move or material counter)"""
+        ax = self.axs[i, j]
+        ax2 = ax.twiny()
+        tickmin = int(np.ceil(ax.get_xlim()[0] / self.normalize_to_pawn_value)) * 2
+        tickmax = int(np.floor(ax.get_xlim()[1] / self.normalize_to_pawn_value)) * 2 + 1
+        new_tick_locations = np.array(
+            [x / 2 * self.normalize_to_pawn_value for x in range(tickmin, tickmax)]
+        )
+
+        def tick_function(X):
+            V = X / self.normalize_to_pawn_value
+            return [(f"{z:.0f}" if z % 1 < 0.1 else "") for z in V]
+
+        ax2.set_xlim(ax.get_xlim())
+        ax2.set_xticks(new_tick_locations)
+        ax2.set_xticklabels(tick_function(new_tick_locations))
+
+    def poly3_str(self, coeffs: list[float], y_data_target: int) -> str:
+        return (
+            "((%5.3f * x / %d + %5.3f) * x / %d + %5.3f) * x / %d + %5.3f"
+            % tuple(val for pair in zip(coeffs, [y_data_target] * 4) for val in pair)[
+                :-1
+            ]
+        )
+
+    def create_sample_data_y(
+        self,
+        xdata: np.ndarray,
+        y_data_point: int,
+        ywindata: list[float],
+        ydrawdata: list[float],
+        ylossdata: list[float],
+    ):
+        """plot wdl sample data at a fixed yData point"""
+        self.axs[0, 0].plot(xdata, ywindata, "b.", label="Measured winrate")
+        self.axs[0, 0].plot(xdata, ydrawdata, "g.", label="Measured drawrate")
+        self.axs[0, 0].plot(xdata, ylossdata, "c.", label="Measured lossrate")
+
+        self.axs[0, 0].set_xlabel(
+            "Evaluation [lower: Internal Value units, upper: Pawns]"
+        )
+        self.axs[0, 0].set_ylabel("outcome")
+        self.axs[0, 0].legend(fontsize="small")
+        self.axs[0, 0].set_title(
+            f"Comparison of model and measured data at {self.yData} {y_data_point}"
+        )
+        # plot between -3 and 3 pawns
+        xmax = ((3 * self.normalize_to_pawn_value) // 100 + 1) * 100
+        self.axs[0, 0].set_xlim([-xmax, xmax])
+
+        self.normalized_axis(0, 0)
+
+    def create_sample_curve_y(self, a, b):
+        """add the three wdl model curves to subplot axs[0, 0]"""
+        xdata = np.linspace(*self.axs[0, 0].get_xlim(), num=1000)
+        winmodel = win_rate(xdata, a, b)
+        lossmodel = loss_rate(xdata, a, b)
+        self.axs[0, 0].plot(xdata, winmodel, "r-", label="Model")
+        self.axs[0, 0].plot(xdata, lossmodel, "r-")
+        self.axs[0, 0].plot(xdata, 1 - winmodel - lossmodel, "r-")
+
+    def create_plots(self, model_data_density: ModelDataDensity, model: ModelData):
+        print("Preparing contour plots and plots of model parameters.")
+
+        plot_fitted_model = len(model.model_ms) > 0
+        if plot_fitted_model:
+            # graphs of a and b as a function of move/material
+            self.axs[1, 0].plot(model.model_ms, model.model_as, "b.", label="as")
+            self.axs[1, 0].plot(
+                model.model_ms,
+                poly3(model.model_ms / self.yDataTarget, *model.coeffs_a),
+                "r-",
+                label="fit: " + model.label_as,
+            )
+            self.axs[1, 0].plot(model.model_ms, model.model_bs, "g.", label="bs")
+            self.axs[1, 0].plot(
+                model.model_ms,
+                poly3(model.model_ms / self.yDataTarget, *model.coeffs_b),
+                "m-",
+                label="fit: " + model.label_bs,
+            )
+
+            self.axs[1, 0].set_xlabel(self.yData)
+            self.axs[1, 0].set_ylabel("parameters (in internal value units)")
+            self.axs[1, 0].legend(fontsize="x-small")
+            self.axs[1, 0].set_title("Winrate model parameters")
+            self.axs[1, 0].set_ylim(bottom=0.0)
+
+        # now generate contour plots
+        contourlines = [0, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.97, 1.0]
+
+        ylabelStr = self.yData + " (1,3,3,5,9)" * bool(self.yData == "material")
+        ymin, ymax = self.yPlotMin, self.yDataMax
+        points = np.array(list(zip(model_data_density.xs, model_data_density.ys)))
+
+        for j, j_str in enumerate(["win", "draw"]):
+            # for wins, plot between -1 and 3 pawns, for draws between -2 and 2 pawns
+            xmin = -(((1 + j) * self.normalize_to_pawn_value) // 100 + 1) * 100
+            xmax = (((3 - j) * self.normalize_to_pawn_value) // 100 + 1) * 100
+            grid_x, grid_y = np.mgrid[xmin:xmax:30j, ymin:ymax:22j]  # use a 30x22 grid
+
+            for i, i_str in enumerate(
+                ["Data", "Model"] if plot_fitted_model else ["Data"]
+            ):
+                self.axs[i, 1 + j].yaxis.grid(True)
+                self.axs[i, 1 + j].xaxis.grid(True)
+                self.axs[i, 1 + j].set_xlabel(
+                    "Evaluation [lower: Internal Value units, upper: Pawns]"
+                )
+                self.axs[i, 1 + j].set_ylabel(ylabelStr)
+
+                if i_str == "Data":
+                    zz = model_data_density.zdraws if j else model_data_density.zwins
+                else:
+                    zz = model_wdl_rates(
+                        np.asarray(model_data_density.xs),
+                        np.asarray(model_data_density.ys),
+                        self.yDataTarget,
+                        model.coeffs_a,
+                        model.coeffs_b,
+                    )[j]
+                zz = griddata(points, zz, (grid_x, grid_y))
+                cp = self.axs[i, 1 + j].contourf(grid_x, grid_y, zz, contourlines)
+                if j == 0 and i == 0:
+                    self.fig.colorbar(cp, ax=self.axs[:, -1], shrink=0.618)
+
+                CS = self.axs[i, 1 + j].contour(
+                    grid_x, grid_y, zz, contourlines, colors="black"
+                )
+                self.axs[i, 1 + j].clabel(CS, inline=1, colors="black")
+                self.axs[i, 1 + j].set_title(
+                    i_str + ": Fraction of positions leading to a " + j_str
+                )
+                self.normalized_axis(i, 1 + j)
+
+        self.fig.align_labels()
+        self.save()
+
+    def save(self):
+        plt.savefig(self.pgnName, dpi=300)
+        if self.setting == "save+show":
+            plt.show()
+        plt.close()
+        print(f"Saved graphics to {self.pgnName}.")
+
+
 class WdlModel:
     def __init__(
         self,
@@ -349,39 +463,6 @@ class WdlModel:
         self.normalize_to_pawn_value = normalize_to_pawn_value
         self.plot = plot
 
-    def plot_sample_data_y(
-        self,
-        xdata: np.ndarray,
-        ywindata: list[float],
-        ydrawdata: list[float],
-        ylossdata: list[float],
-    ):
-        # plot sample data curves at yDataTarget
-        self.plot.axs[0, 0].plot(xdata, ywindata, "b.", label="Measured winrate")
-        self.plot.axs[0, 0].plot(xdata, ydrawdata, "g.", label="Measured drawrate")
-        self.plot.axs[0, 0].plot(xdata, ylossdata, "c.", label="Measured lossrate")
-
-        self.plot.axs[0, 0].set_xlabel(
-            "Evaluation [lower: Internal Value units, upper: Pawns]"
-        )
-        self.plot.axs[0, 0].set_ylabel("outcome")
-        self.plot.axs[0, 0].legend(fontsize="small")
-        self.plot.axs[0, 0].set_title(
-            f"Comparison of model and measured data at {self.yData} {self.yDataTarget}"
-        )
-        xmax = ((3 * self.plot.normalize_to_pawn_value) // 100 + 1) * 100
-        self.plot.axs[0, 0].set_xlim([-xmax, xmax])
-
-        self.plot.normalized_axis(0, 0)
-
-    def plot_sample_curve_y(self, a, b):
-        xdata = np.linspace(*self.plot.axs[0, 0].get_xlim(), num=1000)
-        winmodel = win_rate(xdata, a, b)
-        lossmodel = loss_rate(xdata, a, b)
-        self.plot.axs[0, 0].plot(xdata, winmodel, "r-", label="Model")
-        self.plot.axs[0, 0].plot(xdata, lossmodel, "r-")
-        self.plot.axs[0, 0].plot(xdata, 1 - winmodel - lossmodel, "r-")
-
     def extract_model_data(
         self,
         xs: list[int],
@@ -392,8 +473,6 @@ class WdlModel:
         win: Counter[tuple[int, int]],
         draw: Counter[tuple[int, int]],
         loss: Counter[tuple[int, int]],
-        plotfunc: Callable[[np.ndarray, list[float], list[float], list[float]], None]
-        | None,
     ):
         evals, moms, winrate, drawrate, lossrate = xs, ys, zwins, zdraws, zlosses
 
@@ -466,8 +545,10 @@ class WdlModel:
             model_bs.append(popt_ab[1])  # append b(mom)
 
             # this shows the observed wdl data for mom=yDataTarget
-            if mom == self.yDataTarget and plotfunc != None:
-                plotfunc(np.asarray(xdata), ywindata, ydrawdata, ylossdata)
+            if mom == self.yDataTarget and self.plot.setting != "no":
+                self.plot.create_sample_data_y(
+                    np.asarray(xdata), mom, ywindata, ydrawdata, ylossdata
+                )
 
         return model_as, model_bs, np.asarray(model_ms)
 
@@ -497,7 +578,6 @@ class WdlModel:
             win,
             draw,
             loss,
-            self.plot_sample_data_y if self.plot.setting != "no" else None,
         )
 
         #
@@ -550,7 +630,7 @@ class WdlModel:
         if self.plot.setting != "no":
             # this shows the fit of the observed wdl data at mom=yDataTarget to
             # the model wdl rates with a=p_a(yDataTarget) and b=p_b(yDataTarget)
-            self.plot_sample_curve_y(fsum_a, fsum_b)
+            self.plot.create_sample_curve_y(fsum_a, fsum_b)
 
         print(f"const int NormalizeToPawnValue = {int(fsum_a)};")
         print(f"Corresponding spread = {int(fsum_b)};")
@@ -576,138 +656,6 @@ class WdlModel:
         return ModelData(
             coeffs_a, coeffs_b, model_ms, model_as, model_bs, label_as, label_bs
         )
-
-    def create_plot(self, model_data_density: ModelDataDensity, model: ModelData):
-        if self.plot.setting == "no":
-            return
-
-        print("Preparing contour plots and plots of model parameters.")
-
-        if self.modelFitting != "None":
-            # graphs of a and b as a function of move/material
-            self.plot.axs[1, 0].plot(model.model_ms, model.model_as, "b.", label="as")
-            self.plot.axs[1, 0].plot(
-                model.model_ms,
-                poly3(model.model_ms / self.yDataTarget, *model.coeffs_a),
-                "r-",
-                label="fit: " + model.label_as,
-            )
-            self.plot.axs[1, 0].plot(model.model_ms, model.model_bs, "g.", label="bs")
-            self.plot.axs[1, 0].plot(
-                model.model_ms,
-                poly3(model.model_ms / self.yDataTarget, *model.coeffs_b),
-                "m-",
-                label="fit: " + model.label_bs,
-            )
-
-            self.plot.axs[1, 0].set_xlabel(self.yData)
-            self.plot.axs[1, 0].set_ylabel("parameters (in internal value units)")
-            self.plot.axs[1, 0].legend(fontsize="x-small")
-            self.plot.axs[1, 0].set_title("Winrate model parameters")
-            self.plot.axs[1, 0].set_ylim(bottom=0.0)
-
-        # now generate contour plots
-        contourlines = [0, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.97, 1.0]
-
-        ylabelStr = self.yData + " (1,3,3,5,9)" * bool(self.yData == "material")
-        for i in [0, 1] if self.modelFitting != "None" else [0]:
-            for j in [1, 2]:
-                self.plot.axs[i, j].yaxis.grid(True)
-                self.plot.axs[i, j].xaxis.grid(True)
-                self.plot.axs[i, j].set_xlabel(
-                    "Evaluation [lower: Internal Value units, upper: Pawns]"
-                )
-                self.plot.axs[i, j].set_ylabel(ylabelStr)
-
-        # for wins, plot between -1 and 3 pawns, using a 30x22 grid
-        xmin = -((1 * self.plot.normalize_to_pawn_value) // 100 + 1) * 100
-        xmax = ((3 * self.plot.normalize_to_pawn_value) // 100 + 1) * 100
-        ymin, ymax = self.plot.yPlotMin, self.yDataMax
-        grid_x, grid_y = np.mgrid[xmin:xmax:30j, ymin:ymax:22j]
-        points = np.array(list(zip(model_data_density.xs, model_data_density.ys)))
-
-        # data
-        zz = griddata(
-            points, model_data_density.zwins, (grid_x, grid_y), method="linear"
-        )
-        cp = self.plot.axs[0, 1].contourf(grid_x, grid_y, zz, contourlines)
-        self.plot.fig.colorbar(cp, ax=self.plot.axs[:, -1], shrink=0.618)
-        CS = self.plot.axs[0, 1].contour(
-            grid_x, grid_y, zz, contourlines, colors="black"
-        )
-        self.plot.axs[0, 1].clabel(CS, inline=1, colors="black")
-        self.plot.axs[0, 1].set_title("Data: Fraction of positions leading to a win")
-
-        self.plot.normalized_axis(0, 1)
-
-        # model
-        if self.modelFitting != "None":
-            zwins = []
-            for i in range(0, len(model_data_density.xs)):
-                zwins.append(
-                    model_wdl_rates(
-                        model_data_density.xs[i],
-                        model_data_density.ys[i],
-                        self.yDataTarget,
-                        model.coeffs_a,
-                        model.coeffs_b,
-                    )[0]
-                )
-            zz = griddata(points, zwins, (grid_x, grid_y), method="linear")
-            cp = self.plot.axs[1, 1].contourf(grid_x, grid_y, zz, contourlines)
-            CS = self.plot.axs[1, 1].contour(
-                grid_x, grid_y, zz, contourlines, colors="black"
-            )
-            self.plot.axs[1, 1].clabel(CS, inline=1, colors="black")
-            self.plot.axs[1, 1].set_title(
-                "Model: Fraction of positions leading to a win"
-            )
-            self.plot.normalized_axis(1, 1)
-
-        # for draws, plot between -2 and 2 pawns, using a 30x22 grid
-        xmin = -((2 * self.plot.normalize_to_pawn_value) // 100 + 1) * 100
-        xmax = ((2 * self.plot.normalize_to_pawn_value) // 100 + 1) * 100
-        grid_x, grid_y = np.mgrid[xmin:xmax:30j, ymin:ymax:22j]
-        points = np.array(list(zip(model_data_density.xs, model_data_density.ys)))
-
-        # data
-        zz = griddata(
-            points, model_data_density.zdraws, (grid_x, grid_y), method="linear"
-        )
-        cp = self.plot.axs[0, 2].contourf(grid_x, grid_y, zz, contourlines)
-        CS = self.plot.axs[0, 2].contour(
-            grid_x, grid_y, zz, contourlines, colors="black"
-        )
-        self.plot.axs[0, 2].clabel(CS, inline=1, colors="black")
-        self.plot.axs[0, 2].set_title("Data: Fraction of positions leading to a draw")
-        self.plot.normalized_axis(0, 2)
-
-        # model
-        if self.modelFitting != "None":
-            zwins = []
-            for i in range(0, len(model_data_density.xs)):
-                zwins.append(
-                    model_wdl_rates(
-                        model_data_density.xs[i],
-                        model_data_density.ys[i],
-                        self.yDataTarget,
-                        model.coeffs_a,
-                        model.coeffs_b,
-                    )[1]
-                )
-            zz = griddata(points, zwins, (grid_x, grid_y), method="linear")
-            cp = self.plot.axs[1, 2].contourf(grid_x, grid_y, zz, contourlines)
-            CS = self.plot.axs[1, 2].contour(
-                grid_x, grid_y, zz, contourlines, colors="black"
-            )
-            self.plot.axs[1, 2].clabel(CS, inline=1, colors="black")
-            self.plot.axs[1, 2].set_title(
-                "Model: Fraction of positions leading to a draw"
-            )
-            self.plot.normalized_axis(1, 2)
-
-        self.plot.fig.align_labels()
-        self.plot.save()
 
 
 if __name__ == "__main__":
@@ -822,18 +770,7 @@ if __name__ == "__main__":
         print("No data was found!")
         exit(0)
 
-    if args.modelFitting != "None":
-        title = "Summary of win-draw-loss model analysis"
-    else:
-        title = "Summary of win-draw-loss data"
-
-    wdl_plot = WdlPlot(
-        title,
-        args.pgnName,
-        args.plot,
-        data_loader.normalize_to_pawn_value,
-        args.yPlotMin,
-    )
+    wdl_plot = WdlPlot(args, data_loader.normalize_to_pawn_value)
 
     wdl_model = WdlModel(
         args.yData,
@@ -862,7 +799,8 @@ if __name__ == "__main__":
         else ModelData([], [], np.asarray([]), [], [], "", "")
     )
 
-    wdl_model.create_plot(model_data_density, model)
+    if args.plot != "no":
+        wdl_plot.create_plots(model_data_density, model)
 
     if args.plot != "save+show":
         print(f"Total elapsed time = {time.time() - tic:.2f}s.")
