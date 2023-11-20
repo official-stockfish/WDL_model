@@ -16,10 +16,7 @@ bookname="UHO_4060_v..epd|UHO_Lichess_4852_v1.epd"
 pgnpath=pgns
 
 outpath=update
-
-# create log directory if needed
 mkdir -p "$outpath"
-
 cd "$outpath"
 
 # clone repos if needed, and pull latest revisions
