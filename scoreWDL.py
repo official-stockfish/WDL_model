@@ -125,30 +125,30 @@ class DataLoader:
             if abs(eval) > 400 or move < moveMin or move > moveMax:
                 continue
 
-            yData = move if yDataFormat == "move" else material
+            mom = move if yDataFormat == "move" else material
 
             # convert the cp eval to the internal value by undoing the normalization
             if self.NormalizeToPawnValue is not None:
-                # undo static rescaling, that was constant in yData
+                # undo static rescaling, that was constant in mom
                 a_internal = self.NormalizeToPawnValue
             else:
-                # undo dynamic rescaling, that was dependent on yData
-                yDataClamped = min(
-                    max(yData, self.NormalizeData["yDataMin"]),
+                # undo dynamic rescaling, that was dependent on mom
+                mom_clamped = min(
+                    max(mom, self.NormalizeData["yDataMin"]),
                     self.NormalizeData["yDataMax"],
                 )
                 a_internal = poly3(
-                    yDataClamped / self.NormalizeData["yDataTarget"],
+                    mom_clamped / self.NormalizeData["yDataTarget"],
                     *self.NormalizeData["as"],
                 )
             eval_internal = round(eval * a_internal / 100)
 
             if result == "W":
-                win[eval_internal, yData] += v
+                win[eval_internal, mom] += v
             elif result == "D":
-                draw[eval_internal, yData] += v
+                draw[eval_internal, mom] += v
             elif result == "L":
-                loss[eval_internal, yData] += v
+                loss[eval_internal, mom] += v
 
         print(
             f"Retained (W,D,L) = ({sum(win.values())}, {sum(draw.values())}, {sum(loss.values())}) positions."
@@ -284,7 +284,7 @@ class WdlPlot:
         self.yDataTarget = args.yDataTarget
         self.yPlotMin = args.yPlotMin
 
-        self.fig, self.axs = plt.subplots(
+        self.fig, self.axs = plt.subplots(  # set figure size to A4 x 1.5
             2, 3, figsize=(11.69 * 1.5, 8.27 * 1.5), constrained_layout=True
         )
         self.fig.suptitle(
@@ -413,8 +413,6 @@ class WdlPlot:
                     )[j]
                 zz = griddata(points, zz, (grid_x, grid_y))
                 cp = self.axs[i, 1 + j].contourf(grid_x, grid_y, zz, contourlines)
-                if j == 0 and i == 0:
-                    self.fig.colorbar(cp, ax=self.axs[:, -1], shrink=0.618)
 
                 CS = self.axs[i, 1 + j].contour(
                     grid_x, grid_y, zz, contourlines, colors="black"
@@ -425,6 +423,7 @@ class WdlPlot:
                 )
                 self.normalized_axis(i, 1 + j)
 
+        self.fig.colorbar(cp, ax=self.axs[:, -1], shrink=0.6)
         self.fig.align_labels()
         self.save()
 
