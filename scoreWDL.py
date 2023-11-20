@@ -4,7 +4,7 @@ from collections import Counter
 from dataclasses import dataclass
 from scipy.interpolate import griddata
 from scipy.optimize import curve_fit, minimize
-from typing import Literal, Callable, Any
+from typing import Literal, cast
 
 
 def win_rate(eval: int | np.ndarray, a, b):
@@ -41,8 +41,8 @@ def poly3(x: float | np.ndarray, c_3, c_2, c_1, c_0) -> float:
 
 
 def model_wdl_rates(
-    eval: int,
-    mom: int,
+    eval: int | np.ndarray,
+    mom: int | np.ndarray,
     mom_target: int,
     coeffs_a: list[float],
     coeffs_b: list[float],
@@ -414,16 +414,20 @@ class WdlPlot:
                 )
                 self.axs[i, 1 + j].set_ylabel(ylabelStr)
 
+                zz: np.ndarray | list[float]
                 if i_str == "Data":
                     zz = model_data_density.zdraws if j else model_data_density.zwins
                 else:
-                    zz = model_wdl_rates(
-                        np.asarray(model_data_density.xs),
-                        np.asarray(model_data_density.ys),
-                        self.yDataTarget,
-                        model.coeffs_a,
-                        model.coeffs_b,
-                    )[j]
+                    zz = cast(
+                        np.ndarray,
+                        model_wdl_rates(
+                            np.asarray(model_data_density.xs),
+                            np.asarray(model_data_density.ys),
+                            self.yDataTarget,
+                            model.coeffs_a,
+                            model.coeffs_b,
+                        )[j],
+                    )
                 zz = griddata(points, zz, (grid_x, grid_y))
                 cp = self.axs[i, 1 + j].contourf(grid_x, grid_y, zz, contourlines)
 
