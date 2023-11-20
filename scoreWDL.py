@@ -185,19 +185,26 @@ class DataLoader:
         return ModelDataDensity(xs, ys, zwins, zdraws, zlosses)
 
 
-class ObjectiveFunctions:
-    """Collects objective functions that can be minimized to fit the win draw loss data"""
+class ObjectiveFunction:
+    """Provides objective functions that can be minimized to fit the win draw loss data"""
 
     def __init__(
         self,
+        modelFitting: str,
         win: Counter[tuple[int, int]],
         draw: Counter[tuple[int, int]],
         loss: Counter[tuple[int, int]],
         y_data_target: int,
     ):
-        self.win = win
-        self.draw = draw
-        self.loss = loss
+        if modelFitting == "optimizeScore":
+            # minimize the l2 error of the predicted score
+            self.objective_function = self.scoreError
+        elif modelFitting == "optimizeProbability":
+            # maximize the likelihood of predicting the game outcome
+            self.objective_function = self.evalLogProbability
+        else:
+            self.objective_function = None
+        self.win, self.draw, self.loss = win, draw, loss
         self.y_data_target = y_data_target
 
     def get_ab(self, asbs: list[float], mom: int):
@@ -258,6 +265,18 @@ class ObjectiveFunctions:
             evalLogProb += count * np.log(max(prob, 1e-14))
 
         return -evalLogProb
+
+    def minimize(self, initial_ab):
+        if self.objective_function is None:
+            return initial_ab
+
+        res = minimize(
+            self.objective_function,
+            initial_ab,
+            method="Powell",
+            options={"maxiter": 100000, "disp": False, "xtol": 1e-6},
+        )
+        return res.x, res.message
 
 
 @dataclass
@@ -512,25 +531,14 @@ class WdlModel:
                     losssubset[eval, momkey] = count
 
                 # minimize the objective function
-                OF = ObjectiveFunctions(
-                    winsubset, drawsubset, losssubset, self.yDataTarget
+                OF = ObjectiveFunction(
+                    self.modelFitting,
+                    winsubset,
+                    drawsubset,
+                    losssubset,
+                    self.yDataTarget,
                 )
-
-                if self.modelFitting == "optimizeScore":
-                    objectiveFunction = OF.scoreError
-                elif self.modelFitting == "optimizeProbability":
-                    objectiveFunction = OF.evalLogProbability
-                else:
-                    objectiveFunction = None
-                res = minimize(
-                    objectiveFunction,
-                    popt_ab,
-                    method="Powell",
-                    options={"maxiter": 100000, "disp": False, "xtol": 1e-6},
-                )
-                popt_ab = res.x
-
-            # prepare output
+                popt_ab, _ = OF.minimize(popt_ab)
 
             # store result
             model_ms.append(mom)
@@ -583,31 +591,15 @@ class WdlModel:
 
         # possibly refine p_a and p_b by optimizing a given objective function
         if self.modelFitting != "fitDensity":
-            OF = ObjectiveFunctions(win, draw, loss, self.yDataTarget)
+            OF = ObjectiveFunction(self.modelFitting, win, draw, loss, self.yDataTarget)
 
-            if self.modelFitting == "optimizeScore":
-                # minimize the l2 error of the predicted score
-                objectiveFunction = OF.scoreError
-            elif self.modelFitting == "optimizeProbability":
-                # maximize the likelihood of predicting the game outcome
-                objectiveFunction = OF.evalLogProbability
-            else:
-                objectiveFunction = None
-
-            if objectiveFunction:
-                popt_all = coeffs_a.tolist() + coeffs_b.tolist()
-                print("Initial objective function: ", objectiveFunction(popt_all))
-                res = minimize(
-                    objectiveFunction,
-                    popt_all,
-                    method="Powell",
-                    options={"maxiter": 100000, "disp": False, "xtol": 1e-6},
-                )
-                coeffs_a = res.x[0:4]  # store final p_a
-                coeffs_b = res.x[4:8]  # store final p_b
-                popt_all = res.x
-                print("Final objective function:   ", objectiveFunction(popt_all))
-                print(res.message)
+            popt_all = coeffs_a.tolist() + coeffs_b.tolist()
+            print("Initial objective function: ", OF.objective_function(popt_all))
+            popt_all, message = OF.minimize(popt_all)
+            coeffs_a = popt_all[0:4]  # store final p_a
+            coeffs_b = popt_all[4:8]  # store final p_b
+            print("Final objective function:   ", OF.objective_function(popt_all))
+            print(message)
 
         # prepare output
         label_as = "as = " + self.plot.poly3_str(coeffs_a, self.yDataTarget)
