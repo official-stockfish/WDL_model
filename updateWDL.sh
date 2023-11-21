@@ -58,6 +58,7 @@ if [[ ! -e "$fixfen.gz" ]]; then
     done
     sort -u "$fixfen" -o _tmp_"$fixfen" && mv _tmp_"$fixfen" "$fixfen"
     gzip "$fixfen"
+    mv "$fixfen".gz books/"$fixfen.gz"
 fi
 
 # get a SF revision list
@@ -93,7 +94,7 @@ echo "Look recursively in directory $pgnpath for games from SPRT tests using" \
     "$oldepoch) and $lastrev (from $newepoch)."
 
 # obtain the WDL data from games of SPRT tests of the SF revisions of interest
-./scoreWDLstat --dir $pgnpath -r --matchRev $regex_pattern --matchBook "$bookname" --fixFENsource "$fixfen.gz" --SPRTonly -o "$outpath"/updateWDL.json >&"$outpath"/scoreWDLstat.log
+./scoreWDLstat --dir $pgnpath -r --matchRev $regex_pattern --matchBook "$bookname" --fixFENsource books/"$fixfen.gz" --SPRTonly -o "$outpath"/updateWDL.json >&"$outpath"/scoreWDLstat.log
 
 # fit the new WDL model, keeping anchor at move 32
 # we ignore the first 2 full moves out of book for fitting (11=8+1+2), and the first 9 for (contour) plotting (18=8+1+9)
