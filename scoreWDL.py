@@ -192,12 +192,12 @@ class ObjectiveFunction:
     ):
         if modelFitting == "optimizeScore":
             # minimize the l2 error of the predicted score
-            self.objective_function = self.scoreError
+            self._objective_function = self.scoreError
         elif modelFitting == "optimizeProbability":
             # maximize the likelihood of predicting the game outcome
-            self.objective_function = self.evalLogProbability
+            self._objective_function = self.evalLogProbability
         else:
-            self.objective_function = None
+            self._objective_function = None
         self.win, self.draw, self.loss = win, draw, loss
         self.y_data_target = y_data_target
 
@@ -260,12 +260,15 @@ class ObjectiveFunction:
 
         return -evalLogProb
 
+    def __call__(self, asbs):
+        return 0 if self._objective_function is None else self._objective_function(asbs)
+
     def minimize(self, initial_ab):
-        if self.objective_function is None:
-            return initial_ab
+        if self._objective_function is None:
+            return initial_ab, "No objective function defined, return initial guess."
 
         res = minimize(
-            self.objective_function,
+            self._objective_function,
             initial_ab,
             method="Powell",
             options={"maxiter": 100000, "disp": False, "xtol": 1e-6},
@@ -508,14 +511,14 @@ class WdlModel:
                     losssubset[eval, momkey] = count
 
                 # minimize the objective function
-                OF = ObjectiveFunction(
+                objective_function = ObjectiveFunction(
                     self.modelFitting,
                     winsubset,
                     drawsubset,
                     losssubset,
                     self.yDataTarget,
                 )
-                popt_ab, _ = OF.minimize(popt_ab)
+                popt_ab, _ = objective_function.minimize(popt_ab)
 
             # store result
             model_ms.append(mom)
@@ -560,14 +563,16 @@ class WdlModel:
 
         # possibly refine p_a and p_b by optimizing a given objective function
         if self.modelFitting != "fitDensity":
-            OF = ObjectiveFunction(self.modelFitting, win, draw, loss, self.yDataTarget)
+            objective_function = ObjectiveFunction(
+                self.modelFitting, win, draw, loss, self.yDataTarget
+            )
 
             popt_all = coeffs_a.tolist() + coeffs_b.tolist()
-            print("Initial objective function: ", OF.objective_function(popt_all))
-            popt_all, message = OF.minimize(popt_all)
+            print("Initial objective function: ", objective_function(popt_all))
+            popt_all, message = objective_function.minimize(popt_all)
             coeffs_a = popt_all[0:4]  # store final p_a
             coeffs_b = popt_all[4:8]  # store final p_b
-            print("Final objective function:   ", OF.objective_function(popt_all))
+            print("Final objective function:   ", objective_function(popt_all))
             print(message)
 
         # prepare output
