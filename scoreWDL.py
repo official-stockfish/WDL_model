@@ -69,15 +69,20 @@ class ModelDataDensity:
 
 class DataLoader:
     def __init__(self, args):
-        self.NormalizeToPawnValue = args.NormalizeToPawnValue
-        if args.NormalizeData is not None:
-            self.NormalizeData = json.loads(args.NormalizeData)
+        self.NormalizeData = args.NormalizeData
+        if self.NormalizeData is not None:
+            self.NormalizeData = json.loads(self.NormalizeData)
             self.NormalizeData["as"] = [float(x) for x in self.NormalizeData["as"]]
+        self.normalize_to_pawn_value = (
+            args.NormalizeToPawnValue
+            if self.NormalizeData is None
+            else int(sum(self.NormalizeData["as"]))
+        )
         print(
             "Converting evals with "
             + (
-                f"NormalizeToPawnValue = {self.NormalizeToPawnValue}."
-                if self.NormalizeToPawnValue is not None
+                f"NormalizeToPawnValue = {self.normalize_to_pawn_value}."
+                if self.NormalizeData is None
                 else f"NormalizeData = {self.NormalizeData}."
             )
         )
@@ -122,9 +127,9 @@ class DataLoader:
             mom = move if yDataFormat == "move" else material
 
             # convert the cp eval to the internal value by undoing the normalization
-            if self.NormalizeToPawnValue is not None:
+            if self.NormalizeData is None:
                 # undo static rescaling, that was constant in mom
-                a_internal = self.NormalizeToPawnValue
+                a_internal = self.normalize_to_pawn_value
             else:
                 # undo dynamic rescaling, that was dependent on mom
                 mom_clamped = min(
@@ -146,12 +151,6 @@ class DataLoader:
 
         print(
             f"Retained (W,D,L) = ({sum(win.values())}, {sum(draw.values())}, {sum(loss.values())}) positions."
-        )
-
-        self.normalize_to_pawn_value = (
-            self.NormalizeToPawnValue
-            if self.NormalizeToPawnValue is not None
-            else int(sum(self.NormalizeData["as"]))
         )
 
         return win, draw, loss
