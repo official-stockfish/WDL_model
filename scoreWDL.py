@@ -348,9 +348,7 @@ class WdlPlot:
         )
         self.axs[0, 0].set_ylabel("outcome")
         self.axs[0, 0].legend(fontsize="small")
-        self.axs[0, 0].set_title(
-            f"Comparison of model and measured data at {self.yData} {y_data_point}"
-        )
+        self.axs[0, 0].set_title(f"Measured data at {self.yData} {y_data_point}")
         # plot between -3 and 3 pawns
         xmax = ((3 * self.normalize_to_pawn_value) // 100 + 1) * 100
         self.axs[0, 0].set_xlim([-xmax, xmax])
@@ -365,6 +363,9 @@ class WdlPlot:
         self.axs[0, 0].plot(xdata, winmodel, "r-", label="Model")
         self.axs[0, 0].plot(xdata, lossmodel, "r-")
         self.axs[0, 0].plot(xdata, 1 - winmodel - lossmodel, "r-")
+        self.axs[0, 0].set_title(
+            "Comparison of model and m" + self.axs[0, 0].title.get_text()[1:]
+        )
 
     def create_plots(self, model_data_density: ModelDataDensity, model: ModelData):
         print("Preparing contour plots and plots of model parameters.")
@@ -473,7 +474,11 @@ class WdlModel:
     ):
         model_ms, model_as, model_bs = [], [], []
 
-        for mom in range(self.yDataMin, self.yDataMax + 1):
+        for mom in (
+            range(self.yDataMin, self.yDataMax + 1)
+            if self.modelFitting != "None"
+            else [self.yDataTarget]
+        ):
             xdata, ywindata, ydrawdata, ylossdata = [], [], [], []
             for i, momkey in enumerate(model_data_density.ys):
                 if not momkey == mom:
@@ -482,6 +487,14 @@ class WdlModel:
                 ywindata.append(model_data_density.zwins[i])
                 ydrawdata.append(model_data_density.zdraws[i])
                 ylossdata.append(model_data_density.zlosses[i])
+
+            # this shows the observed wdl data for mom=yDataTarget
+            if mom == self.yDataTarget and self.plot.setting != "no":
+                self.plot.create_sample_data_y(
+                    np.asarray(xdata), mom, ywindata, ydrawdata, ylossdata
+                )
+                if self.modelFitting == "None":
+                    break
 
             if len(ywindata) < 10:
                 print(
@@ -495,8 +508,8 @@ class WdlModel:
 
             # refine the local result based on data, optimizing an objective function
 
-            # get the subset of data relevant for this mom
             if self.modelFitting != "fitDensity":
+                # get the subset of data relevant for this mom
                 winsubset: Counter[tuple[int, int]] = Counter()
                 drawsubset: Counter[tuple[int, int]] = Counter()
                 losssubset: Counter[tuple[int, int]] = Counter()
@@ -528,12 +541,6 @@ class WdlModel:
             model_as.append(popt_ab[0])  # append a(mom)
             model_bs.append(popt_ab[1])  # append b(mom)
 
-            # this shows the observed wdl data for mom=yDataTarget
-            if mom == self.yDataTarget and self.plot.setting != "no":
-                self.plot.create_sample_data_y(
-                    np.asarray(xdata), mom, ywindata, ydrawdata, ylossdata
-                )
-
         return model_as, model_bs, np.asarray(model_ms)
 
     def fit_model(
@@ -543,10 +550,8 @@ class WdlModel:
         draw: Counter[tuple[int, int]],
         loss: Counter[tuple[int, int]],
     ) -> ModelData:
-        if self.modelFitting == "None":
-            return ModelData([], [], np.asarray([]), [], [], "", "")
-
-        print(f"Fit WDL model based on {self.yData}.")
+        if self.modelFitting != "None":
+            print(f"Fit WDL model based on {self.yData}.")
         #
         # for each value of mom of interest, find a(mom) and b(mom) so that the induced
         # 1D win rate function best matches the observed win frequencies
@@ -555,6 +560,9 @@ class WdlModel:
         model_as, model_bs, model_ms = self.extract_model_data(
             model_data_density, win, draw, loss
         )
+
+        if self.modelFitting == "None":
+            return ModelData([], [], np.asarray([]), [], [], "", "")
 
         #
         # now capture the functional behavior of a and b as functions of mom
