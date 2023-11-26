@@ -49,7 +49,7 @@ fi
 bookhash=$(echo -n "${matching_books[@]}" | md5sum | cut -d ' ' -f 1)
 fixfen="fixfen_$bookhash.epd"
 
-if [[ ! -e "$fixfen.gz" ]]; then
+if [[ ! -e books/"$fixfen.gz" ]]; then
     rm -f "$fixfen"
     for book in "${matching_books[@]}"; do
         unzip -o books/"$book".zip >&unzip"$book".log
