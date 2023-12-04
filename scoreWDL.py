@@ -1,4 +1,4 @@
-import argparse, json, matplotlib.pyplot as plt, numpy as np, time
+import argparse, json, matplotlib.pyplot as plt, numpy as np, time, math
 from ast import literal_eval
 from collections import Counter
 from dataclasses import dataclass
@@ -223,8 +223,9 @@ class ObjectiveFunction:
         return probw + 0.5 * probd + 0
 
     def scoreError(self, asbs: list[float]):
-        """Sum of the squared error on the game score"""
+        """Root mean squared error on the game score"""
         scoreErr = 0
+        totalCount = 0
 
         for d, score in [
             (self.win.items(), 1),
@@ -232,17 +233,20 @@ class ObjectiveFunction:
             (self.loss.items(), 0),
         ]:
             for (eval, mom), count in d:
+                totalCount += count
                 scoreErr += count * (self.estimateScore(asbs, eval, mom) - score) ** 2
 
-        return scoreErr
+        return math.sqrt(scoreErr / totalCount)
 
     def evalLogProbability(self, asbs: list[float]):
-        """-log(product of game outcome probability)"""
+        """-log((product of game outcome probability)**(1/N))"""
         evalLogProb = 0
+        totalCount = 0
 
         for (eval, mom), count in self.win.items():
             a, b = self.get_ab(asbs, mom)
             prob = win_rate(eval, a, b)
+            totalCount += count
             evalLogProb += count * np.log(max(prob, 1e-14))
 
         for (eval, mom), count in self.draw.items():
@@ -250,14 +254,16 @@ class ObjectiveFunction:
             probw = win_rate(eval, a, b)
             probl = loss_rate(eval, a, b)
             prob = 1 - probw - probl
+            totalCount += count
             evalLogProb += count * np.log(max(prob, 1e-14))
 
         for (eval, mom), count in self.loss.items():
             a, b = self.get_ab(asbs, mom)
             prob = loss_rate(eval, a, b)
+            totalCount += count
             evalLogProb += count * np.log(max(prob, 1e-14))
 
-        return -evalLogProb
+        return -evalLogProb / totalCount
 
     def __call__(self, asbs):
         return 0 if self._objective_function is None else self._objective_function(asbs)
