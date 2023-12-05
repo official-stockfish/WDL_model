@@ -41,7 +41,7 @@ class WdlData:
     """stores wdl raw data counts and wdl densities in six 2D numpy arrays, with
     'coordinates' (mom, eval), for mom = move/material and internal eval"""
 
-    def __init__(self, args, eval_max):
+    def __init__(self, args):
         self.yData = args.yData
         self.filenames = args.filename
         self.NormalizeData = args.NormalizeData
@@ -64,7 +64,7 @@ class WdlData:
         # numpy arrays have nonnegative indices, so save the two offsets for later
         dim_mom = args.yDataMax - args.yDataMin + 1
         self.offset_mom = args.yDataMin
-        self.eval_max = round(eval_max * self.normalize_to_pawn_value / 100)
+        self.eval_max = round(args.evalMax * self.normalize_to_pawn_value / 100)
         dim_eval = 2 * self.eval_max + 1
         self.offset_eval = -self.eval_max
 
@@ -393,7 +393,8 @@ class WdlPlot:
     def __init__(self, args, normalize_to_pawn_value: int):
         self.setting = args.plot
         self.pgnName = args.pgnName
-        self.yPlotMin = args.yPlotMin  # TODO: make yPlotMax a cli parameter
+        self.yPlotMin = args.yPlotMin
+        self.yPlotMax = args.yPlotMax
         self.normalize_to_pawn_value = normalize_to_pawn_value
 
         self.fig, self.axs = plt.subplots(  # set figure size to A4 x 1.5
@@ -481,7 +482,7 @@ class WdlPlot:
         contourlines = [0, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.97, 1.0]
 
         ylabelStr = wdl_data.yData + " (1,3,3,5,9)" * bool(wdl_data.yData == "material")
-        ymin, ymax = self.yPlotMin, wdl_data.wins.shape[0] + wdl_data.offset_mom - 1
+        ymin, ymax = self.yPlotMin, self.yPlotMax
         points = np.array(list(zip(xs, ys)))
 
         for j, j_str in enumerate(["win", "draw"]):
@@ -562,6 +563,12 @@ if __name__ == "__main__":
         help="Upper move number limit for filter applied to json data.",
     )
     parser.add_argument(
+        "--evalMax",
+        type=int,
+        default=400,
+        help="Filter for absolute eval (in cp) applied to json data.",
+    )
+    parser.add_argument(
         "--yData",
         choices=["move", "material"],
         default="move",
@@ -589,6 +596,11 @@ if __name__ == "__main__":
         "--yPlotMin",
         type=int,
         help="Overrides --yDataMin for plotting.",
+    )
+    parser.add_argument(
+        "--yPlotMax",
+        type=int,
+        help="Overrides --yDataMax for plotting.",
     )
     parser.add_argument(
         "--plot",
@@ -622,14 +634,12 @@ if __name__ == "__main__":
         if args.yDataMax == 120 and args.yDataMin == 3:
             args.yDataMin, args.yDataMax = 10, 78
 
-    if args.yPlotMin is None:
-        args.yPlotMin = (
-            max(10, args.yDataMin) if args.yData == "move" else args.yDataMin
-        )
+    args.yPlotMin = args.yDataMin if args.yPlotMin is None else args.yPlotMin
+    args.yPlotMax = args.yDataMax if args.yPlotMax is None else args.yPlotMax
 
     tic = time.time()
 
-    wdl_data = WdlData(args, eval_max=400)  # TODO: make 400 a cli parameter
+    wdl_data = WdlData(args)
     wdl_data.load_json_data(args.moveMin, args.moveMax)
 
     if args.modelFitting != "None":
