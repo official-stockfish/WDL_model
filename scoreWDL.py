@@ -379,14 +379,9 @@ class WdlModel:
 
         print("Parameters in internal value units: ")
         print(self.label_p_a + "\n" + self.label_p_b)
-        print(
-            "     constexpr double as[] = {%13.8f, %13.8f, %13.8f, %13.8f};"
-            % tuple(self.coeffs_a)
-        )
-        print(
-            "     constexpr double bs[] = {%13.8f, %13.8f, %13.8f, %13.8f };"
-            % tuple(self.coeffs_b)
-        )
+        for ab, coeffs in [("a", self.coeffs_a), ("b", self.coeffs_b)]:
+            cstr = ", ".join([f"{c:.8f}" for c in coeffs])
+            print(f"   constexpr double {ab}s[] = {{{cstr}}};")
 
 
 class WdlPlot:
