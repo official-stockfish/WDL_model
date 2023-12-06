@@ -43,6 +43,8 @@ class WdlData:
 
     def __init__(self, args):
         self.yData = args.yData
+        self.yDataMin = args.yDataMin
+        self.yDataMax = args.yDataMax
         self.filenames = args.filename
         self.NormalizeData = args.NormalizeData
         if self.NormalizeData is not None:
@@ -62,8 +64,8 @@ class WdlData:
         )
 
         # numpy arrays have nonnegative indices, so save the two offsets for later
-        dim_mom = args.yDataMax - args.yDataMin + 1
-        self.offset_mom = args.yDataMin
+        dim_mom = self.yDataMax - self.yDataMin + 1
+        self.offset_mom = self.yDataMin
         self.eval_max = round(args.evalMax * self.normalize_to_pawn_value / 100)
         dim_eval = 2 * self.eval_max + 1
         self.offset_eval = -self.eval_max
@@ -100,6 +102,9 @@ class WdlData:
                         continue
 
                     mom = move if self.yData == "move" else material
+
+                    if mom < self.yDataMin or mom > self.yDataMax:
+                        continue
 
                     # convert the cp eval to the internal value by undoing the normalization
                     if self.NormalizeData is None:
