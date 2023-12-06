@@ -43,6 +43,8 @@ class WdlData:
 
     def __init__(self, args):
         self.yData = args.yData
+        self.yDataMin = args.yDataMin
+        self.yDataMax = args.yDataMax
         self.filenames = args.filename
         self.NormalizeData = args.NormalizeData
         if self.NormalizeData is not None:
@@ -62,8 +64,8 @@ class WdlData:
         )
 
         # numpy arrays have nonnegative indices, so save the two offsets for later
-        dim_mom = args.yDataMax - args.yDataMin + 1
-        self.offset_mom = args.yDataMin
+        dim_mom = self.yDataMax - self.yDataMin + 1
+        self.offset_mom = self.yDataMin
         self.eval_max = round(args.evalMax * self.normalize_to_pawn_value / 100)
         dim_eval = 2 * self.eval_max + 1
         self.offset_eval = -self.eval_max
@@ -85,7 +87,7 @@ class WdlData:
         elif result == "L":
             self.losses[mom_idx, eval_idx] += value
 
-    def load_json_data(self, move_min, move_max, mom_min, mom_max):
+    def load_json_data(self, move_min, move_max):
         """load the WDL data from json: the keys describe the position (result, move, material, eval),
         and the values are the observed count of these positions"""
         for filename in self.filenames:
@@ -101,7 +103,7 @@ class WdlData:
 
                     mom = move if self.yData == "move" else material
 
-                    if mom < mom_min or mom > mom_max:
+                    if mom < self.yDataMin or mom > self.yDataMax:
                         continue
 
                     # convert the cp eval to the internal value by undoing the normalization
@@ -638,7 +640,7 @@ if __name__ == "__main__":
     tic = time.time()
 
     wdl_data = WdlData(args)
-    wdl_data.load_json_data(args.moveMin, args.moveMax, args.yDataMin, args.yDataMax)
+    wdl_data.load_json_data(args.moveMin, args.moveMax)
 
     if args.modelFitting != "None":
         wdl_model = WdlModel(args)
