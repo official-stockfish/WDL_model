@@ -85,7 +85,7 @@ class WdlData:
         elif result == "L":
             self.losses[mom_idx, eval_idx] += value
 
-    def load_json_data(self, move_min, move_max):
+    def load_json_data(self, move_min, move_max, mom_min, mom_max):
         """load the WDL data from json: the keys describe the position (result, move, material, eval),
         and the values are the observed count of these positions"""
         for filename in self.filenames:
@@ -100,6 +100,9 @@ class WdlData:
                         continue
 
                     mom = move if self.yData == "move" else material
+
+                    if mom < mom_min or mom > mom_max:
+                        continue
 
                     # convert the cp eval to the internal value by undoing the normalization
                     if self.NormalizeData is None:
@@ -635,7 +638,7 @@ if __name__ == "__main__":
     tic = time.time()
 
     wdl_data = WdlData(args)
-    wdl_data.load_json_data(args.moveMin, args.moveMax)
+    wdl_data.load_json_data(args.moveMin, args.moveMax, args.yDataMin, args.yDataMax)
 
     if args.modelFitting != "None":
         wdl_model = WdlModel(args)
