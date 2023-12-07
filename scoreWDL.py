@@ -43,9 +43,8 @@ class WdlData:
 
     def __init__(self, args):
         self.yData = args.yData
-        self.yDataMin = args.yDataMin
-        self.yDataMax = args.yDataMax
-        self.filenames = args.filename
+        self.moveMin, self.moveMax = args.moveMin, args.moveMax
+        self.materialMin, self.materialMax = args.materialMin, args.materialMax
         self.NormalizeData = args.NormalizeData
         if self.NormalizeData is not None:
             self.NormalizeData = json.loads(self.NormalizeData)
@@ -64,8 +63,12 @@ class WdlData:
         )
 
         # numpy arrays have nonnegative indices, so save the two offsets for later
-        dim_mom = self.yDataMax - self.yDataMin + 1
-        self.offset_mom = self.yDataMin
+        if self.yData == "move":
+            dim_mom = self.moveMax - self.moveMin + 1
+            self.offset_mom = self.moveMin
+        else:
+            dim_mom = self.materialMax - self.materialMin + 1
+            self.offset_mom = self.materialMin
         self.eval_max = round(args.evalMax * self.normalize_to_pawn_value / 100)
         dim_eval = 2 * self.eval_max + 1
         self.offset_eval = -self.eval_max
@@ -87,10 +90,10 @@ class WdlData:
         elif result == "L":
             self.losses[mom_idx, eval_idx] += value
 
-    def load_json_data(self, move_min, move_max):
+    def load_json_data(self, filenames):
         """load the WDL data from json: the keys describe the position (result, move, material, eval),
         and the values are the observed count of these positions"""
-        for filename in self.filenames:
+        for filename in filenames:
             print(f"Reading eval stats from {filename}.")
             with open(filename) as infile:
                 data = json.load(infile)
@@ -98,13 +101,12 @@ class WdlData:
                 for key, value in data.items() if data else []:
                     result, move, material, eval = literal_eval(key)
 
-                    if move < move_min or move > move_max:
+                    if move < self.moveMin or move > self.moveMax:
+                        continue
+                    if material < self.materialMin or material > self.materialMax:
                         continue
 
                     mom = move if self.yData == "move" else material
-
-                    if mom < self.yDataMin or mom > self.yDataMax:
-                        continue
 
                     # convert the cp eval to the internal value by undoing the normalization
                     if self.NormalizeData is None:
@@ -553,7 +555,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--moveMin",
         type=int,
-        default=0,
+        default=3,
         help="Lower move number limit for filter applied to json data.",
     )
     parser.add_argument(
@@ -561,6 +563,18 @@ if __name__ == "__main__":
         type=int,
         default=120,
         help="Upper move number limit for filter applied to json data.",
+    )
+    parser.add_argument(
+        "--materialMin",
+        type=int,
+        default=0,
+        help="Lower material count limit for filter applied to json data.",
+    )
+    parser.add_argument(
+        "--materialMax",
+        type=int,
+        default=120,
+        help="Upper material count limit for filter applied to json data.",
     )
     parser.add_argument(
         "--evalMax",
@@ -575,18 +589,6 @@ if __name__ == "__main__":
         help="Select y-axis data used for plotting and fitting.",
     )
     parser.add_argument(
-        "--yDataMin",
-        type=int,
-        default=3,
-        help="Minimum value of yData to consider for plotting and fitting.",
-    )
-    parser.add_argument(
-        "--yDataMax",
-        type=int,
-        default=120,
-        help="Maximum value of yData to consider for plotting and fitting.",
-    )
-    parser.add_argument(
         "--yDataTarget",
         type=int,
         default=32,
@@ -595,12 +597,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--yPlotMin",
         type=int,
-        help="Overrides --yDataMin for plotting.",
+        help="Overrides --moveMin/--materialMin for plotting.",
     )
     parser.add_argument(
         "--yPlotMax",
         type=int,
-        help="Overrides --yDataMax for plotting.",
+        help="Overrides --moveMax/--materialMax for plotting.",
     )
     parser.add_argument(
         "--plot",
@@ -629,18 +631,15 @@ if __name__ == "__main__":
             args.NormalizeData is None
         ), "Error: Can only specify one of --NormalizeToPawnValue and --NormalizeData."
 
-    if args.yData == "material":
-        # fix default values for material
-        if args.yDataMax == 120 and args.yDataMin == 3:
-            args.yDataMin, args.yDataMax = 10, 78
-
-    args.yPlotMin = args.yDataMin if args.yPlotMin is None else args.yPlotMin
-    args.yPlotMax = args.yDataMax if args.yPlotMax is None else args.yPlotMax
+    if args.yPlotMin is None:
+        args.yPlotMin = args.moveMin if args.yData == "move" else args.materialMin
+    if args.yPlotMax is None:
+        args.yPlotMax = args.moveMax if args.yData == "move" else args.materialMax
 
     tic = time.time()
 
     wdl_data = WdlData(args)
-    wdl_data.load_json_data(args.moveMin, args.moveMax)
+    wdl_data.load_json_data(args.filename)
 
     if args.modelFitting != "None":
         wdl_model = WdlModel(args)
