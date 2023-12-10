@@ -42,15 +42,17 @@ class WdlData:
     'coordinates' (mom, eval), for mom = move/material and internal eval"""
 
     def __init__(self, args):
-        self.yData = args.yData
-        self.yDataMin = args.yDataMin
-        self.yDataMax = args.yDataMax
-        self.filenames = args.filename
+        self.momType = args.momType
+        self.moveMin, self.moveMax = args.moveMin, args.moveMax
+        self.materialMin, self.materialMax = args.materialMin, args.materialMax
+        self.winMin = args.winMin
         self.NormalizeData = args.NormalizeData
         if self.NormalizeData is not None:
             self.NormalizeData = json.loads(self.NormalizeData)
             self.NormalizeData["as"] = [float(x) for x in self.NormalizeData["as"]]
             self.normalize_to_pawn_value = int(sum(self.NormalizeData["as"]))
+            if not "momType" in self.NormalizeData:
+                self.NormalizeData["momType"] = "move"
         else:
             self.normalize_to_pawn_value = args.NormalizeToPawnValue
 
@@ -64,14 +66,17 @@ class WdlData:
         )
 
         # numpy arrays have nonnegative indices, so save the two offsets for later
-        dim_mom = self.yDataMax - self.yDataMin + 1
-        self.offset_mom = self.yDataMin
+        if self.momType == "move":
+            dim_mom = self.moveMax - self.moveMin + 1
+            self.offset_mom = self.moveMin
+        else:
+            dim_mom = self.materialMax - self.materialMin + 1
+            self.offset_mom = self.materialMin
         self.eval_max = round(args.evalMax * self.normalize_to_pawn_value / 100)
         dim_eval = 2 * self.eval_max + 1
         self.offset_eval = -self.eval_max
 
         # set up three integer arrays, each counting positions for (mom, eval) leading to win/draw/loss
-        # here mom is the row index, since plots of 2D matrices show rows as yData
         # TODO: check if sparse matrices in place of full 2D arrays are faster overall
         self.wins = np.zeros((dim_mom, dim_eval), dtype=int)
         self.draws = np.zeros((dim_mom, dim_eval), dtype=int)
@@ -87,10 +92,10 @@ class WdlData:
         elif result == "L":
             self.losses[mom_idx, eval_idx] += value
 
-    def load_json_data(self, move_min, move_max):
+    def load_json_data(self, filenames):
         """load the WDL data from json: the keys describe the position (result, move, material, eval),
         and the values are the observed count of these positions"""
-        for filename in self.filenames:
+        for filename in filenames:
             print(f"Reading eval stats from {filename}.")
             with open(filename) as infile:
                 data = json.load(infile)
@@ -98,12 +103,9 @@ class WdlData:
                 for key, value in data.items() if data else []:
                     result, move, material, eval = literal_eval(key)
 
-                    if move < move_min or move > move_max:
+                    if move < self.moveMin or move > self.moveMax:
                         continue
-
-                    mom = move if self.yData == "move" else material
-
-                    if mom < self.yDataMin or mom > self.yDataMax:
+                    if material < self.materialMin or material > self.materialMax:
                         continue
 
                     # convert the cp eval to the internal value by undoing the normalization
@@ -112,17 +114,23 @@ class WdlData:
                         a_internal = self.normalize_to_pawn_value
                     else:
                         # undo dynamic rescaling, that was dependent on mom
+                        mom = (
+                            move
+                            if self.NormalizeData["momType"] == "move"
+                            else material
+                        )
                         mom_clamped = min(
-                            max(mom, self.NormalizeData["yDataMin"]),
-                            self.NormalizeData["yDataMax"],
+                            max(mom, self.NormalizeData["momMin"]),
+                            self.NormalizeData["momMax"],
                         )
                         a_internal = poly3(
-                            mom_clamped / self.NormalizeData["yDataTarget"],
+                            mom_clamped / self.NormalizeData["momTarget"],
                             *self.NormalizeData["as"],
                         )
                     eval_internal = round(eval * a_internal / 100)
 
                     if abs(eval_internal) <= self.eval_max:
+                        mom = move if self.momType == "move" else material
                         self.add_to_wdl_counters(result, mom, eval_internal, value)
 
         W, D, L = self.wins.sum(), self.draws.sum(), self.losses.sum()
@@ -177,10 +185,10 @@ class WdlData:
 
         # first filter out mom values with too few wins in total
         total_wins = np.sum(self.wins, axis=1)
-        mom_mask = total_wins >= 10  # TODO: make 10 a cli parameter
+        mom_mask = total_wins >= self.winMin
         if not np.all(mom_mask):
             print(
-                f"Warning: Too little data, so skipping {self.yData} values",
+                f"Warning: Too little data, so skipping {self.momType} values",
                 np.where(~mom_mask)[0] + self.offset_mom,
             )
 
@@ -216,7 +224,7 @@ class ObjectiveFunction:
         modelFitting: str,
         wdl_data: WdlData,
         single_mom: int | None,
-        y_data_target: int = 0,
+        mom_target: int = 0,
     ):
         if modelFitting == "optimizeScore":
             # minimize the l2 error of the predicted score
@@ -226,7 +234,7 @@ class ObjectiveFunction:
             self._objective_function = self.evalLogProbability
         else:
             self._objective_function = None
-        self.y_data_target = y_data_target
+        self.mom_target = mom_target
         self.wins, self.draws, self.losses = [], [], []
         self.total_count = 0
         for mom in (
@@ -248,8 +256,8 @@ class ObjectiveFunction:
         if len(asbs) == 8:
             coeffs_a = asbs[0:4]
             coeffs_b = asbs[4:8]
-            a = poly3(mom / self.y_data_target, *coeffs_a)
-            b = poly3(mom / self.y_data_target, *coeffs_b)
+            a = poly3(mom / self.mom_target, *coeffs_a)
+            b = poly3(mom / self.mom_target, *coeffs_b)
         else:
             a = asbs[0]
             b = asbs[1]
@@ -320,14 +328,14 @@ class ObjectiveFunction:
 
 class WdlModel:
     def __init__(self, args):
-        self.yDataTarget = args.yDataTarget
+        self.momTarget = args.momTarget
         self.modelFitting = args.modelFitting
 
     def wdl_rates(self, eval: np.ndarray, mom: np.ndarray):
         """our wdl model is based on win/loss rate with a and b polynomials in mom,
         where mom = move or material counter"""
-        a = poly3(mom / self.yDataTarget, *self.coeffs_a)
-        b = poly3(mom / self.yDataTarget, *self.coeffs_b)
+        a = poly3(mom / self.momTarget, *self.coeffs_a)
+        b = poly3(mom / self.momTarget, *self.coeffs_b)
         w = win_rate(eval, a, b)
         l = loss_rate(eval, a, b)
         return w, 1 - w - l, l
@@ -335,26 +343,26 @@ class WdlModel:
     def poly3_str(self, coeffs: np.ndarray) -> str:
         return (
             "((%5.3f * x / %d + %5.3f) * x / %d + %5.3f) * x / %d + %5.3f"
-            % tuple(
-                val for pair in zip(coeffs, [self.yDataTarget] * 4) for val in pair
-            )[:-1]
+            % tuple(val for pair in zip(coeffs, [self.momTarget] * 4) for val in pair)[
+                :-1
+            ]
         )
 
     def fit_ab_globally(self, wdl_data: WdlData):
-        print(f"Fit WDL model based on {wdl_data.yData}.")
+        print(f"Fit WDL model based on {wdl_data.momType}.")
 
         # for each value of mom of interest, find good fits for a(mom) and b(mom)
         self.ms, self._as, self.bs = wdl_data.fit_abs_locally(self.modelFitting)
 
         # now capture the functional behavior of a and b as functions of mom,
         # starting with a simple polynomial fit to find p_a and p_b
-        self.coeffs_a, _ = curve_fit(poly3, self.ms / self.yDataTarget, self._as)
-        self.coeffs_b, _ = curve_fit(poly3, self.ms / self.yDataTarget, self.bs)
+        self.coeffs_a, _ = curve_fit(poly3, self.ms / self.momTarget, self._as)
+        self.coeffs_b, _ = curve_fit(poly3, self.ms / self.momTarget, self.bs)
 
         # possibly refine p_a and p_b by optimizing a given objective function
         if self.modelFitting != "fitDensity":
             objective_function = ObjectiveFunction(
-                self.modelFitting, wdl_data, None, self.yDataTarget
+                self.modelFitting, wdl_data, None, self.momTarget
             )
 
             popt_all = self.coeffs_a.tolist() + self.coeffs_b.tolist()
@@ -372,14 +380,14 @@ class WdlModel:
         # now we can report the new conversion factor p_a from internal eval to centipawn
         # such that an expected win score of 50% is for an internal eval of p_a(mom)
         # for a static conversion (independent of mom), we provide a constant value
-        # NormalizeToPawnValue = int(p_a(yDataTarget)) = int(sum(coeffs_a))
+        # NormalizeToPawnValue = int(p_a(momTarget)) = int(sum(coeffs_a))
         fsum_a, fsum_b = sum(self.coeffs_a), sum(self.coeffs_b)
 
         print(f"const int NormalizeToPawnValue = {int(fsum_a)};")
         print(f"Corresponding spread = {int(fsum_b)};")
         print(f"Corresponding normalized spread = {fsum_b / fsum_a};")
         print(
-            f"Draw rate at 0.0 eval at move {self.yDataTarget} = {1 - 2 / (1 + np.exp(fsum_a / fsum_b))};"
+            f"Draw rate at 0.0 eval at move {self.momTarget} = {1 - 2 / (1 + np.exp(fsum_a / fsum_b))};"
         )
 
         print("Parameters in internal value units: ")
@@ -393,8 +401,8 @@ class WdlPlot:
     def __init__(self, args, normalize_to_pawn_value: int):
         self.setting = args.plot
         self.pgnName = args.pgnName
-        self.yPlotMin = args.yPlotMin
-        self.yPlotMax = args.yPlotMax
+        self.momPlotMin = args.momPlotMin
+        self.momPlotMax = args.momPlotMax
         self.normalize_to_pawn_value = normalize_to_pawn_value
 
         self.fig, self.axs = plt.subplots(  # set figure size to A4 x 1.5
@@ -408,8 +416,7 @@ class WdlPlot:
 
     def normalized_axis(self, i, j):
         """provides a second x-axis in pawns, to go with the original axis in internal eval
-        if the engine used a dynamic normalization, the labels will only be exact for
-        the old yDataTarget value for mom (move or material counter)"""
+        if the engine used a dynamic normalization, the labels will only be approximations"""
         eval_min, eval_max = self.axs[i, j].get_xlim()
         halfpawn_value = self.normalize_to_pawn_value / 2
         halfpawn_ticks = np.arange(
@@ -432,7 +439,7 @@ class WdlPlot:
         )
         self.axs[0, 0].set_ylabel("outcome")
         self.axs[0, 0].legend(fontsize="small")
-        self.axs[0, 0].set_title(f"Measured data at {wdl_data.yData} {mom}")
+        self.axs[0, 0].set_title(f"Measured data at {wdl_data.momType} {mom}")
         # plot between -3 and 3 pawns
         xmax = ((3 * self.normalize_to_pawn_value) // 100 + 1) * 100
         self.axs[0, 0].set_xlim([-xmax, xmax])
@@ -457,19 +464,19 @@ class WdlPlot:
             self.axs[1, 0].plot(model.ms, model._as, "b.", label="as")
             self.axs[1, 0].plot(
                 model.ms,
-                poly3(model.ms / model.yDataTarget, *model.coeffs_a),
+                poly3(model.ms / model.momTarget, *model.coeffs_a),
                 "r-",
                 label=model.label_p_a,
             )
             self.axs[1, 0].plot(model.ms, model.bs, "g.", label="bs")
             self.axs[1, 0].plot(
                 model.ms,
-                poly3(model.ms / model.yDataTarget, *model.coeffs_b),
+                poly3(model.ms / model.momTarget, *model.coeffs_b),
                 "m-",
                 label=model.label_p_b,
             )
 
-            self.axs[1, 0].set_xlabel(wdl_data.yData)
+            self.axs[1, 0].set_xlabel(wdl_data.momType)
             self.axs[1, 0].set_ylabel("parameters (in internal value units)")
             self.axs[1, 0].legend(fontsize="x-small")
             self.axs[1, 0].set_title("Winrate model parameters")
@@ -481,8 +488,10 @@ class WdlPlot:
         # now generate contour plots
         contourlines = [0, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.97, 1.0]
 
-        ylabelStr = wdl_data.yData + " (1,3,3,5,9)" * bool(wdl_data.yData == "material")
-        ymin, ymax = self.yPlotMin, self.yPlotMax
+        ylabelStr = wdl_data.momType + " (1,3,3,5,9)" * bool(
+            wdl_data.momType == "material"
+        )
+        ymin, ymax = self.momPlotMin, self.momPlotMax
         points = np.array(list(zip(xs, ys)))
 
         for j, j_str in enumerate(["win", "draw"]):
@@ -531,29 +540,38 @@ class WdlPlot:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Fit Stockfish's WDL model to fishtest game statistics.",
+        description="Fit Stockfish's WDL model to fishtest game statistics. "
+        + "Given an (internal) evaluation x, the model sets W(x) = 1 / ( 1 + exp(-(x-a)/b)), "
+        + "L(x) = W(-x) and D(x) = 1 - W(x) - L(x), where a = p_a(mom) and b = p_b(mom) are "
+        + "polynomials in mom (move number or material count). "
+        + "The engine can use the polynomial p_a also to compute a 'centipawn' evaluation so "
+        + "that 100cp mean W=50%: either x/p_a(mom) (dynamic rescaling) or x/p_a(momTarget) "
+        + "(static rescaling). "
+        + "To make the calculation of p_a(momTarget) as simple as possible, the script returns "
+        + "{c_3, c_2, c_1, c_0} such that p_a(mom) = sum_i c_i (mom/momTarget)^i, and "
+        + "analogously for p_b.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
         "filename",
         nargs="*",
-        help="json file(s) with fishtest games' WDL statistics",
+        help="json file(s) with fishtest games' win/draw/loss statistics",
         default=["scoreWDLstat.json"],
     )
     parser.add_argument(
         "--NormalizeToPawnValue",
         type=int,
-        help="Value needed for converting the games' cp evals to the SF's internal eval.",
+        help="The old p_a(momTarget) value possibly needed for converting the games' cp evals to SF's internal eval.",
     )
     parser.add_argument(
         "--NormalizeData",
         type=str,
-        help='Allow dynamic conversion. E.g. {"yDataMin": 11, "yDataMax": 120, "yDataTarget": 32, "as": [0.38036525, -2.82015070, 23.17882135, 307.36768407]}.',
+        help='Dynamic rescaling parameters. E.g. {"momType": "move", "momMin": 11, "momMax": 120, "momTarget": 32, "as": [0.38036525, -2.82015070, 23.17882135, 307.36768407]}.',
     )
     parser.add_argument(
         "--moveMin",
         type=int,
-        default=0,
+        default=3,
         help="Lower move number limit for filter applied to json data.",
     )
     parser.add_argument(
@@ -563,44 +581,56 @@ if __name__ == "__main__":
         help="Upper move number limit for filter applied to json data.",
     )
     parser.add_argument(
+        "--materialMin",
+        type=int,
+        default=0,
+        help="Lower material count limit for filter applied to json data.",
+    )
+    parser.add_argument(
+        "--materialMax",
+        type=int,
+        default=120,
+        help="Upper material count limit for filter applied to json data.",
+    )
+    parser.add_argument(
         "--evalMax",
         type=int,
         default=400,
         help="Filter for absolute eval (in cp) applied to json data.",
     )
     parser.add_argument(
-        "--yData",
+        "--momType",
         choices=["move", "material"],
         default="move",
         help="Select y-axis data used for plotting and fitting.",
     )
     parser.add_argument(
-        "--yDataMin",
-        type=int,
-        default=3,
-        help="Minimum value of yData to consider for plotting and fitting.",
-    )
-    parser.add_argument(
-        "--yDataMax",
-        type=int,
-        default=120,
-        help="Maximum value of yData to consider for plotting and fitting.",
-    )
-    parser.add_argument(
-        "--yDataTarget",
+        "--momTarget",
         type=int,
         default=32,
-        help="Value of yData at which new rescaled 100cp should correspond to 50:50 winning chances.",
+        help="The polynomials p_a and p_b will be expressed in terms of sum_i c_i (mom/momTarget)^i.",
     )
     parser.add_argument(
-        "--yPlotMin",
-        type=int,
-        help="Overrides --yDataMin for plotting.",
+        "--modelFitting",
+        choices=["fitDensity", "optimizeProbability", "optimizeScore", "None"],
+        default="fitDensity",
+        help="Choice of model fitting: Fit the win rate curves, maximimize the probability of predicting the outcome, minimize the squared error in predicted score, or no fitting.",
     )
     parser.add_argument(
-        "--yPlotMax",
+        "--winMin",
         type=int,
-        help="Overrides --yDataMax for plotting.",
+        default=10,
+        help="Do not fit win rate curves for mom values with fewer wins in the filtered json data.",
+    )
+    parser.add_argument(
+        "--momPlotMin",
+        type=int,
+        help="Overrides --moveMin/--materialMin for plotting.",
+    )
+    parser.add_argument(
+        "--momPlotMax",
+        type=int,
+        help="Overrides --moveMax/--materialMax for plotting.",
     )
     parser.add_argument(
         "--plot",
@@ -613,12 +643,6 @@ if __name__ == "__main__":
         default="scoreWDL.png",
         help="Name of saved graphics file.",
     )
-    parser.add_argument(
-        "--modelFitting",
-        choices=["fitDensity", "optimizeProbability", "optimizeScore", "None"],
-        default="fitDensity",
-        help="Choice of model fitting: Fit the win rate curves, maximimize the probability of predicting the outcome, minimize the squared error in predicted score, or no fitting.",
-    )
     args = parser.parse_args()
 
     if args.NormalizeToPawnValue is None:
@@ -629,18 +653,15 @@ if __name__ == "__main__":
             args.NormalizeData is None
         ), "Error: Can only specify one of --NormalizeToPawnValue and --NormalizeData."
 
-    if args.yData == "material":
-        # fix default values for material
-        if args.yDataMax == 120 and args.yDataMin == 3:
-            args.yDataMin, args.yDataMax = 10, 78
-
-    args.yPlotMin = args.yDataMin if args.yPlotMin is None else args.yPlotMin
-    args.yPlotMax = args.yDataMax if args.yPlotMax is None else args.yPlotMax
+    if args.momPlotMin is None:
+        args.momPlotMin = args.moveMin if args.momType == "move" else args.materialMin
+    if args.momPlotMax is None:
+        args.momPlotMax = args.moveMax if args.momType == "move" else args.materialMax
 
     tic = time.time()
 
     wdl_data = WdlData(args)
-    wdl_data.load_json_data(args.moveMin, args.moveMax)
+    wdl_data.load_json_data(args.filename)
 
     if args.modelFitting != "None":
         wdl_model = WdlModel(args)
@@ -651,10 +672,10 @@ if __name__ == "__main__":
     if args.plot != "no":
         print("Preparing plots.")
         wdl_plot = WdlPlot(args, wdl_data.normalize_to_pawn_value)
-        wdl_plot.sample_wdl_densities(wdl_data, args.yDataTarget)
+        wdl_plot.sample_wdl_densities(wdl_data, args.momTarget)
         if wdl_model:
-            # this shows the fit of the observed wdl data at mom=yDataTarget to
-            # the model wdl rates with a=p_a(yDataTarget) and b=p_b(yDataTarget)
+            # this shows the fit of the observed wdl data at mom=momTarget to
+            # the model wdl rates with a=p_a(momTarget) and b=p_b(momTarget)
             fsum_a, fsum_b = sum(wdl_model.coeffs_a), sum(wdl_model.coeffs_b)
             wdl_plot.sample_wdl_curves(fsum_a, fsum_b)
 

@@ -76,9 +76,9 @@ programs. For example:
 
 - `scoreWDLstat --matchEngine <regex>` : extracts WDL data only from the
    engine matching the regex
-- `python scoreWDL.py --yDataTarget 30` : chooses move 30 (rather than 32)
+- `python scoreWDL.py --momTarget 30` : chooses move 30 (rather than 32)
   as target move for the 100cp anchor
-- `python scoreWDL.py --yData material --yDataTarget 68` : bases the fitting
+- `python scoreWDL.py --momType material --momTarget 68` : bases the fitting
   on material (rather than move), with 100cp anchor a material count of 68
 
 ## Background
