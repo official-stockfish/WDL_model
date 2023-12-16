@@ -3,11 +3,53 @@
 # exit on errors
 set -e
 
-echo "started at: " $(date)
+# set range of commits to be considered for the WDL fitting, and other options
+# by default we start from the most recent WDL model change and go to master
+default_firstrev=70ba9de85cddc5460b1ec53e0a99bee271e26ece
+default_lastrev=HEAD
+default_moveMin=8
+default_moveMax=120
+firstrev=$default_firstrev
+lastrev=$default_lastrev
+moveMin=$default_moveMin
+moveMax=$default_moveMax
 
-# give range of commit SHAs to be considered for the WDL fitting
-firstrev=70ba9de85cddc5460b1ec53e0a99bee271e26ece
-lastrev=HEAD
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+    --firstrev)
+        firstrev="$2"
+        shift 2
+        ;;
+    --lastrev)
+        lastrev="$2"
+        shift 2
+        ;;
+    --moveMin)
+        moveMin="$2"
+        shift 2
+        ;;
+    --moveMax)
+        moveMax="$2"
+        shift 2
+        ;;
+    --help)
+        echo "Usage: $0 [OPTIONS] file.epd(.gz)"
+        echo "Options:"
+        echo "  --firstrev FIRSTREV   First SF commit to collect games from (default: $default_firstrev)"
+        echo "  --lastrev LASTREV     Last SF commit to collect games from (default: $default_lastrev)"
+        echo "  --moveMin MOVEMIN     Parameter passed to scoreWDL.py (default: $default_moveMin)"
+        echo "  --moveMax MOVEMAX     Parameter passed to scoreWDL.py (default: $default_moveMax)"
+        exit 0
+        ;;
+    *)
+        break
+        ;;
+    esac
+done
+
+echo "Running: $0 --firstrev=$firstrev --lasttrev=$lastrev --moveMin=$moveMin --moveMax=$moveMax"
+
+echo "started at: " $(date)
 
 # regex for book name
 bookname="UHO_4060_v..epd|UHO_Lichess_4852_v1.epd"
@@ -92,7 +134,7 @@ echo "Look recursively in directory $pgnpath for games from SPRT tests using" \
 ./scoreWDLstat --dir $pgnpath -r --matchRev $regex_pattern --matchBook "$bookname" --fixFENsource "$fixfen.gz" --SPRTonly -o updateWDL.json >&scoreWDLstat.log
 
 # fit the new WDL model, keeping anchor at move 32
-python scoreWDL.py updateWDL.json --plot save --pgnName updateWDL.png --momType "move" --momTarget 32 --moveMin 8 --moveMax 120 --modelFitting optimizeProbability --NormalizeToPawnValue $oldpawn >&scoreWDL.log
+python scoreWDL.py updateWDL.json --plot save --pgnName updateWDL.png --momType "move" --momTarget 32 --moveMin "$moveMin" --moveMax "$moveMax" --modelFitting optimizeProbability --NormalizeToPawnValue $oldpawn >&scoreWDL.log
 
 # extract the total number of positions, and the new NormalizeToPawnValue
 poscount=$(awk -F '[() ,]' '/Retained \(W,D,L\)/ {sum = 0; for (i = 9; i <= NF; i++) sum += $i; print sum; exit}' scoreWDL.log)
