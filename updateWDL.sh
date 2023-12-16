@@ -33,7 +33,7 @@ while [[ $# -gt 0 ]]; do
         shift 2
         ;;
     --help)
-        echo "Usage: $0 [OPTIONS] file.epd(.gz)"
+        echo "Usage: $0 [OPTIONS]"
         echo "Options:"
         echo "  --firstrev FIRSTREV   First SF commit to collect games from (default: $default_firstrev)"
         echo "  --lastrev LASTREV     Last SF commit to collect games from (default: $default_lastrev)"
