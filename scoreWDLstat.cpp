@@ -193,11 +193,11 @@ class Analyze : public pgn::Visitor {
         if (key.eval != 1002) {  // an eval was found
             key.result = board.sideToMove() == Color::WHITE ? resultkey.white : resultkey.black;
             key.move   = board.fullMoveNumber();
-            const auto knights = Bitboard(board.pieces(PieceType::KNIGHT)).count();
-            const auto bishops = Bitboard(board.pieces(PieceType::BISHOP)).count();
-            const auto rooks   = Bitboard(board.pieces(PieceType::ROOK)).count();
-            const auto queens  = Bitboard(board.pieces(PieceType::QUEEN)).count();
-            const auto pawns   = Bitboard(board.pieces(PieceType::PAWN)).count();
+            const auto knights = board.pieces(PieceType::KNIGHT).count();
+            const auto bishops = board.pieces(PieceType::BISHOP).count();
+            const auto rooks   = board.pieces(PieceType::ROOK).count();
+            const auto queens  = board.pieces(PieceType::QUEEN).count();
+            const auto pawns   = board.pieces(PieceType::PAWN).count();
             key.material       = 9 * queens + 5 * rooks + 3 * bishops + 3 * knights + pawns;
 
             pos_map.lazy_emplace_l(
