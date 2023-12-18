@@ -589,7 +589,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--materialMax",
         type=int,
-        default=120,
+        default=78,
         help="Upper material count limit for filter applied to json data.",
     )
     parser.add_argument(
