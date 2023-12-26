@@ -398,12 +398,11 @@ class WdlModel:
 
 
 class WdlPlot:
-    def __init__(self, args, normalize_to_pawn_value: int):
+    def __init__(self, args):
         self.setting = args.plot
         self.pgnName = args.pgnName
         self.momPlotMin = args.momPlotMin
         self.momPlotMax = args.momPlotMax
-        self.normalize_to_pawn_value = normalize_to_pawn_value
 
         self.fig, self.axs = plt.subplots(  # set figure size to A4 x 1.5
             2, 3, figsize=(11.69 * 1.5, 8.27 * 1.5), constrained_layout=True
@@ -414,11 +413,12 @@ class WdlPlot:
             fontsize="x-large",
         )
 
-    def normalized_axis(self, i, j):
+    def normalized_axis(self, i: int, j: int, pawn_value: int):
         """provides a second x-axis in pawns, to go with the original axis in internal eval
-        if the engine used a dynamic normalization, the labels will only be approximations"""
+        if the engine used a dynamic normalization, the labels will only be approximations
+        """
         eval_min, eval_max = self.axs[i, j].get_xlim()
-        halfpawn_value = self.normalize_to_pawn_value / 2
+        halfpawn_value = pawn_value / 2
         halfpawn_ticks = np.arange(
             eval_min / halfpawn_value, eval_max / halfpawn_value + 1, dtype=int
         )
@@ -441,13 +441,15 @@ class WdlPlot:
         self.axs[0, 0].legend(fontsize="small")
         self.axs[0, 0].set_title(f"Measured data at {wdl_data.momType} {mom}")
         # plot between -3 and 3 pawns
-        xmax = ((3 * self.normalize_to_pawn_value) // 100 + 1) * 100
+        xmax = ((3 * wdl_data.normalize_to_pawn_value) // 100 + 1) * 100
         self.axs[0, 0].set_xlim([-xmax, xmax])
 
-        self.normalized_axis(0, 0)
+        self.normalized_axis(0, 0, wdl_data.normalize_to_pawn_value)
 
-    def sample_wdl_curves(self, a: float, b: float):
+    def sample_wdl_curves(self, wdl_model: WdlModel, mom: int):
         """add the three wdl model curves to subplot axs[0, 0]"""
+        a = poly3(mom / wdl_model.momTarget, *wdl_model.coeffs_a)
+        b = poly3(mom / wdl_model.momTarget, *wdl_model.coeffs_b)
         xdata = np.linspace(*self.axs[0, 0].get_xlim(), num=1000)
         winmodel = win_rate(xdata, a, b)
         lossmodel = loss_rate(xdata, a, b)
@@ -524,7 +526,7 @@ class WdlPlot:
                 self.axs[i, 1 + j].set_title(
                     i_str + ": Fraction of positions leading to a " + j_str
                 )
-                self.normalized_axis(i, 1 + j)
+                self.normalized_axis(i, 1 + j, wdl_data.normalize_to_pawn_value)
 
         self.fig.colorbar(cp, ax=self.axs[:, -1], shrink=0.6)
         self.fig.align_labels()
@@ -633,6 +635,11 @@ if __name__ == "__main__":
         help="Overrides --moveMax/--materialMax for plotting.",
     )
     parser.add_argument(
+        "--momPlotTarget",
+        type=int,
+        help="Overrides --momTarget for the density subplot.",
+    )
+    parser.add_argument(
         "--plot",
         choices=["save+show", "save", "no"],
         default="save+show",
@@ -657,6 +664,8 @@ if __name__ == "__main__":
         args.momPlotMin = args.moveMin if args.momType == "move" else args.materialMin
     if args.momPlotMax is None:
         args.momPlotMax = args.moveMax if args.momType == "move" else args.materialMax
+    if args.momPlotTarget is None:
+        args.momPlotTarget = args.momTarget
 
     tic = time.time()
 
@@ -671,13 +680,10 @@ if __name__ == "__main__":
 
     if args.plot != "no":
         print("Preparing plots.")
-        wdl_plot = WdlPlot(args, wdl_data.normalize_to_pawn_value)
-        wdl_plot.sample_wdl_densities(wdl_data, args.momTarget)
+        wdl_plot = WdlPlot(args)
+        wdl_plot.sample_wdl_densities(wdl_data, args.momPlotTarget)
         if wdl_model:
-            # this shows the fit of the observed wdl data at mom=momTarget to
-            # the model wdl rates with a=p_a(momTarget) and b=p_b(momTarget)
-            fsum_a, fsum_b = sum(wdl_model.coeffs_a), sum(wdl_model.coeffs_b)
-            wdl_plot.sample_wdl_curves(fsum_a, fsum_b)
+            wdl_plot.sample_wdl_curves(wdl_model, args.momPlotTarget)
 
         wdl_plot.poly3_and_contour_plots(wdl_data, wdl_model)
 
