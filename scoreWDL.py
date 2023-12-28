@@ -53,6 +53,10 @@ class WdlData:
             self.normalize_to_pawn_value = int(sum(self.NormalizeData["as"]))
             if not "momType" in self.NormalizeData:
                 self.NormalizeData["momType"] = "move"
+            assert self.NormalizeData["momType"] in [
+                "move",
+                "material",
+            ], "Error: momType must be move or material."
         else:
             self.normalize_to_pawn_value = args.NormalizeToPawnValue
 
