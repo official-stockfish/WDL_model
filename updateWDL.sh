@@ -117,6 +117,10 @@ get_normalize_data() {
     local pawn=$(git grep 'const int NormalizeToPawnValue' "$revision" -- src/uci.h | grep -oP 'const int NormalizeToPawnValue = \K\d+')
 
     if [ -z "$pawn" ]; then
+        pawn=$(git grep 'constexpr int  NormalizeToPawnValue' "$revision" -- src/uci.cpp | grep -oP 'constexpr int  NormalizeToPawnValue = \K\d+')
+    fi
+
+    if [ -z "$pawn" ]; then
         line=$(git grep 'double m = std::clamp(ply / 2 + 1' "$revision" -- src/uci.cpp)
 
         momMin="${line#*std::clamp(ply / 2 + 1, }"
