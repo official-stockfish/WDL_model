@@ -157,7 +157,7 @@ class Analyze : public pgn::Visitor {
 
         Move m;
 
-        m = uci::parseSanInternal(board, move, moves);
+        m = uci::parseSan(board, move, moves);
 
         const size_t delimiter_pos = comment.find('/');
 
@@ -193,11 +193,11 @@ class Analyze : public pgn::Visitor {
         if (key.eval != 1002) {  // an eval was found
             key.result = board.sideToMove() == Color::WHITE ? resultkey.white : resultkey.black;
             key.move   = board.fullMoveNumber();
-            const auto knights = builtin::popcount(board.pieces(PieceType::KNIGHT));
-            const auto bishops = builtin::popcount(board.pieces(PieceType::BISHOP));
-            const auto rooks   = builtin::popcount(board.pieces(PieceType::ROOK));
-            const auto queens  = builtin::popcount(board.pieces(PieceType::QUEEN));
-            const auto pawns   = builtin::popcount(board.pieces(PieceType::PAWN));
+            const auto knights = board.pieces(PieceType::KNIGHT).count();
+            const auto bishops = board.pieces(PieceType::BISHOP).count();
+            const auto rooks   = board.pieces(PieceType::ROOK).count();
+            const auto queens  = board.pieces(PieceType::QUEEN).count();
+            const auto pawns   = board.pieces(PieceType::PAWN).count();
             key.material       = 9 * queens + 5 * rooks + 3 * bishops + 3 * knights + pawns;
 
             pos_map.lazy_emplace_l(

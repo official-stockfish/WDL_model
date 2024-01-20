@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -Wall -Wextra -std=c++17 -O3 -g
+CXXFLAGS = -Wall -Wextra -std=c++17 -O3 -g -DNDEBUG
 
 NATIVE = -march=native
 
