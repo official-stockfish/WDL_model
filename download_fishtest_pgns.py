@@ -1,4 +1,4 @@
-import argparse, datetime, json, os, re, requests, tarfile, urllib.request
+import argparse, datetime, json, os, re, tarfile, urllib.request
 
 parser = argparse.ArgumentParser(
     description="Bulk-download .pgn.gz files from finished tests on fishtest.",
