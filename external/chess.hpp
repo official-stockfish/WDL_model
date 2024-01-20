@@ -25,23 +25,31 @@ THIS FILE IS AUTO GENERATED DO NOT CHANGE MANUALLY.
 
 Source: https://github.com/Disservin/chess-library
 
-VERSION: 0.6.1
+VERSION: 0.6.19
 */
 
 #ifndef CHESS_HPP
 #define CHESS_HPP
 
 
+#include <cassert>
 #include <cstdint>
 #include <functional>
 
 
+
+
+#if __cplusplus >= 202002L
 #include <bit>
+#endif
 #include <string>
 #include <bitset>
 #include <algorithm>
 #include <iostream>
-#include <cassert>
+
+#if defined(_MSC_VER)
+#include <intrin.h>
+#endif
 
 
 #include <string_view>
@@ -285,7 +293,7 @@ class Square {
         return *this;
     }
 
-    [[nodiscard]] constexpr Square operator--(int) noexcept {
+    constexpr Square operator--(int) noexcept {
         Square tmp(*this);
         operator--();
         return tmp;
@@ -298,7 +306,6 @@ class Square {
         return str;
     }
 
-    [[nodiscard]] constexpr underlying internal() const noexcept { return sq; }
     [[nodiscard]] constexpr int index() const noexcept { return static_cast<int>(sq); }
 
     [[nodiscard]] constexpr File file() const noexcept { return File(index() & 7); }
@@ -315,11 +322,11 @@ class Square {
         return r >= Rank::RANK_1 && r <= Rank::RANK_8 && f >= File::FILE_A && f <= File::FILE_H;
     }
 
-    [[nodiscard]] static constexpr int distance(Square sq, Square sq2) noexcept {
+    [[nodiscard]] static int distance(Square sq, Square sq2) noexcept {
         return std::max(std::abs(sq.file() - sq2.file()), std::abs(sq.rank() - sq2.rank()));
     }
 
-    [[nodiscard]] static constexpr int value_distance(Square sq, Square sq2) noexcept {
+    [[nodiscard]] static int value_distance(Square sq, Square sq2) noexcept {
         return std::abs(sq.index() - sq2.index());
     }
 
@@ -494,7 +501,12 @@ class Bitboard {
 
     [[nodiscard]] constexpr bool empty() const noexcept { return bits == 0; }
 
-    [[nodiscard]] constexpr int lsb() const noexcept {
+    [[nodiscard]]
+#if !defined(_MSC_VER)
+    constexpr
+#endif
+        int
+        lsb() const noexcept {
         assert(bits != 0);
 #if __cplusplus >= 202002L
         return std::countr_zero(bits);
@@ -511,7 +523,12 @@ class Bitboard {
 #endif
     }
 
-    [[nodiscard]] constexpr int msb() const noexcept {
+    [[nodiscard]]
+#if !defined(_MSC_VER)
+    constexpr
+#endif
+        int
+        msb() const noexcept {
         assert(bits != 0);
 
 #if __cplusplus >= 202002L
@@ -529,7 +546,12 @@ class Bitboard {
 #endif
     }
 
-    [[nodiscard]] constexpr int count() const noexcept {
+    [[nodiscard]]
+#if !defined(_MSC_VER)
+    constexpr
+#endif
+        int
+        count() const noexcept {
 #if __cplusplus >= 202002L
         return std::popcount(bits);
 #else
@@ -541,7 +563,12 @@ class Bitboard {
 #endif
     }
 
-    [[nodiscard]] constexpr std::uint8_t pop() noexcept {
+    [[nodiscard]]
+#if !defined(_MSC_VER)
+    constexpr
+#endif
+        std::uint8_t
+        pop() noexcept {
         assert(bits != 0);
         std::uint8_t index = lsb();
         bits &= bits - 1;
@@ -561,8 +588,8 @@ inline std::ostream& operator<<(std::ostream& os, const Bitboard& bb) {
     return os;
 }
 
-inline constexpr Bitboard operator&(std::uint64_t lhs, const Bitboard& rhs) { return rhs & lhs; }
-inline constexpr Bitboard operator|(std::uint64_t lhs, const Bitboard& rhs) { return rhs | lhs; }
+constexpr Bitboard operator&(std::uint64_t lhs, const Bitboard& rhs) { return rhs & lhs; }
+constexpr Bitboard operator|(std::uint64_t lhs, const Bitboard& rhs) { return rhs | lhs; }
 }  // namespace chess
 
 namespace chess {
@@ -581,19 +608,19 @@ class attacks {
         U64 operator()(Bitboard b) const { return (((b & mask)).getBits() * magic) >> shift; }
     };
 
-    /// @brief [Internal Usage] Slow function to calculate bishop attacks
+    /// @brief Slow function to calculate bishop attacks
     /// @param sq
     /// @param occupied
     /// @return
     [[nodiscard]] static Bitboard bishopAttacks(Square sq, Bitboard occupied);
 
-    /// @brief [Internal Usage] Slow function to calculate rook attacks
+    /// @brief Slow function to calculate rook attacks
     /// @param sq
     /// @param occupied
     /// @return
     [[nodiscard]] static Bitboard rookAttacks(Square sq, Bitboard occupied);
 
-    /// @brief [Internal Usage] Initializes the magic bitboard tables for sliding pieces
+    /// @brief Initializes the magic bitboard tables for sliding pieces
     /// @param sq
     /// @param table
     /// @param magic
@@ -787,9 +814,8 @@ class attacks {
     /// @param board
     /// @param color Attacker Color
     /// @param square Attacked Square
-    /// @param occupied
     /// @return
-    [[nodiscard]] static Bitboard attackers(const Board &board, Color color, Square square, Bitboard occupied) noexcept;
+    [[nodiscard]] static Bitboard attackers(const Board &board, Color color, Square square) noexcept;
 
     /// @brief [Internal Usage] Initializes the attacks for the bishop and rook. Called once at
     /// startup.
@@ -797,6 +823,9 @@ class attacks {
 };
 }  // namespace chess
 
+#include <array>
+#include <vector>
+#include <charconv>
 
 
 
@@ -1021,7 +1050,7 @@ class Piece {
         }
     }
 
-    operator int() const noexcept { return static_cast<int>(piece); }
+    constexpr operator int() const noexcept { return static_cast<int>(piece); }
 
     [[nodiscard]] constexpr PieceType type() const noexcept {
         return static_cast<PieceType::underlying>(int(piece) % 6);
@@ -1055,11 +1084,6 @@ class Piece {
 };
 }  // namespace chess
 
-#include <array>
-#include <vector>
-#include <charconv>
-
-
 
 namespace chess::constants {
 
@@ -1087,7 +1111,7 @@ class Move {
     template <std::uint16_t MoveType = 0>
     [[nodiscard]] static constexpr Move make(Square source, Square target, PieceType pt = PieceType::KNIGHT) noexcept {
         return Move(MoveType + ((std::uint16_t(pt) - std::uint16_t(PieceType(PieceType::KNIGHT))) << 12) +
-                    std::uint16_t(std::uint16_t(source.internal()) << 6) + std::uint16_t(target.index()));
+                    std::uint16_t(std::uint16_t(source.index()) << 6) + std::uint16_t(target.index()));
     }
 
     /// @brief Get the source square of the move.
@@ -1118,8 +1142,8 @@ class Move {
     [[nodiscard]] constexpr std::uint16_t move() const noexcept { return move_; }
     [[nodiscard]] constexpr std::int16_t score() const noexcept { return score_; }
 
-    bool operator==(const Move &rhs) const noexcept { return move_ == rhs.move_; }
-    bool operator!=(const Move &rhs) const noexcept { return move_ != rhs.move_; }
+    constexpr bool operator==(const Move &rhs) const noexcept { return move_ == rhs.move_; }
+    constexpr bool operator!=(const Move &rhs) const noexcept { return move_ != rhs.move_; }
 
     static constexpr std::uint16_t NO_MOVE   = 0;
     static constexpr std::uint16_t NULL_MOVE = 65;
@@ -1216,20 +1240,135 @@ enum PieceGenType {
 
 class Board;
 
-namespace movegen {
-enum class MoveGenType : std::uint8_t { ALL, CAPTURE, QUIET };
+class movegen {
+   public:
+    enum class MoveGenType : std::uint8_t { ALL, CAPTURE, QUIET };
 
-/// @brief Generates all legal moves for a position. The movelist will be
-/// emptied before adding the moves.
-/// @tparam mt
-/// @param movelist
-/// @param board
-template <MoveGenType mt = MoveGenType::ALL>
-void legalmoves(Movelist &movelist, const Board &board,
-                int pieces = PieceGenType::PAWN | PieceGenType::KNIGHT | PieceGenType::BISHOP | PieceGenType::ROOK |
-                             PieceGenType::QUEEN | PieceGenType::KING);
+    /// @brief Generates all legal moves for a position.
+    /// @tparam mt
+    /// @param movelist
+    /// @param board
+    template <MoveGenType mt = MoveGenType::ALL>
+    void static legalmoves(Movelist &movelist, const Board &board,
+                           int pieces = PieceGenType::PAWN | PieceGenType::KNIGHT | PieceGenType::BISHOP |
+                                        PieceGenType::ROOK | PieceGenType::QUEEN | PieceGenType::KING);
 
-}  // namespace movegen
+   private:
+    static auto init_squares_between();
+    static const std::array<std::array<Bitboard, 64>, 64> SQUARES_BETWEEN_BB;
+
+    /// @brief Generate the checkmask.
+    /// Returns a bitboard where the attacker path between the king and enemy piece is set.
+    /// @tparam c
+    /// @param board
+    /// @param sq
+    /// @param double_check
+    /// @return
+    template <Color::underlying c>
+    [[nodiscard]] static Bitboard checkMask(const Board &board, Square sq, int &double_check);
+
+    /// @brief Generate the pin mask for horizontal and vertical pins.
+    /// Returns a bitboard where the ray between the king and the pinner is set.
+    /// @tparam c
+    /// @param board
+    /// @param sq
+    /// @param occ_enemy
+    /// @param occ_us
+    /// @return
+    template <Color::underlying c>
+    [[nodiscard]] static Bitboard pinMaskRooks(const Board &board, Square sq, Bitboard occ_enemy, Bitboard occ_us);
+
+    /// @brief Generate the pin mask for diagonal pins.
+    /// Returns a bitboard where the ray between the king and the pinner is set.
+    /// @tparam c
+    /// @param board
+    /// @param sq
+    /// @param occ_enemy
+    /// @param occ_us
+    /// @return
+    template <Color::underlying c>
+    [[nodiscard]] static Bitboard pinMaskBishops(const Board &board, Square sq, Bitboard occ_enemy, Bitboard occ_us);
+
+    /// @brief Returns the squares that are attacked by the enemy
+    /// @tparam c
+    /// @param board
+    /// @param enemy_empty
+    /// @return
+    template <Color::underlying c>
+    [[nodiscard]] static Bitboard seenSquares(const Board &board, Bitboard enemy_empty);
+
+    /// @brief Generate pawn moves.
+    /// @tparam c
+    /// @tparam mt
+    /// @param board
+    /// @param moves
+    /// @param pin_d
+    /// @param pin_hv
+    /// @param checkmask
+    /// @param occ_enemy
+    template <Color::underlying c, MoveGenType mt>
+    static void generatePawnMoves(const Board &board, Movelist &moves, Bitboard pin_d, Bitboard pin_hv,
+                                  Bitboard checkmask, Bitboard occ_enemy);
+
+    /// @brief Generate knight moves.
+    /// @param sq
+    /// @param movable
+    /// @return
+    [[nodiscard]] static Bitboard generateKnightMoves(Square sq);
+
+    /// @brief Generate bishop moves.
+    /// @param sq
+    /// @param movable
+    /// @param pin_d
+    /// @param occ_all
+    /// @return
+    [[nodiscard]] static Bitboard generateBishopMoves(Square sq, Bitboard pin_d, Bitboard occ_all);
+
+    /// @brief Generate rook moves.
+    /// @param sq
+    /// @param movable
+    /// @param pin_hv
+    /// @param occ_all
+    /// @return
+    [[nodiscard]] static Bitboard generateRookMoves(Square sq, Bitboard pin_hv, Bitboard occ_all);
+
+    /// @brief Generate queen moves.
+    /// @param sq
+    /// @param movable
+    /// @param pin_d
+    /// @param pin_hv
+    /// @param occ_all
+    /// @return
+    [[nodiscard]] static Bitboard generateQueenMoves(Square sq, Bitboard pin_d, Bitboard pin_hv, Bitboard occ_all);
+    /// @brief Generate king moves.
+    /// @param sq
+    /// @param seen
+    /// @param movable_square
+    /// @return
+    [[nodiscard]] static Bitboard generateKingMoves(Square sq, Bitboard seen, Bitboard movable_square);
+
+    /// @brief Generate castling moves.
+    /// @tparam c
+    /// @tparam mt
+    /// @param board
+    /// @param sq
+    /// @param seen
+    /// @param pinHV
+    /// @return
+    template <Color::underlying c, MoveGenType mt>
+    [[nodiscard]] static Bitboard generateCastleMoves(const Board &board, Square sq, Bitboard seen, Bitboard pinHV);
+
+    template <typename T>
+    static void whileBitboardAdd(Movelist &movelist, Bitboard mask, T func);
+
+    /// @brief all legal moves for a position
+    /// @tparam c
+    /// @tparam mt
+    /// @param movelist
+    /// @param board
+    template <Color::underlying c, MoveGenType mt>
+    static void legalmoves(Movelist &movelist, const Board &board, int pieces);
+};
 
 }  // namespace chess
 
@@ -1551,16 +1690,16 @@ class Board {
 
    private:
     struct State {
-        CastlingRights castling;
         U64 hash;
+        CastlingRights castling;
         Square enpassant;
         uint8_t half_moves;
         Piece captured_piece;
 
         State(const U64 &hash, const CastlingRights &castling, const Square &enpassant, const uint8_t &half_moves,
               const Piece &captured_piece)
-            : castling(castling),
-              hash(hash),
+            : hash(hash),
+              castling(castling),
               enpassant(enpassant),
               half_moves(half_moves),
               captured_piece(captured_piece) {}
@@ -2384,11 +2523,10 @@ template <Color::underlying c>
 /// @param board
 /// @param color Attacker Color
 /// @param square Attacked Square
-/// @param occupied
 /// @return
-[[nodiscard]] inline Bitboard attacks::attackers(const Board &board, Color color, Square square,
-                                                 Bitboard occupied) noexcept {
-    const auto queens = board.pieces(PieceType::QUEEN, color);
+[[nodiscard]] inline Bitboard attacks::attackers(const Board &board, Color color, Square square) noexcept {
+    const auto queens   = board.pieces(PieceType::QUEEN, color);
+    const auto occupied = board.occ();
 
     // using the fact that if we can attack PieceType from square, they can attack us back
     auto atks = (pawn(~color, square) & board.pieces(PieceType::PAWN, color));
@@ -2400,7 +2538,7 @@ template <Color::underlying c>
     return atks & occupied;
 }
 
-/// @brief [Internal Usage] Slow function to calculate bishop attacks
+/// @brief Slow function to calculate bishop attacks
 /// @param sq
 /// @param occupied
 /// @return
@@ -2439,7 +2577,7 @@ template <Color::underlying c>
     return attacks;
 }
 
-/// @brief [Internal Usage] Slow function to calculate rook attacks
+/// @brief Slow function to calculate rook attacks
 /// @param sq
 /// @param occupied
 /// @return
@@ -2478,7 +2616,7 @@ template <Color::underlying c>
     return attacks;
 }
 
-/// @brief [Internal Usage] Initializes the magic bitboard tables for sliding pieces
+/// @brief Initializes the magic bitboard tables for sliding pieces
 /// @param sq
 /// @param table
 /// @param magic
@@ -2499,7 +2637,7 @@ inline void attacks::initSliders(Square sq, Magic table[], U64 magic,
     table_sq.shift = 64 - Bitboard(table_sq.mask).count();
 
     if (sq < 64 - 1) {
-        table[sq.index() + 1].attacks = table_sq.attacks + (1 << Bitboard(table_sq.mask).count());
+        table[sq.index() + 1].attacks = table_sq.attacks + (1ull << Bitboard(table_sq.mask).count());
     }
 
     do {
@@ -2520,7 +2658,7 @@ inline void attacks::initAttacks() {
     }
 }
 
-static auto init = []() {
+inline auto init = []() {
     attacks::initAttacks();
     return 0;
 }();
@@ -2528,10 +2666,9 @@ static auto init = []() {
 
 
 
-namespace chess::movegen {
-// force initialization of squares between
-static auto init_squares_between = []() constexpr {
-    // initialize squares between table
+namespace chess {
+
+inline auto movegen::init_squares_between() {
     std::array<std::array<Bitboard, 64>, 64> squares_between_bb{};
     Bitboard sqs = 0;
 
@@ -2548,11 +2685,9 @@ static auto init_squares_between = []() constexpr {
     }
 
     return squares_between_bb;
-};
+}
 
-static const std::array<std::array<Bitboard, 64>, 64> SQUARES_BETWEEN_BB = init_squares_between();
-
-/// @brief [Internal Usage] Generate the checkmask.
+/// @brief Generate the checkmask.
 /// Returns a bitboard where the attacker path between the king and enemy piece is set.
 /// @tparam c
 /// @param board
@@ -2560,7 +2695,7 @@ static const std::array<std::array<Bitboard, 64>, 64> SQUARES_BETWEEN_BB = init_
 /// @param double_check
 /// @return
 template <Color::underlying c>
-[[nodiscard]] Bitboard checkMask(const Board &board, Square sq, int &double_check) {
+[[nodiscard]] inline Bitboard movegen::checkMask(const Board &board, Square sq, int &double_check) {
     double_check = 0;
 
     const auto opp_knight = board.pieces(PieceType::KNIGHT, ~c);
@@ -2611,20 +2746,20 @@ template <Color::underlying c>
     return mask;
 }
 
-/// @brief [Internal Usage] Generate the pin mask for horizontal and vertical pins.
+/// @brief Generate the pin mask for horizontal and vertical pins.
 /// Returns a bitboard where the ray between the king and the pinner is set.
 /// @tparam c
 /// @param board
 /// @param sq
-/// @param occ_enemy
+/// @param occ_opp
 /// @param occ_us
 /// @return
 template <Color::underlying c>
-[[nodiscard]] Bitboard pinMaskRooks(const Board &board, Square sq, Bitboard occ_enemy, Bitboard occ_us) {
+[[nodiscard]] inline Bitboard movegen::pinMaskRooks(const Board &board, Square sq, Bitboard occ_opp, Bitboard occ_us) {
     const auto opp_rook  = board.pieces(PieceType::ROOK, ~c);
     const auto opp_queen = board.pieces(PieceType::QUEEN, ~c);
 
-    Bitboard rook_attacks = attacks::rook(sq, occ_enemy) & (opp_rook | opp_queen);
+    Bitboard rook_attacks = attacks::rook(sq, occ_opp) & (opp_rook | opp_queen);
     Bitboard pin_hv       = 0;
 
     while (rook_attacks) {
@@ -2637,20 +2772,21 @@ template <Color::underlying c>
     return pin_hv;
 }
 
-/// @brief [Internal Usage] Generate the pin mask for diagonal pins.
+/// @brief Generate the pin mask for diagonal pins.
 /// Returns a bitboard where the ray between the king and the pinner is set.
 /// @tparam c
 /// @param board
 /// @param sq
-/// @param occ_enemy
+/// @param occ_opp
 /// @param occ_us
 /// @return
 template <Color::underlying c>
-[[nodiscard]] Bitboard pinMaskBishops(const Board &board, Square sq, Bitboard occ_enemy, Bitboard occ_us) {
+[[nodiscard]] inline Bitboard movegen::pinMaskBishops(const Board &board, Square sq, Bitboard occ_opp,
+                                                      Bitboard occ_us) {
     const auto opp_bishop = board.pieces(PieceType::BISHOP, ~c);
     const auto opp_queen  = board.pieces(PieceType::QUEEN, ~c);
 
-    Bitboard bishop_attacks = attacks::bishop(sq, occ_enemy) & (opp_bishop | opp_queen);
+    Bitboard bishop_attacks = attacks::bishop(sq, occ_opp) & (opp_bishop | opp_queen);
     Bitboard pin_diag       = 0;
 
     while (bishop_attacks) {
@@ -2663,13 +2799,13 @@ template <Color::underlying c>
     return pin_diag;
 }
 
-/// @brief [Internal Usage] Returns the squares that are attacked by the enemy
+/// @brief Returns the squares that are attacked by the enemy
 /// @tparam c
 /// @param board
 /// @param enemy_empty
 /// @return
 template <Color::underlying c>
-[[nodiscard]] Bitboard seenSquares(const Board &board, Bitboard enemy_empty) {
+[[nodiscard]] inline Bitboard movegen::seenSquares(const Board &board, Bitboard enemy_empty) {
     auto king_sq          = board.kingSq(~c);
     Bitboard map_king_atk = attacks::king(king_sq) & enemy_empty;
 
@@ -2707,7 +2843,7 @@ template <Color::underlying c>
     return seen;
 }
 
-/// @brief [Internal Usage] Generate pawn moves.
+/// @brief Generate pawn moves.
 /// @tparam c
 /// @tparam mt
 /// @param board
@@ -2715,10 +2851,10 @@ template <Color::underlying c>
 /// @param pin_d
 /// @param pin_hv
 /// @param checkmask
-/// @param occ_enemy
-template <Color::underlying c, MoveGenType mt>
-void generatePawnMoves(const Board &board, Movelist &moves, Bitboard pin_d, Bitboard pin_hv, Bitboard checkmask,
-                       Bitboard occ_enemy) {
+/// @param occ_opp
+template <Color::underlying c, movegen::MoveGenType mt>
+inline void movegen::generatePawnMoves(const Board &board, Movelist &moves, Bitboard pin_d, Bitboard pin_hv,
+                                       Bitboard checkmask, Bitboard occ_opp) {
     constexpr Direction UP              = c == Color::WHITE ? Direction::NORTH : Direction::SOUTH;
     constexpr Direction DOWN            = c == Color::WHITE ? Direction::SOUTH : Direction::NORTH;
     constexpr Direction DOWN_LEFT       = c == Color::WHITE ? Direction::SOUTH_WEST : Direction::NORTH_EAST;
@@ -2744,8 +2880,8 @@ void generatePawnMoves(const Board &board, Movelist &moves, Bitboard pin_d, Bitb
         attacks::pawnRightAttacks<c>(unpinnedpawns_lr) | (attacks::pawnRightAttacks<c>(pinnedpawns_lr) & pin_d);
 
     // Prune moves that don't capture a piece and are not on the checkmask.
-    l_pawns &= occ_enemy & checkmask;
-    r_pawns &= occ_enemy & checkmask;
+    l_pawns &= occ_opp & checkmask;
+    r_pawns &= occ_opp & checkmask;
 
     // These pawns can walk Forward
     const Bitboard pawns_hv = pawns & ~pin_d;
@@ -2874,44 +3010,45 @@ void generatePawnMoves(const Board &board, Movelist &moves, Bitboard pin_d, Bitb
     }
 }
 
-/// @brief [Internal Usage] Generate knight moves.
+/// @brief Generate knight moves.
 /// @param sq
 /// @param movable
 /// @return
-[[nodiscard]] inline Bitboard generateKnightMoves(Square sq) { return attacks::knight(sq); }
+[[nodiscard]] inline Bitboard movegen::generateKnightMoves(Square sq) { return attacks::knight(sq); }
 
-/// @brief [Internal Usage] Generate bishop moves.
+/// @brief Generate bishop moves.
 /// @param sq
 /// @param movable
 /// @param pin_d
 /// @param occ_all
 /// @return
-[[nodiscard]] inline Bitboard generateBishopMoves(Square sq, Bitboard pin_d, Bitboard occ_all) {
+[[nodiscard]] inline Bitboard movegen::generateBishopMoves(Square sq, Bitboard pin_d, Bitboard occ_all) {
     // The Bishop is pinned diagonally thus can only move diagonally.
     if (pin_d & Bitboard::fromSquare(sq)) return attacks::bishop(sq, occ_all) & pin_d;
     return attacks::bishop(sq, occ_all);
 }
 
-/// @brief [Internal Usage] Generate rook moves.
+/// @brief Generate rook moves.
 /// @param sq
 /// @param movable
 /// @param pin_hv
 /// @param occ_all
 /// @return
-[[nodiscard]] inline Bitboard generateRookMoves(Square sq, Bitboard pin_hv, Bitboard occ_all) {
+[[nodiscard]] inline Bitboard movegen::generateRookMoves(Square sq, Bitboard pin_hv, Bitboard occ_all) {
     // The Rook is pinned horizontally thus can only move horizontally.
     if (pin_hv & Bitboard::fromSquare(sq)) return attacks::rook(sq, occ_all) & pin_hv;
     return attacks::rook(sq, occ_all);
 }
 
-/// @brief [Internal Usage] Generate queen moves.
+/// @brief Generate queen moves.
 /// @param sq
 /// @param movable
 /// @param pin_d
 /// @param pin_hv
 /// @param occ_all
 /// @return
-[[nodiscard]] inline Bitboard generateQueenMoves(Square sq, Bitboard pin_d, Bitboard pin_hv, Bitboard occ_all) {
+[[nodiscard]] inline Bitboard movegen::generateQueenMoves(Square sq, Bitboard pin_d, Bitboard pin_hv,
+                                                          Bitboard occ_all) {
     Bitboard moves = 0ULL;
 
     if (pin_d & Bitboard::fromSquare(sq))
@@ -2926,25 +3063,26 @@ void generatePawnMoves(const Board &board, Movelist &moves, Bitboard pin_d, Bitb
     return moves;
 }
 
-/// @brief [Internal Usage] Generate king moves.
+/// @brief Generate king moves.
 /// @param sq
-/// @param _seen
+/// @param seen
 /// @param movable_square
 /// @return
-[[nodiscard]] inline Bitboard generateKingMoves(Square sq, Bitboard _seen, Bitboard movable_square) {
-    return attacks::king(sq) & movable_square & ~_seen;
+[[nodiscard]] inline Bitboard movegen::generateKingMoves(Square sq, Bitboard seen, Bitboard movable_square) {
+    return attacks::king(sq) & movable_square & ~seen;
 }
 
-/// @brief [Internal Usage] Generate castling moves.
+/// @brief Generate castling moves.
 /// @tparam c
 /// @tparam mt
 /// @param board
 /// @param sq
 /// @param seen
-/// @param pinHV
+/// @param pin_hv
 /// @return
-template <Color::underlying c, MoveGenType mt>
-[[nodiscard]] inline Bitboard generateCastleMoves(const Board &board, Square sq, Bitboard seen, Bitboard pinHV) {
+template <Color::underlying c, movegen::MoveGenType mt>
+[[nodiscard]] inline Bitboard movegen::generateCastleMoves(const Board &board, Square sq, Bitboard seen,
+                                                           Bitboard pin_hv) {
     if constexpr (mt == MoveGenType::CAPTURE) return 0ull;
     const auto rights = board.castlingRights();
 
@@ -2953,12 +3091,8 @@ template <Color::underlying c, MoveGenType mt>
     for (const auto side : {Board::CastlingRights::Side::KING_SIDE, Board::CastlingRights::Side::QUEEN_SIDE}) {
         if (!rights.has(c, side)) continue;
 
-        const auto end_king_sq = Square(side == Board::CastlingRights::Side::KING_SIDE ? Square::underlying::SQ_G1
-                                                                                       : Square::underlying::SQ_C1)
-                                     .relative_square(c);
-        const auto end_rook_sq = Square(side == Board::CastlingRights::Side::KING_SIDE ? Square::underlying::SQ_F1
-                                                                                       : Square::underlying::SQ_D1)
-                                     .relative_square(c);
+        const auto end_king_sq = Square::castling_king_square(side == Board::CastlingRights::Side::KING_SIDE, c);
+        const auto end_rook_sq = Square::castling_rook_square(side == Board::CastlingRights::Side::KING_SIDE, c);
 
         const auto from_rook_sq = Square(rights.getRookFile(c, side), sq.rank());
 
@@ -2970,7 +3104,7 @@ template <Color::underlying c, MoveGenType mt>
 
         if ((not_attacked_path & empty_not_attacked) == not_attacked_path &&
             ((not_occ_path & ~board.occ()) == not_occ_path) &&
-            !(Bitboard::fromSquare(from_rook_sq) & pinHV.getBits() & attacks::MASK_RANK[sq.rank()].getBits()) &&
+            !(Bitboard::fromSquare(from_rook_sq) & pin_hv.getBits() & attacks::MASK_RANK[sq.rank()].getBits()) &&
             !(Bitboard::fromSquare(end_rook_sq) & (withoutRook & withoutKing).getBits()) &&
             !(Bitboard::fromSquare(end_king_sq) &
               (seen | (withoutRook & Bitboard(~Bitboard::fromSquare(sq)))).getBits())) {
@@ -2982,7 +3116,7 @@ template <Color::underlying c, MoveGenType mt>
 }
 
 template <typename T>
-inline void whileBitboardAdd(Movelist &movelist, Bitboard mask, T func) {
+inline void movegen::whileBitboardAdd(Movelist &movelist, Bitboard mask, T func) {
     while (mask) {
         const Square from = mask.pop();
         auto moves        = func(from);
@@ -2993,13 +3127,13 @@ inline void whileBitboardAdd(Movelist &movelist, Bitboard mask, T func) {
     }
 }
 
-/// @brief [Internal Usage] all legal moves for a position
+/// @brief all legal moves for a position
 /// @tparam c
 /// @tparam mt
 /// @param movelist
 /// @param board
-template <Color::underlying c, MoveGenType mt>
-void legalmoves(Movelist &movelist, const Board &board, int pieces) {
+template <Color::underlying c, movegen::MoveGenType mt>
+inline void movegen::legalmoves(Movelist &movelist, const Board &board, int pieces) {
     /*
      The size of the movelist might not
      be 0! This is done on purpose since it enables
@@ -3007,40 +3141,40 @@ void legalmoves(Movelist &movelist, const Board &board, int pieces) {
     */
     auto king_sq = board.kingSq(c);
 
-    int _doubleCheck = 0;
+    int double_check = 0;
 
-    Bitboard _occ_us    = board.us(c);
-    Bitboard _occ_enemy = board.us(~c);
-    Bitboard _occ_all   = _occ_us | _occ_enemy;
+    Bitboard occ_us  = board.us(c);
+    Bitboard occ_opp = board.us(~c);
+    Bitboard occ_all = occ_us | occ_opp;
 
-    Bitboard _enemy_emptyBB = ~_occ_us;
+    Bitboard opp_empty = ~occ_us;
 
-    Bitboard _checkMask = checkMask<c>(board, king_sq, _doubleCheck);
-    Bitboard _pinHV     = pinMaskRooks<c>(board, king_sq, _occ_enemy, _occ_us);
-    Bitboard _pinD      = pinMaskBishops<c>(board, king_sq, _occ_enemy, _occ_us);
+    Bitboard check_mask = checkMask<c>(board, king_sq, double_check);
+    Bitboard pin_hv     = pinMaskRooks<c>(board, king_sq, occ_opp, occ_us);
+    Bitboard pin_d      = pinMaskBishops<c>(board, king_sq, occ_opp, occ_us);
 
-    assert(_doubleCheck <= 2);
+    assert(double_check <= 2);
 
     // Moves have to be on the checkmask
     Bitboard movable_square;
 
     // Slider, Knights and King moves can only go to enemy or empty squares.
     if (mt == MoveGenType::ALL)
-        movable_square = _enemy_emptyBB;
+        movable_square = opp_empty;
     else if (mt == MoveGenType::CAPTURE)
-        movable_square = _occ_enemy;
+        movable_square = occ_opp;
     else  // QUIET moves
-        movable_square = ~_occ_all;
+        movable_square = ~occ_all;
 
     if (pieces & PieceGenType::KING) {
-        Bitboard _seen = seenSquares<~c>(board, _enemy_emptyBB);
+        Bitboard seen = seenSquares<~c>(board, opp_empty);
 
         whileBitboardAdd(movelist, Bitboard::fromSquare(king_sq),
-                         [&](Square sq) { return generateKingMoves(sq, _seen, movable_square); });
+                         [&](Square sq) { return generateKingMoves(sq, seen, movable_square); });
 
-        if (_checkMask == constants::DEFAULT_CHECKMASK && Square::back_rank(king_sq, c) &&
+        if (check_mask == constants::DEFAULT_CHECKMASK && Square::back_rank(king_sq, c) &&
             board.castlingRights().has(c)) {
-            Bitboard moves_bb = generateCastleMoves<c, mt>(board, king_sq, _seen, _pinHV);
+            Bitboard moves_bb = generateCastleMoves<c, mt>(board, king_sq, seen, pin_hv);
             while (moves_bb) {
                 Square to = moves_bb.pop();
                 movelist.add(Move::make<Move::CASTLING>(king_sq, to));
@@ -3048,50 +3182,50 @@ void legalmoves(Movelist &movelist, const Board &board, int pieces) {
         }
     }
 
-    movable_square &= _checkMask;
+    movable_square &= check_mask;
 
     // Early return for double check as described earlier
-    if (_doubleCheck == 2) return;
+    if (double_check == 2) return;
 
     // Add the moves to the movelist.
     if (pieces & PieceGenType::PAWN) {
-        generatePawnMoves<c, mt>(board, movelist, _pinD, _pinHV, _checkMask, _occ_enemy);
+        generatePawnMoves<c, mt>(board, movelist, pin_d, pin_hv, check_mask, occ_opp);
     }
 
     if (pieces & PieceGenType::KNIGHT) {
         // Prune knights that are pinned since these cannot move.
-        Bitboard knights_mask = board.pieces(PieceType::KNIGHT, c) & ~(_pinD | _pinHV);
+        Bitboard knights_mask = board.pieces(PieceType::KNIGHT, c) & ~(pin_d | pin_hv);
 
         whileBitboardAdd(movelist, knights_mask, [&](Square sq) { return generateKnightMoves(sq) & movable_square; });
     }
 
     if (pieces & PieceGenType::BISHOP) {
         // Prune horizontally pinned bishops
-        Bitboard bishops_mask = board.pieces(PieceType::BISHOP, c) & ~_pinHV;
+        Bitboard bishops_mask = board.pieces(PieceType::BISHOP, c) & ~pin_hv;
 
         whileBitboardAdd(movelist, bishops_mask,
-                         [&](Square sq) { return generateBishopMoves(sq, _pinD, _occ_all) & movable_square; });
+                         [&](Square sq) { return generateBishopMoves(sq, pin_d, occ_all) & movable_square; });
     }
 
     if (pieces & PieceGenType::ROOK) {
         //  Prune diagonally pinned rooks
-        Bitboard rooks_mask = board.pieces(PieceType::ROOK, c) & ~_pinD;
+        Bitboard rooks_mask = board.pieces(PieceType::ROOK, c) & ~pin_d;
 
         whileBitboardAdd(movelist, rooks_mask,
-                         [&](Square sq) { return generateRookMoves(sq, _pinHV, _occ_all) & movable_square; });
+                         [&](Square sq) { return generateRookMoves(sq, pin_hv, occ_all) & movable_square; });
     }
 
     if (pieces & PieceGenType::QUEEN) {
         // Prune double pinned queens
-        Bitboard queens_mask = board.pieces(PieceType::QUEEN, c) & ~(_pinD & _pinHV);
+        Bitboard queens_mask = board.pieces(PieceType::QUEEN, c) & ~(pin_d & pin_hv);
 
         whileBitboardAdd(movelist, queens_mask,
-                         [&](Square sq) { return generateQueenMoves(sq, _pinD, _pinHV, _occ_all) & movable_square; });
+                         [&](Square sq) { return generateQueenMoves(sq, pin_d, pin_hv, occ_all) & movable_square; });
     }
 }
 
-template <MoveGenType mt>
-inline void legalmoves(Movelist &movelist, const Board &board, int pieces) {
+template <movegen::MoveGenType mt>
+inline void movegen::legalmoves(Movelist &movelist, const Board &board, int pieces) {
     movelist.clear();
 
     if (board.sideToMove() == Color::WHITE)
@@ -3099,11 +3233,14 @@ inline void legalmoves(Movelist &movelist, const Board &board, int pieces) {
     else
         legalmoves<Color::BLACK, mt>(movelist, board, pieces);
 }
-}  // namespace chess::movegen
 
+inline const std::array<std::array<Bitboard, 64>, 64> movegen::SQUARES_BETWEEN_BB = movegen::init_squares_between();
+
+}  // namespace chess
+
+#include <istream>
 #include <optional>
 #include <stdexcept>
-#include <istream>
 
 namespace chess::pgn {
 
@@ -3150,34 +3287,31 @@ class StreamParser {
     void readGames(Visitor &vis) {
         visitor = &vis;
 
-        while (true) {
-            const auto c = stream_buffer.get();
+        const auto ret = stream_buffer.fill();
+        if (!ret.has_value() || !*ret) {
+            return;
+        }
 
-            if (!c.has_value()) {
-                if (!pgn_end && has_body) {
-                    pgn_end = true;
+        stream_buffer.loop([this](char c) { processNextByte(c); });
 
-                    callVisitorMoveFunction();
+        if (!pgn_end && has_body) {
+            pgn_end = true;
 
-                    visitor->endPgn();
-                    visitor->skipPgn(false);
-                }
+            callVisitorMoveFunction();
 
-                return;
-            }
-
-            processNextByte(*c);
+            visitor->endPgn();
+            visitor->skipPgn(false);
         }
     }
 
    private:
     class LineBuffer {
        public:
-        bool empty() const { return index_ == 0; }
+        bool empty() const noexcept { return index_ == 0; }
 
-        void clear() { index_ = 0; }
+        void clear() noexcept { index_ = 0; }
 
-        std::string_view get() const { return std::string_view(buffer_.data(), index_); }
+        std::string_view get() const noexcept { return std::string_view(buffer_.data(), index_); }
 
         void operator+=(char c) {
             if (index_ < N) {
@@ -3185,6 +3319,14 @@ class StreamParser {
             } else {
                 throw std::runtime_error("LineBuffer overflow");
             }
+        }
+
+        void remove_suffix(std::size_t n) {
+            if (n > index_) {
+                throw std::runtime_error("LineBuffer underflow");
+            }
+
+            index_ -= n;
         }
 
        private:
@@ -3196,30 +3338,44 @@ class StreamParser {
 
     class StreamBuffer {
        private:
-        static constexpr std::size_t N = 512;
+        static constexpr std::size_t N = 1024;
         using BufferType               = std::array<char, N * N>;
 
        public:
         StreamBuffer(std::istream &stream) : stream_(stream) {}
 
-        std::optional<char> get() {
-            if (buffer_index_ == bytes_read_) {
-                const auto ret = fill();
-                return ret.has_value() && *ret ? std::optional<char>(buffer_[buffer_index_++]) : std::nullopt;
+        template <typename FUNC>
+        void loop(FUNC f) {
+            while (true) {
+                if (buffer_index_ >= bytes_read_) {
+                    const auto ret = fill();
+
+                    if (!ret.has_value() || !*ret) {
+                        return;
+                    }
+                }
+
+                const auto c = buffer_[buffer_index_];
+
+                // skip carriage return
+                if (c == '\r') {
+                    buffer_index_++;
+                    continue;
+                }
+
+                if constexpr (std::is_same_v<decltype(f(c)), bool>) {
+                    const auto res = f(c);
+
+                    if (res) {
+                        buffer_index_++;
+                        return;
+                    }
+                } else {
+                    f(c);
+                }
+
+                buffer_index_++;
             }
-
-            return buffer_[buffer_index_++];
-        }
-
-        std::optional<bool> fill() {
-            if (!stream_.good()) return std::nullopt;
-
-            buffer_index_ = 0;
-
-            stream_.read(buffer_.data(), N * N);
-            bytes_read_ = stream_.gcount();
-
-            return std::optional<bool>(bytes_read_ > 0);
         }
 
         /// @brief Assume that the current character is already the opening_delim
@@ -3227,10 +3383,10 @@ class StreamParser {
         /// @param close_delim
         /// @return
         bool readUntilMatchingDelimiter(char open_delim, char close_delim) {
-            int stack = 1;
+            int stack = 0;
 
             while (true) {
-                const auto ret = get();
+                const auto ret = getNextByte();
 
                 if (!ret.has_value()) {
                     return false;
@@ -3256,6 +3412,32 @@ class StreamParser {
             return false;
         }
 
+        std::optional<bool> fill() {
+            if (!stream_.good()) return std::nullopt;
+
+            buffer_index_ = 0;
+
+            stream_.read(buffer_.data(), N * N);
+            bytes_read_ = stream_.gcount();
+
+            return std::optional<bool>(bytes_read_ > 0);
+        }
+
+        std::optional<char> getNextByte() {
+            if (buffer_index_ == bytes_read_) {
+                const auto ret = fill();
+                return ret.has_value() && *ret ? std::optional<char>(buffer_[buffer_index_++]) : std::nullopt;
+            }
+
+            return buffer_[buffer_index_++];
+        }
+
+        void moveBack() {
+            if (buffer_index_ > 0) {
+                buffer_index_--;
+            }
+        }
+
        private:
         std::istream &stream_;
         BufferType buffer_;
@@ -3270,8 +3452,7 @@ class StreamParser {
         move.clear();
         comment.clear();
 
-        reading_move    = false;
-        reading_comment = false;
+        reading_move = false;
 
         line_start = true;
 
@@ -3280,10 +3461,6 @@ class StreamParser {
 
         in_header = false;
         in_body   = false;
-
-        // Header
-        reading_key   = false;
-        reading_value = false;
     }
 
     bool isLetter(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); }
@@ -3297,17 +3474,149 @@ class StreamParser {
         }
     }
 
-    void processNextByte(const char c) {
-        // save the last three characters across different buffers
-        c3 = c2;
-        c2 = c1;
-        c1 = c;
+    void processHeader() {
+        stream_buffer.loop([this](char c) {
+            // end of key
+            if (c == ' ') {
+                // skip whitespace and "
+                stream_buffer.getNextByte();
+                stream_buffer.getNextByte();
 
-        // skip carriage return
-        if (c == '\r') {
-            return;
-        }
+                // read until end of line
+                stream_buffer.loop([this](char c) {
+                    if (c == '\n') {
+                        in_header  = false;
+                        line_start = true;
 
+                        header.second.remove_suffix(2);
+
+                        if (!visitor->skip()) visitor->header(header.first.get(), header.second.get());
+
+                        header.first.clear();
+                        header.second.clear();
+
+                        return true;
+                    }
+
+                    header.second += c;
+                    return false;
+                });
+
+                stream_buffer.moveBack();
+
+                return true;
+            }
+
+            header.first += c;
+
+            return false;
+        });
+    }
+
+    void processBody() {
+        stream_buffer.loop([this](char c) {
+            // make sure that the line_start is turned off again
+            if (line_start && c != '\n') {
+                line_start = false;
+            }
+
+            // Pgn are build up in the following way.
+            // {move_number} {move} {comment} {move} {comment} {move_number} ...
+            // So we need to skip the move_number then start reading the move, then save the comment
+            // then read the second move in the group. After that a move_number will follow again.
+            switch (c) {
+                case '\n':
+                    if (line_start) {
+                        pgn_end = true;
+
+                        visitor->endPgn();
+                        visitor->skipPgn(false);
+
+                        reset_trackers();
+                        return true;
+                    }
+
+                    line_start = true;
+
+                    reading_move = false;
+
+                    callVisitorMoveFunction();
+                    break;
+                // whitespace while reading a move means that we have finished reading the move
+                case ' ':
+                    if (reading_move) {
+                        reading_move = false;
+                    }
+
+                    break;
+                /*
+                The second kind starts with a left brace character and continues to the next right brace
+                character.
+                Brace comments do not nest; a left brace character appearing in a brace comment loses its
+                special meaning and is ignored. A semicolon appearing inside of a brace comment loses its
+                special meaning and is ignored. Braces appearing inside of a semicolon comments lose their
+                special meaning and are ignored.
+                */
+                case '{':
+                    stream_buffer.getNextByte();
+
+                    stream_buffer.loop([this](char c) {
+                        if (c == '}') {
+                            callVisitorMoveFunction();
+
+                            return true;
+                        }
+
+                        comment += c;
+
+                        return false;
+                    });
+
+                    stream_buffer.moveBack();
+
+                    break;
+                default:
+                    cbuf[2] = cbuf[1];
+                    cbuf[1] = cbuf[0];
+                    cbuf[0] = c;
+
+                    if (reading_move) {
+                        move += c;
+                    }
+                    // we are in empty space, when we encounter now a file or a piece, or a castling
+                    // move, we try to parse the move
+                    else if (!reading_move) {
+                        // skip variations
+                        if (c == '(') {
+                            stream_buffer.readUntilMatchingDelimiter('(', ')');
+                            return false;
+                        }
+
+                        // O-O(-O) castling moves are caught by isLetter(c), and we need to distinguish
+                        // 0-0(-0) castling moves from results like 1-0 and 0-1.
+                        if (isLetter(c) || (c == '0' && cbuf[1] == '-' && cbuf[2] == '0')) {
+                            callVisitorMoveFunction();
+
+                            reading_move = true;
+
+                            if (c == '0') {
+                                move += '0';
+                                move += '-';
+                                move += '0';
+                            } else {
+                                move += c;
+                            }
+                        }
+                    }
+
+                    break;
+            }
+
+            return false;
+        });
+    }
+
+    void processNextByte(char c) {
         // PGN Header
         if (line_start && c == '[') {
             if (pgn_end) {
@@ -3316,128 +3625,38 @@ class StreamParser {
                 visitor->startPgn();
             }
 
+            line_start = false;
+
             has_head = true;
 
             in_header = true;
             in_body   = false;
 
-            reading_key = true;
+            if (!stream_buffer.getNextByte().has_value()) return;
+            processHeader();
 
-            line_start = false;
-            return;
+            // processHeader() will move the buffer_index to the next character
+            // so we need to undo this
+            stream_buffer.moveBack();
         }
-
         // PGN Moves Start
-        if (line_start && has_head && !in_header && !in_body) {
-            reading_move    = false;
-            reading_comment = false;
+        else if (line_start && has_head && !in_header && !in_body) {
+            line_start = false;
+
+            reading_move = false;
 
             has_body = true;
 
             in_header = false;
             in_body   = true;
 
-            line_start = false;
-
             if (!visitor->skip()) visitor->startMoves();
-            return;
-        }
+        } else if (in_body) {
+            processBody();
 
-        // PGN End
-        if (line_start && in_body && c == '\n') {
-            // buffer_index = i + 1;
-            pgn_end = true;
-
-            visitor->endPgn();
-            visitor->skipPgn(false);
-
-            reset_trackers();
-            return;
-        }
-
-        // set line_start to true, since the next char will be first on
-        // a new line
-        if (c == '\n') {
-            line_start = true;
-        }
-
-        // make sure that the line_start is turned off again
-        if (line_start && c != '\n') {
-            line_start = false;
-        }
-
-        if (in_header) {
-            if (c == '"') {
-                reading_value = !reading_value;
-            } else if (reading_key && c == ' ') {
-                reading_key = false;
-            } else if (reading_key) {
-                header.first += c;
-            } else if (reading_value) {
-                header.second += c;
-            } else if (c == '\n') {
-                reading_key   = false;
-                reading_value = false;
-                in_header     = false;
-
-                if (!visitor->skip()) visitor->header(header.first.get(), header.second.get());
-
-                header.first.clear();
-                header.second.clear();
-            }
-        }
-        // Pgn are build up in the following way.
-        // {move_number} {move} {comment} {move} {comment} {move_number} ...
-        // So we need to skip the move_number then start reading the move, then save the comment
-        // then read the second move in the group. After that a move_number will follow again.
-        else if (in_body) {
-            // whitespace while reading a move means that we have finished reading the move
-            if (c == '\n') {
-                reading_move    = false;
-                reading_comment = false;
-
-                callVisitorMoveFunction();
-            } else if (reading_move && c == ' ') {
-                reading_move = false;
-            } else if (reading_move) {
-                move += c;
-            } else if (!reading_comment && c == '{') {
-                reading_comment = true;
-            } else if (reading_comment && c == '}') {
-                reading_comment = false;
-
-                callVisitorMoveFunction();
-            }
-            // we are in empty space, when we encounter now a file or a piece, or a castling
-            // move, we try to parse the move
-            else if (!reading_move && !reading_comment) {
-                // skip variations
-                if (c == '(') {
-                    stream_buffer.readUntilMatchingDelimiter('(', ')');
-                    return;
-                }
-
-                // O-O(-O) castling moves are caught by isLetter(c), and we need to distinguish
-                // 0-0(-0) castling moves from results like 1-0 and 0-1.
-                if (isLetter(c) || (c == '0' && c2 == '-' && c3 == '0')) {
-                    callVisitorMoveFunction();
-
-                    reading_move = true;
-
-                    if (c == '0') {
-                        move += '0';
-                        move += '-';
-                        move += '0';
-                    } else {
-                        move += c;
-                    }
-                } else {
-                    // no new move detected
-                    return;
-                }
-            } else if (reading_comment) {
-                comment += c;
-            }
+            // processBody() will move the buffer_index to the next character
+            // so we need to undo this
+            stream_buffer.moveBack();
         }
     }
 
@@ -3446,21 +3665,17 @@ class StreamParser {
     Visitor *visitor = nullptr;
 
     // one time allocations
-    std::pair<LineBuffer, LineBuffer> header;
+    std::pair<LineBuffer, LineBuffer> header = {LineBuffer{}, LineBuffer{}};
 
-    // std::string move;
-    LineBuffer move;
-    LineBuffer comment;
+    LineBuffer move    = {};
+    LineBuffer comment = {};
 
     // buffer for the last two characters, cbuf[0] is the current character
-    char c3 = '\0';
-    char c2 = '\0';
-    char c1 = '\0';
+    std::array<char, 3> cbuf = {'\0', '\0', '\0'};
 
     // State
 
-    bool reading_move    = false;
-    bool reading_comment = false;
+    bool reading_move = false;
 
     // True when at the start of a line
     bool line_start = true;
@@ -3470,10 +3685,6 @@ class StreamParser {
 
     bool has_head = false;
     bool has_body = false;
-
-    // Header
-    bool reading_key   = false;
-    bool reading_value = false;
 
     bool pgn_end = true;
 };
@@ -3539,8 +3750,7 @@ class uci {
 
         // promotion
         if (piece == PieceType::PAWN && uci.length() == 5 && Square::back_rank(target, ~board.sideToMove())) {
-            std::string_view promotion = uci.substr(4, 1);
-            return Move::make<Move::PROMOTION>(source, target, PieceType(promotion));
+            return Move::make<Move::PROMOTION>(source, target, PieceType(uci.substr(4, 1)));
         }
 
         switch (uci.length()) {
