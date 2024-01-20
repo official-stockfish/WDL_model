@@ -1,4 +1,4 @@
-import argparse, json, os, re, requests, tarfile, time, urllib.request
+import argparse, json, os, re, requests, time
 
 parser = argparse.ArgumentParser(
     description="Download fishtest metadata for any test that .pgn(.gz) files can be found for.",
