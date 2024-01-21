@@ -50,7 +50,7 @@ class WdlData:
         if self.NormalizeData is not None:
             self.NormalizeData = json.loads(self.NormalizeData)
             self.NormalizeData["as"] = [float(x) for x in self.NormalizeData["as"]]
-            self.normalize_to_pawn_value = int(sum(self.NormalizeData["as"]))
+            self.normalize_to_pawn_value = int(sum(self.NormalizeData["as"]) + 0.5)
             if not "momType" in self.NormalizeData:
                 self.NormalizeData["momType"] = "move"
             assert self.NormalizeData["momType"] in [
@@ -384,11 +384,11 @@ class WdlModel:
         # now we can report the new conversion factor p_a from internal eval to centipawn
         # such that an expected win score of 50% is for an internal eval of p_a(mom)
         # for a static conversion (independent of mom), we provide a constant value
-        # NormalizeToPawnValue = int(p_a(momTarget)) = int(sum(coeffs_a))
+        # NormalizeToPawnValue = round(p_a(yDataTarget)) = round(sum(coeffs_a))
         fsum_a, fsum_b = sum(self.coeffs_a), sum(self.coeffs_b)
 
-        print(f"const int NormalizeToPawnValue = {int(fsum_a)};")
-        print(f"Corresponding spread = {int(fsum_b)};")
+        print(f"const int NormalizeToPawnValue = {int(fsum_a + 0.5)};")
+        print(f"Corresponding spread = {int(fsum_b + 0.5)};")
         print(f"Corresponding normalized spread = {fsum_b / fsum_a};")
         print(
             f"Draw rate at 0.0 eval at move {self.momTarget} = {1 - 2 / (1 + np.exp(fsum_a / fsum_b))};"
