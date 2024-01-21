@@ -509,6 +509,16 @@ void print_usage(char const *program_name) {
 /// @param argv See print_usage() for possible arguments
 /// @return
 int main(int argc, char const *argv[]) {
+    // Workaround to prevent data races in std::ctype<char>::narrow
+    // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=77704
+#if __GLIBCXX__
+    {
+        const std::ctype<char> &ct(std::use_facet<std::ctype<char>>(std::locale()));
+
+        for (size_t i(0); i != 256; ++i) ct.narrow(static_cast<char>(i), '\0');
+    }
+#endif
+
     const std::vector<std::string> args(argv + 1, argv + argc);
 
     std::vector<std::string> files_pgn;
