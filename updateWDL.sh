@@ -178,6 +178,12 @@ python scoreWDL.py updateWDL.json --plot save --pgnName updateWDL.png --momType 
 
 # extract the total number of positions, and the new NormalizeToPawnValue
 poscount=$(awk -F '[() ,]' '/Retained \(W,D,L\)/ {sum = 0; for (i = 9; i <= NF; i++) sum += $i; print sum; exit}' scoreWDL.log)
+
+if [[ $poscount -eq 0 ]]; then
+    echo "No games found for revisions of interest."
+    exit 0
+fi
+
 newpawn=$(grep -oP 'const int NormalizeToPawnValue = \K\d+' scoreWDL.log)
 
 if [[ $newpawn -ne $oldpawn ]]; then
