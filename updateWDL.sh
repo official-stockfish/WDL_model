@@ -173,6 +173,13 @@ echo "Look recursively in directory $pgnpath for games from SPRT tests using" \
 # obtain the WDL data from games of SPRT tests of the SF revisions of interest
 ./scoreWDLstat --dir $pgnpath -r --matchRev $regex_pattern --matchBook "$bookname" --fixFENsource "$fixfen.gz" --SPRTonly -o updateWDL.json >&scoreWDLstat.log
 
+gamescount=$(grep -o '[0-9]\+ games' scoreWDLstat.log | grep -o '[0-9]\+')
+
+if [[ $gamescount -eq 0 ]]; then
+    echo "No games found for revisions of interest."
+    exit 0
+fi
+
 # fit the new WDL model, keeping anchor at move 32
 python scoreWDL.py updateWDL.json --plot save --pgnName updateWDL.png --momType move --momTarget 32 --moveMin $moveMin --moveMax $moveMax --modelFitting optimizeProbability $oldnormdata >&scoreWDL.log
 
@@ -180,16 +187,16 @@ python scoreWDL.py updateWDL.json --plot save --pgnName updateWDL.png --momType 
 poscount=$(awk -F '[() ,]' '/Retained \(W,D,L\)/ {sum = 0; for (i = 9; i <= NF; i++) sum += $i; print sum; exit}' scoreWDL.log)
 
 if [[ $poscount -eq 0 ]]; then
-    echo "No games found for revisions of interest."
+    echo "No positions found."
     exit 0
 fi
 
 newpawn=$(grep -oP 'const int NormalizeToPawnValue = \K\d+' scoreWDL.log)
 
 if [[ $newpawn -ne $oldpawn ]]; then
-    echo "Based on $poscount positions, NormalizeToPawnValue should change from $oldpawn to $newpawn."
+    echo "Based on $poscount positions from $gamescount games, NormalizeToPawnValue should change from $oldpawn to $newpawn."
 else
-    echo "Based on $poscount positions, NormalizeToPawnValue should stay at $oldpawn."
+    echo "Based on $poscount positions from $gamescount games, NormalizeToPawnValue should stay at $oldpawn."
 fi
 
 echo "ended at: " $(date)
