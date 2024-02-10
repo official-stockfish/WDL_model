@@ -36,6 +36,7 @@ using map_meta = std::unordered_map<std::string, TestMetaData>;
 // map to hold move counters that cutechess-cli changed from original FENs
 using map_fens = std::unordered_map<std::string, std::pair<int, int>>;
 
+// concurrent position map
 map_t pos_map                         = {};
 std::atomic<std::size_t> total_chunks = 0;
 std::atomic<std::size_t> total_games  = 0;
@@ -190,14 +191,15 @@ class Analyze : public pgn::Visitor {
 
         // an eval was found
         if (key.eval != 1002) {
-            key.result = board.sideToMove() == Color::WHITE ? resultkey.white : resultkey.black;
-            key.move   = board.fullMoveNumber();
             const auto knights = board.pieces(PieceType::KNIGHT).count();
             const auto bishops = board.pieces(PieceType::BISHOP).count();
             const auto rooks   = board.pieces(PieceType::ROOK).count();
             const auto queens  = board.pieces(PieceType::QUEEN).count();
             const auto pawns   = board.pieces(PieceType::PAWN).count();
-            key.material       = 9 * queens + 5 * rooks + 3 * bishops + 3 * knights + pawns;
+
+            key.result   = board.sideToMove() == Color::WHITE ? resultkey.white : resultkey.black;
+            key.move     = board.fullMoveNumber();
+            key.material = 9 * queens + 5 * rooks + 3 * bishops + 3 * knights + pawns;
 
             // insert or update the position map
             pos_map.lazy_emplace_l(
@@ -284,14 +286,14 @@ void ana_files(const std::vector<std::string> &files, const std::string &regex_e
         std::string line;
         while (std::getline(iss, line)) {
             std::istringstream iss(line);
-            std::string key, f1, f2, f3, ep;
+            std::string f1, f2, f3, ep;
             int halfmove, fullmove = 0;
 
             iss >> f1 >> f2 >> f3 >> ep >> halfmove >> fullmove;
 
             if (!fullmove) continue;
 
-            key              = f1 + ' ' + f2 + ' ' + f3;
+            auto key         = f1 + ' ' + f2 + ' ' + f3;
             auto fixfen_data = std::pair<int, int>(halfmove, fullmove);
 
             if (fixfen_map.find(key) != fixfen_map.end()) {
@@ -361,68 +363,76 @@ void ana_files(const std::vector<std::string> &files, const std::string &regex_e
     return meta_map;
 }
 
-template <typename Predicate>
-void filter_files(std::vector<std::string> &file_list, const map_meta &meta_map, Predicate pred) {
-    const auto adj = [&](const std::string &pathname) {
+template <typename STRATEGY>
+void filter_files(std::vector<std::string> &file_list, const map_meta &meta_map,
+                  const STRATEGY &strategy) {
+    const auto applier = [&](const std::string &pathname) {
         auto test_filename = pathname.substr(0, pathname.find_last_of('-'));
-        pred(test_filename);
+        return strategy.apply(test_filename, meta_map);
     };
-
-    file_list.erase(std::remove_if(file_list.begin(), file_list.end(), adj), file_list.end());
+    const auto it = std::remove_if(file_list.begin(), file_list.end(), applier);
+    file_list.erase(it, file_list.end());
 }
 
-void filter_files_book(std::vector<std::string> &file_list, const map_meta &meta_map,
-                       const std::regex &regex_book, bool invert) {
-    filter_files(
-        file_list, meta_map, [&regex_book, invert, &meta_map](const std::string &test_filename) {
-            // check if metadata and "book" entry exist
-            if (meta_map.find(test_filename) != meta_map.end() &&
-                meta_map.at(test_filename).book.has_value()) {
-                bool match = std::regex_match(meta_map.at(test_filename).book.value(), regex_book);
-                return invert ? match : !match;
-            }
+class BookFilterStrategy {
+    std::regex regex_book;
+    bool invert;
 
-            // missing metadata or "book" entry can never match
-            return true;
-        });
-}
+   public:
+    BookFilterStrategy(const std::regex &rb, bool inv) : regex_book(rb), invert(inv) {}
 
-void filter_files_revision(std::vector<std::string> &file_list, const map_meta &meta_map,
-                           const std::regex &regex_rev) {
-    filter_files(file_list, meta_map, [&regex_rev, &meta_map](const std::string &test_filename) {
-        if (meta_map.find(test_filename) == meta_map.end()) {
+    bool apply(const std::string &filename, const map_meta &meta_map) const {
+        // check if metadata and "book" entry exist
+        if (meta_map.find(filename) != meta_map.end() && meta_map.at(filename).book.has_value()) {
+            bool match = std::regex_match(meta_map.at(filename).book.value(), regex_book);
+            return invert ? match : !match;
+        }
+
+        // missing metadata or "book" entry can never match
+        return true;
+    }
+};
+
+class FileFilterStrategy {
+    std::regex regex_rev;
+
+   public:
+    FileFilterStrategy(const std::regex &rb) : regex_rev(rb) {}
+
+    bool apply(const std::string &filename, const map_meta &meta_map) const {
+        if (meta_map.find(filename) == meta_map.end()) {
             return true;
         }
 
-        if (meta_map.at(test_filename).resolved_base.has_value() &&
-            std::regex_match(meta_map.at(test_filename).resolved_base.value(), regex_rev)) {
+        if (meta_map.at(filename).resolved_base.has_value() &&
+            std::regex_match(meta_map.at(filename).resolved_base.value(), regex_rev)) {
             return false;
         }
 
-        if (meta_map.at(test_filename).resolved_new.has_value() &&
-            std::regex_match(meta_map.at(test_filename).resolved_new.value(), regex_rev)) {
+        if (meta_map.at(filename).resolved_new.has_value() &&
+            std::regex_match(meta_map.at(filename).resolved_new.value(), regex_rev)) {
             return false;
         }
 
         return true;
-    });
-}
+    }
+};
 
-void filter_files_sprt(std::vector<std::string> &file_list, const map_meta &meta_map) {
-    filter_files(file_list, meta_map, [&](const std::string &test_filename) {
+class SprtFilterStrategy {
+   public:
+    bool apply(const std::string &filename, const map_meta &meta_map) const {
         // check if metadata and "sprt" entry exist
-        if (meta_map.find(test_filename) != meta_map.end() &&
-            meta_map.at(test_filename).sprt.has_value() &&
-            meta_map.at(test_filename).sprt.value()) {
+        if (meta_map.find(filename) != meta_map.end() && meta_map.at(filename).sprt.has_value() &&
+            meta_map.at(filename).sprt.value()) {
             return false;
         }
 
         return true;
-    });
-}
+    }
+};
 
 void process(const std::vector<std::string> &files_pgn, const std::string &regex_engine,
-             const map_meta &meta_map, const map_fens &fixfen_map, int concurrency, int bin_width) {
+             const map_fens &fixfen_map, int concurrency, int bin_width) {
     // Create more chunks than threads to prevent threads from idling.
     int target_chunks = 4 * concurrency;
 
@@ -441,21 +451,21 @@ void process(const std::vector<std::string> &files_pgn, const std::string &regex
     std::cout << "\rProgress: " << total_chunks << "/" << files_chunked.size() << std::flush;
 
     for (const auto &files : files_chunked) {
-        pool.enqueue([&files, &regex_engine, &meta_map, &fixfen_map, &progress_mutex,
-                      &files_chunked, &bin_width]() {
-            analysis::ana_files(files, regex_engine, fixfen_map, bin_width);
+        pool.enqueue(
+            [&files, &regex_engine, &fixfen_map, &progress_mutex, &files_chunked, &bin_width]() {
+                analysis::ana_files(files, regex_engine, fixfen_map, bin_width);
 
-            total_chunks++;
+                total_chunks++;
 
-            // Limit the scope of the lock
-            {
-                const std::lock_guard<std::mutex> lock(progress_mutex);
+                // Limit the scope of the lock
+                {
+                    const std::lock_guard<std::mutex> lock(progress_mutex);
 
-                // Print progress
-                std::cout << "\rProgress: " << total_chunks << "/" << files_chunked.size()
-                          << std::flush;
-            }
-        });
+                    // Print progress
+                    std::cout << "\rProgress: " << total_chunks << "/" << files_chunked.size()
+                              << std::flush;
+                }
+            });
     }
 
     // Wait for all threads to finish
@@ -524,108 +534,98 @@ int main(int argc, char const *argv[]) {
     }
 #endif
 
-    const std::vector<std::string> args(argv + 1, argv + argc);
+    pos_map.reserve(analysis::map_size);
+
+    CommandLine cmd(argc, argv);
 
     std::vector<std::string> files_pgn;
-    std::string regex_book, regex_rev, regex_engine, json_filename = "scoreWDLstat.json";
-
-    std::vector<std::string>::const_iterator pos;
-
+    std::string json_filename = "scoreWDLstat.json";
+    std::string default_path  = "./pgns";
+    std::string regex_engine;
+    map_fens fixfen_map;
+    int bin_width   = 5;
     int concurrency = std::max(1, int(std::thread::hardware_concurrency()));
 
-    int bin_width = 5;
-
-    if (std::find(args.begin(), args.end(), "--help") != args.end()) {
+    if (cmd.has_argument("--help", true)) {
         print_usage(argv[0]);
         return 0;
     }
 
-    if (find_argument(args, pos, "--concurrency")) {
-        concurrency = std::stoi(*std::next(pos));
+    if (cmd.has_argument("--concurrency")) {
+        bin_width = std::stoi(cmd.get_argument("--binWidth"));
     }
 
-    if (find_argument(args, pos, "--binWidth")) {
-        bin_width = std::stoi(*std::next(pos));
+    if (cmd.has_argument("--concurrency")) {
+        concurrency = std::stoi(cmd.get_argument("--concurrency"));
     }
 
-    if (find_argument(args, pos, "--file")) {
-        files_pgn = {*std::next(pos)};
+    if (cmd.has_argument("--file")) {
+        files_pgn = {cmd.get_argument("--file")};
     } else {
-        std::string path = "./pgns";
+        auto path = cmd.get_argument("--dir", default_path);
 
-        if (find_argument(args, pos, "--dir")) {
-            path = *std::next(pos);
-        }
-
-        bool recursive = find_argument(args, pos, "-r", true);
+        bool recursive = cmd.has_argument("-r", true);
         std::cout << "Looking " << (recursive ? "(recursively) " : "") << "for pgn files in "
                   << path << std::endl;
 
         files_pgn = get_files(path, recursive);
-    }
 
-    // sort to easily check for "duplicate" files, i.e. "foo.pgn.gz" and "foo.pgn"
-    std::sort(files_pgn.begin(), files_pgn.end());
+        // sort to easily check for "duplicate" files, i.e. "foo.pgn.gz" and "foo.pgn"
+        std::sort(files_pgn.begin(), files_pgn.end());
 
-    for (size_t i = 1; i < files_pgn.size(); ++i) {
-        if (files_pgn[i].find(files_pgn[i - 1]) == 0) {
-            std::cout << "Error: \"Duplicate\" files: " << files_pgn[i - 1] << " and "
-                      << files_pgn[i] << std::endl;
-            std::exit(1);
+        for (size_t i = 1; i < files_pgn.size(); ++i) {
+            if (files_pgn[i].find(files_pgn[i - 1]) == 0) {
+                std::cout << "Error: \"Duplicate\" files: " << files_pgn[i - 1] << " and "
+                          << files_pgn[i] << std::endl;
+                std::exit(1);
+            }
         }
     }
 
     std::cout << "Found " << files_pgn.size() << " .pgn(.gz) files in total." << std::endl;
 
-    bool allow_duplicates = find_argument(args, pos, "--allowDuplicates", true);
-    auto meta_map         = get_metadata(files_pgn, allow_duplicates);
+    auto meta_map = get_metadata(files_pgn, cmd.has_argument("--allowDuplicates", true));
 
-    if (find_argument(args, pos, "--SPRTonly", true)) {
-        filter_files_sprt(files_pgn, meta_map);
+    if (cmd.has_argument("--SPRTonly", true)) {
+        filter_files(files_pgn, meta_map, SprtFilterStrategy());
     }
 
-    if (find_argument(args, pos, "--matchBook")) {
-        regex_book = *std::next(pos);
+    if (cmd.has_argument("--matchBook")) {
+        auto regex_book = cmd.get_argument("--matchBook");
 
         if (!regex_book.empty()) {
-            bool invert = find_argument(args, pos, "--matchBookInvert", true);
+            bool invert = cmd.has_argument("--matchBookInvert", true);
             std::cout << "Filtering pgn files " << (invert ? "not " : "")
                       << "matching the book name " << regex_book << std::endl;
-            std::regex regex(regex_book);
-            filter_files_book(files_pgn, meta_map, regex, invert);
+            filter_files(files_pgn, meta_map, BookFilterStrategy(std::regex(regex_book), invert));
         }
     }
 
-    if (find_argument(args, pos, "--matchRev")) {
-        regex_rev = *std::next(pos);
+    if (cmd.has_argument("--matchRev")) {
+        auto regex_rev = cmd.get_argument("--matchRev");
 
         if (!regex_rev.empty()) {
             std::cout << "Filtering pgn files matching revision SHA " << regex_rev << std::endl;
-            std::regex regex(regex_rev);
-            filter_files_revision(files_pgn, meta_map, regex);
+            filter_files(files_pgn, meta_map, FileFilterStrategy(std::regex(regex_rev)));
         }
 
         regex_engine = regex_rev;
     }
 
-    map_fens fixfen_map;
-
-    if (find_argument(args, pos, "--fixFENsource")) {
-        fixfen_map = get_fixfen(*std::next(pos));
+    if (cmd.has_argument("--fixFENsource")) {
+        fixfen_map = get_fixfen(cmd.get_argument("--fixFENsource"));
     }
 
-    if (find_argument(args, pos, "--matchEngine")) {
-        regex_engine = *std::next(pos);
+    if (cmd.has_argument("--matchEngine")) {
+        regex_engine = cmd.get_argument("--matchEngine");
     }
 
-    if (find_argument(args, pos, "-o")) {
-        json_filename = *std::next(pos);
+    if (cmd.has_argument("-o")) {
+        json_filename = cmd.get_argument("-o");
     }
-
-    pos_map.reserve(analysis::map_size);
 
     const auto t0 = std::chrono::high_resolution_clock::now();
-    process(files_pgn, regex_engine, meta_map, fixfen_map, concurrency, bin_width);
+    process(files_pgn, regex_engine, fixfen_map, concurrency, bin_width);
     const auto t1 = std::chrono::high_resolution_clock::now();
 
     std::cout << "\nTime taken: "
