@@ -169,10 +169,29 @@ inline float fast_stof(const char *str) {
     return chunks;
 }
 
-inline bool find_argument(const std::vector<std::string> &args,
-                          std::vector<std::string>::const_iterator &pos, std::string_view arg,
-                          bool without_parameter = false) {
-    pos = std::find(args.begin(), args.end(), arg);
+class CommandLine {
+   public:
+    CommandLine(int argc, char const *argv[]) {
+        for (int i = 1; i < argc; ++i) {
+            args.emplace_back(argv[i]);
+        }
+    }
 
-    return pos != args.end() && (without_parameter || std::next(pos) != args.end());
-}
+    bool has_argument(const std::string &arg, bool without_parameter = false) const {
+        const auto pos = std::find(args.begin(), args.end(), arg);
+        return pos != args.end() && (without_parameter || std::next(pos) != args.end());
+    }
+
+    std::string get_argument(const std::string &arg, std::string default_value = "") const {
+        auto it = std::find(args.begin(), args.end(), arg);
+
+        if (it != args.end() && std::next(it) != args.end()) {
+            return *std::next(it);
+        }
+
+        return default_value;
+    }
+
+   private:
+    std::vector<std::string> args;
+};
