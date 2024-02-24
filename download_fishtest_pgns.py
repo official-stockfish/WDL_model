@@ -130,25 +130,27 @@ while True:
 
         if args.verbose >= 1:
             print(f"Collecting meta data for test {test} ...")
-        wins, draws, losses = 0, 0, 0
         if "spsa" in meta.get("args", {}):
             if args.verbose >= 1:
                 print(f"Skipping SPSA test {test} ...")
             continue
         with open(path + test + ".json", "w") as jsonFile:
             json.dump(meta, jsonFile, indent=4, sort_keys=True)
+        games = None
         if "results" in meta:
             wins = meta["results"].get("wins", 0)
             draws = meta["results"].get("draws", 0)
             losses = meta["results"].get("losses", 0)
+            games = wins + draws + losses
+            if games == 0:
+                continue
 
         url = "https://tests.stockfishchess.org/api/run_pgns/" + test + ".pgns.tar"
         try:
             response = urllib.request.urlopen(url)
             mb = int(response.getheader("Content-Length", 0)) // (2**20)
-            games = wins + draws + losses
             msg = f"Downloading{'' if mb == 0 else f' {mb}MB'} .pgns.tar file "
-            if games:
+            if games is not None:
                 msg += f"with {games} games {'' if args.verbose == 0 else f'(WDL = {wins} {draws} {losses}) '}"
             print(msg + f"to {path} ...")
             tmpName = path + test + ".tmp"
