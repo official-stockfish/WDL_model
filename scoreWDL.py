@@ -658,7 +658,7 @@ if __name__ == "__main__":
 
     if args.NormalizeToPawnValue is None:
         if args.NormalizeData is None:
-            args.NormalizeToPawnValue = 345
+            args.NormalizeToPawnValue = 356
     else:
         assert (
             args.NormalizeData is None
