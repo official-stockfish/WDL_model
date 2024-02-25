@@ -54,13 +54,10 @@ steps:
     - Run `python scoreWDL.py` with some custom parameters to compute the WDL 
       model parameters from the data stored in `updateWDL.json`. The script's
       output will be stored in `scoreWDL.log` and will contain the new
-      values for `NormalizeToPawnValue` in Stockfish's
-      [`uci.h`](https://github.com/official-stockfish/Stockfish/blob/master/src/uci.h)
-      and `as[]`, `bs[]` in
-      [`uci.cpp`](https://github.com/official-stockfish/Stockfish/blob/master/src/uci.cpp). See e.g. https://github.com/official-stockfish/Stockfish/pull/4373.
+      values for `NormalizeToPawnValue` and `as[]`, `bs[]` in Stockfish's
+      [`uci.cpp`](https://github.com/official-stockfish/Stockfish/blob/master/src/uci.cpp). See e.g. https://github.com/official-stockfish/Stockfish/pull/5070.
       In addition, the script will produce a graphical illustration of the 
-      analysed data and the fitted WDL model in the file
-      `WDL_model_summary.png`, as displayed below.
+      analysed data and the fitted WDL model, as displayed below.
 
 ## Results
 
