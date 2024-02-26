@@ -158,7 +158,8 @@ class Analyze : public pgn::Visitor {
             return;
         }
 
-        const size_t delimiter_pos = comment.find('/');
+        // openbench uses Nf3 {+0.57 17/28 583 363004}, fishtest Nf3 {+0.57/17}
+        const size_t delimiter_pos = comment.find_first_of(" /");
 
         Key key;
         key.eval = 1002;
