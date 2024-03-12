@@ -133,7 +133,8 @@ class Analyze : public pgn::Visitor {
         }
 
         if (key == "Termination") {
-            if (value == "time forfeit" || value == "abandoned") {
+            if (value == "time forfeit" || value == "abandoned" || value == "stalled connection" ||
+                value == "illegal move" || value == "unterminated") {
                 goodTermination = false;
             }
         }
