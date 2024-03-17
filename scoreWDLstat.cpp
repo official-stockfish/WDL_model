@@ -86,12 +86,12 @@ class Analyze : public pgn::Visitor {
 
     void header(std::string_view key, std::string_view value) override {
         if (key == "FEN") {
-            std::regex p("^(.+) (.+) 0 1$");
+            std::regex p("^(.+) 0 1$");
             std::smatch match;
             std::string value_str(value);
 
-            // revert changes by cutechess-cli to move counters, but trust it on ep square
-            if (!fixfen_map.empty() && std::regex_search(value_str, match, p) && match.size() > 2) {
+            // revert changes by cutechess-cli to move counters
+            if (!fixfen_map.empty() && std::regex_search(value_str, match, p) && match.size() > 1) {
                 std::string fen = match[1];
                 auto it         = fixfen_map.find(fen);
 
@@ -100,10 +100,9 @@ class Analyze : public pgn::Visitor {
                     std::exit(1);
                 }
 
-                const auto &fix         = it->second;
-                std::string ep          = match[2];  // trust cutechess-cli on this one
-                std::string fixed_value = fen + " " + ep + " " + std::to_string(fix.first) + " " +
-                                          std::to_string(fix.second);
+                const auto &fix = it->second;
+                std::string fixed_value =
+                    fen + " " + std::to_string(fix.first) + " " + std::to_string(fix.second);
                 board.setFen(fixed_value);
             } else {
                 board.setFen(value);
@@ -295,7 +294,7 @@ void ana_files(const std::vector<std::string> &files, const std::string &regex_e
 
             if (!fullmove) continue;
 
-            auto key         = f1 + ' ' + f2 + ' ' + f3;
+            auto key         = f1 + ' ' + f2 + ' ' + f3 + ' ' + ep;
             auto fixfen_data = std::pair<int, int>(halfmove, fullmove);
 
             if (fixfen_map.find(key) != fixfen_map.end()) {
