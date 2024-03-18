@@ -224,7 +224,7 @@ class WdlData:
         total_draws = np.sum(self.draws, axis=1)
         total_losses = np.sum(self.losses, axis=1)
 
-        index = np.arange(len(total_wins))
+        index = np.arange(self.wins.shape[0]) + wdl_data.offset_mom
 
         plt.bar(index, total_wins, label="Wins", color="blue")
         plt.bar(
