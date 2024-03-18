@@ -181,7 +181,7 @@ if [[ $gamescount -eq 0 ]]; then
 fi
 
 # fit the new WDL model, keeping anchor at move 32
-python scoreWDL.py updateWDL.json --plot save --pgnName updateWDL.png --momType move --momTarget 32 --moveMin $moveMin --moveMax $moveMax --modelFitting optimizeProbability $oldnormdata >&scoreWDL.log
+python scoreWDL.py updateWDL.json --plot save --pngName updateWDL.png --momType move --momTarget 32 --moveMin $moveMin --moveMax $moveMax --modelFitting optimizeProbability $oldnormdata >&scoreWDL.log
 
 # extract the total number of positions, and the new NormalizeToPawnValue
 poscount=$(awk -F '[() ,]' '/Retained \(W,D,L\)/ {sum = 0; for (i = 9; i <= NF; i++) sum += $i; print sum; exit}' scoreWDL.log)
