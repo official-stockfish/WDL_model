@@ -3,12 +3,12 @@
 Stockfish's "centipawn" evaluation is decoupled from the classical value
 of a pawn, and is calibrated such that an advantage of
 "100 centipawns" means the engine has a 50% probability to win
-from this position in selfplay at move 32 at fishtest LTC time control.\
+from this position in selfplay at fishtest LTC time control.\
 If the option `UCI_ShowWDL` is enabled, the engine will show Win-Draw-Loss
 probabilities alongside its "centipawn" evaluation. These probabilities
-depend on the engine's evaluation and the move number, and are computed
-from a WDL model that can be generated from fishtest data with the help of
-the scripts in this repository.
+depend on the engine's evaluation and the material left on the board, 
+and are computed from a WDL model that can be generated from fishtest data 
+with the help of the scripts in this repository.
 
 ## Install
 
@@ -54,8 +54,8 @@ steps:
     - Run `python scoreWDL.py` with some custom parameters to compute the WDL 
       model parameters from the data stored in `updateWDL.json`. The script's
       output will be stored in `scoreWDL.log` and will contain the new
-      values for `NormalizeToPawnValue` and `as[]`, `bs[]` in Stockfish's
-      [`uci.cpp`](https://github.com/official-stockfish/Stockfish/blob/master/src/uci.cpp). See e.g. https://github.com/official-stockfish/Stockfish/pull/5070.
+      values for `as[]` and `bs[]` in Stockfish's
+      [`uci.cpp`](https://github.com/official-stockfish/Stockfish/blob/master/src/uci.cpp). See e.g. https://github.com/official-stockfish/Stockfish/pull/5121.
       In addition, the script will produce a graphical illustration of the 
       analysed data and the fitted WDL model, as displayed below.
 
@@ -73,10 +73,7 @@ programs. For example:
 
 - `scoreWDLstat --matchEngine <regex>` : extracts WDL data only from the
    engine matching the regex
-- `python scoreWDL.py --momTarget 30` : chooses move 30 (rather than 32)
-  as target move for the 100cp anchor
-- `python scoreWDL.py --momType material --momTarget 68` : bases the fitting
-  on material (rather than move), with 100cp anchor a material count of 68
+- `python scoreWDL.py --NormalizeToPawnValue 356 --momType move --momTarget 32 --moveMin 8` : fit the model based on full move number, with move 32 as the 100cp anchor (until SF16.1 this was used for Stockfish)
 
 ## Background
 
@@ -105,7 +102,7 @@ score(x) = 1 * win_rate(x) + 0.5 * draw_rate(x) + 0 * loss_rate(x)
 
 The model is made more accurate by not only taking the evaluation,
 but also the material or game move counter (`mom`) into account. (The model
-currently employed in Stockfish uses the move counter.)
+currently employed in Stockfish uses the material.)
 This dependency is modeled by making the parameters `a` and `b` a function of 
 `mom`. The win/draw/loss rates are now 2D functions, while `a` and `b` are replaced by 1D functions. For example:
 ```
@@ -116,8 +113,8 @@ Here for simplicity the 1D functions `p_a` and `p_b` are chosen to be polynomial
 The parameters that need to be fitted to represent the model completely are thus the 8 coefficients that
 determine these two polynomials. For example:
 ```
-p_a(mom) = ((-1.719 * mom / 32 + 12.448) * mom / 32 + -12.855) * mom / 32 + 331.883
-p_b(mom) = ((-3.001 * mom / 32 + 22.505) * mom / 32 + -51.253) * mom / 32 + 93.209
+p_a(mom) = ((-185.71 * mom / 58 + 504.85) * mom / 58 + -438.58) * mom / 58 +  474.05
+p_b(mom) = ((89.24 * mom / 58 + -137.02) * mom / 58 + 73.29) * mom / 58 + 47.53
 ```
 
 In order to fit these 8 parameters three different approaches are provided:
@@ -148,29 +145,28 @@ Observe that `x` in the above formulas is the internal engine evaluation
 of a position, often also called non-normalized evaluation, which is in 
 general not exposed to the user. By definition
 `x = p_a(mom)` is the internal evaluation with a 50% win rate at material or
-game move counter `mom`. Ideally this `x` should be scaled to the displayed
-evalution `1.0` for every value of `mom`. But for computational simplicity,
-in Stockfish all values of `x`, irrespective of the value of `mom`, are 
-rescaled to `x/p_a(32)`, which thanks to the choice of `p_a` is just the sum 
-of the four coefficients of the polynomial `p_a`, and in rounded form is stored
+game move counter `mom`. Since SF17 (and in current development versions)
+this `x` is scaled to the displayed evalution `1.0` for every value of `mom`,
+where `mom` represents the material count of the material left on the board.
+Until SF16.1, for computational simplicity,
+all values of `x`, irrespective of the value of `mom` (with `mom` being the
+full move number), were 
+rescaled to `x/p_a(32)`, which thanks to the choice of `p_a` was just the sum 
+of the four coefficients of the polynomial `p_a`, and in rounded form was stored
 within `NormalizeToPawnValue`.
-
-In turn, this repository needs the value of `NormalizeToPawnValue` to recover
-the internal engine evaluations from the normalized evaluations stored in the 
-pgn files.
 
 ### Interpretation 
 
-The three plots in the graphic displayed above can be interpreted in the
+The six plots in the graphic displayed above can be interpreted in the
 following way. The middle and right plot in the first row show contour plots
 in the `(x,mom)` domain
 of the observed win and draw frequencies in the data, respectively.
 Below them are the corresponding contour plots for the fitted model, i.e.
 for the 2D functions `win_rate(x,mom)` and `draw_rate(x,mom)` based on the 
 found optimal 8 parameters. 
-The top left plot shows a slice of the data at the chosen anchor `mom=32`,
+The top left plot shows a slice of the data at the chosen anchor `mom=58`,
 together with plots of `win_rate(x)`, `draw_rate(x)` and `loss_rate(x)`
-for the fitted `a=p_a(32)` and `b=p_b(32)`. 
+for the fitted `a=p_a(58)` and `b=p_b(58)`. 
 Finally, the bottom left plot shows the collection of
 all the values of `a(mom)` and `b(mom)`, together with plots of the two
 polynomials `p_a` and `p_b`.
