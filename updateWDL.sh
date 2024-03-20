@@ -7,12 +7,10 @@ set -e
 # by default we start from the most recent WDL model change and go to master
 default_firstrev=e67cc979fd2c0e66dfc2b2f2daa0117458cfc462
 default_lastrev=HEAD
-default_moveMin=8
-default_moveMax=120
+default_materialMin=10
 firstrev=$default_firstrev
 lastrev=$default_lastrev
-moveMin=$default_moveMin
-moveMax=$default_moveMax
+materialMin=$default_materialMin
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -24,21 +22,16 @@ while [[ $# -gt 0 ]]; do
         lastrev="$2"
         shift 2
         ;;
-    --moveMin)
-        moveMin="$2"
-        shift 2
-        ;;
-    --moveMax)
-        moveMax="$2"
+    --materialMin)
+        materialMin="$2"
         shift 2
         ;;
     --help)
         echo "Usage: $0 [OPTIONS]"
         echo "Options:"
-        echo "  --firstrev FIRSTREV   First SF commit to collect games from (default: $default_firstrev)"
-        echo "  --lastrev LASTREV     Last SF commit to collect games from (default: $default_lastrev)"
-        echo "  --moveMin MOVEMIN     Parameter passed to scoreWDL.py (default: $default_moveMin)"
-        echo "  --moveMax MOVEMAX     Parameter passed to scoreWDL.py (default: $default_moveMax)"
+        echo "  --firstrev    FIRSTREV      First SF commit to collect games from (default: $default_firstrev)"
+        echo "  --lastrev     LASTREV       Last SF commit to collect games from (default: $default_lastrev)"
+        echo "  --materialMin MATERIALMIN   Parameter passed to scoreWDL.py (default: $default_materialMin)"
         exit 0
         ;;
     *)
@@ -47,12 +40,12 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-echo "Running: $0 --firstrev=$firstrev --lasttrev=$lastrev --moveMin=$moveMin --moveMax=$moveMax"
+echo "Running: $0 --firstrev=$firstrev --lasttrev=$lastrev --materialMin=$materialMin"
 
 echo "started at: " $(date)
 
 # regex for book name
-bookname="UHO_4060_v..epd|UHO_Lichess_4852_v1.epd"
+bookname="UHO_Lichess_4852_v..epd"
 
 # path for PGN files
 pgnpath=pgns
@@ -121,9 +114,9 @@ get_normalize_data() {
     fi
 
     if [ -z "$pawn" ]; then
-        line=$(git grep 'double m = std::clamp(ply / 2 + 1' "$revision" -- src/uci.cpp)
+        line=$(git grep 'double m = std::clamp(material' "$revision" -- src/uci.cpp)
 
-        momMin="${line#*std::clamp(ply / 2 + 1, }"
+        momMin="${line#*std::clamp(material, }"
         momMin="${momMin%%,*}"
         momMax="${line##*, }"
         momMax="${momMax%%)*}"
@@ -135,7 +128,7 @@ get_normalize_data() {
         as="${as%\};}"
         as=$(sed 's/ //g' <<<"$as") # remove spaces
 
-        echo "--NormalizeData {\"momType\":\"move\",\"momMin\":$((momMin)),\"momMax\":$((momMax)),\"momTarget\":$((momTarget)),\"as\":[$as]}"
+        echo "--NormalizeData {\"momType\":\"material\",\"momMin\":$((momMin)),\"momMax\":$((momMax)),\"momTarget\":$((momTarget)),\"as\":[$as]}"
     else
         echo "--NormalizeToPawnValue $pawn"
     fi
@@ -180,8 +173,8 @@ if [[ $gamescount -eq 0 ]]; then
     exit 0
 fi
 
-# fit the new WDL model, keeping anchor at move 32
-python scoreWDL.py updateWDL.json --plot save --pngName updateWDL.png --momType move --momTarget 32 --moveMin $moveMin --moveMax $moveMax --modelFitting optimizeProbability $oldnormdata >&scoreWDL.log
+# fit the new WDL model, keeping anchor at material 58
+python scoreWDL.py updateWDL.json --plot save --pngName updateWDL.png --momType material --momTarget 58 --materialMin $materialMin --moveMin 1 --modelFitting optimizeProbability $oldnormdata >&scoreWDL.log
 
 # extract the total number of positions, and the new NormalizeToPawnValue
 poscount=$(awk -F '[() ,]' '/Retained \(W,D,L\)/ {sum = 0; for (i = 9; i <= NF; i++) sum += $i; print sum; exit}' scoreWDL.log)
