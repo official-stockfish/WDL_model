@@ -174,7 +174,7 @@ if [[ $gamescount -eq 0 ]]; then
 fi
 
 # fit the new WDL model, keeping anchor at material 58
-python scoreWDL.py updateWDL.json --plot save --pgnName updateWDL.png --momType material --momTarget 58 --materialMin $materialMin --modelFitting optimizeProbability $oldnormdata >&scoreWDL.log
+python scoreWDL.py updateWDL.json --plot save --pngName updateWDL.png --momType material --momTarget 58 --materialMin $materialMin --moveMin 1 --modelFitting optimizeProbability $oldnormdata >&scoreWDL.log
 
 # extract the total number of positions, and the new NormalizeToPawnValue
 poscount=$(awk -F '[() ,]' '/Retained \(W,D,L\)/ {sum = 0; for (i = 9; i <= NF; i++) sum += $i; print sum; exit}' scoreWDL.log)

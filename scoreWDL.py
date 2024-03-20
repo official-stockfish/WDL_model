@@ -219,6 +219,33 @@ class WdlData:
 
         return model_ms, model_as, model_bs
 
+    def save_distro_plot(self, pngNameDistro):
+        total_wins = np.sum(self.wins, axis=1)
+        total_draws = np.sum(self.draws, axis=1)
+        total_losses = np.sum(self.losses, axis=1)
+
+        index = np.arange(self.wins.shape[0]) + wdl_data.offset_mom
+
+        plt.bar(index, total_wins, label="Wins", color="blue")
+        plt.bar(
+            index, total_draws, bottom=total_wins, label="Draws", color="lightgreen"
+        )
+        plt.bar(
+            index,
+            total_losses,
+            bottom=total_wins + total_draws,
+            label="Losses",
+            color="red",
+        )
+
+        plt.xlabel(self.momType)
+        plt.ylabel("Number of Games")
+        plt.title("Distribution of Wins, Draws, and Losses")
+        plt.legend()
+        plt.savefig(pngNameDistro)
+        plt.close()
+        print(f"Saved distribution plot to {pngNameDistro}.")
+
 
 class ObjectiveFunction:
     """provides objective functions that can be minimized to fit the wdl_data"""
@@ -404,7 +431,7 @@ class WdlModel:
 class WdlPlot:
     def __init__(self, args):
         self.setting = args.plot
-        self.pgnName = args.pgnName
+        self.pngName = args.pngName
         self.momPlotMin = args.momPlotMin
         self.momPlotMax = args.momPlotMax
 
@@ -537,11 +564,11 @@ class WdlPlot:
         self.save()
 
     def save(self):
-        plt.savefig(self.pgnName, dpi=300)
+        plt.savefig(self.pngName, dpi=300)
         if self.setting == "save+show":
             plt.show()
         plt.close()
-        print(f"Saved graphics to {self.pgnName}.")
+        print(f"Saved graphics to {self.pngName}.")
 
 
 if __name__ == "__main__":
@@ -650,9 +677,13 @@ if __name__ == "__main__":
         help="Save/show graphics or not. Useful for batch processing.",
     )
     parser.add_argument(
-        "--pgnName",
+        "--pngName",
         default="scoreWDL.png",
         help="Name of saved graphics file.",
+    )
+    parser.add_argument(
+        "--pngNameDistro",
+        help="Name of optional graphics file for raw data distribution plot.",
     )
     args = parser.parse_args()
 
@@ -675,6 +706,8 @@ if __name__ == "__main__":
 
     wdl_data = WdlData(args)
     wdl_data.load_json_data(args.filename)
+    if args.pngNameDistro:
+        wdl_data.save_distro_plot(args.pngNameDistro)
 
     if args.modelFitting != "None":
         wdl_model = WdlModel(args)
