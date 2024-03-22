@@ -604,7 +604,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--moveMin",
         type=int,
-        default=3,
+        default=1,
         help="Lower move number limit for filter applied to json data.",
     )
     parser.add_argument(
@@ -616,7 +616,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--materialMin",
         type=int,
-        default=0,
+        default=10,
         help="Lower material count limit for filter applied to json data.",
     )
     parser.add_argument(
@@ -634,19 +634,19 @@ if __name__ == "__main__":
     parser.add_argument(
         "--momType",
         choices=["move", "material"],
-        default="move",
+        default="material",
         help="Select y-axis data used for plotting and fitting.",
     )
     parser.add_argument(
         "--momTarget",
         type=int,
-        default=32,
+        default=58,
         help="The polynomials p_a and p_b will be expressed in terms of sum_i c_i (mom/momTarget)^i.",
     )
     parser.add_argument(
         "--modelFitting",
         choices=["fitDensity", "optimizeProbability", "optimizeScore", "None"],
-        default="fitDensity",
+        default="optimizeProbability",
         help="Choice of model fitting: Fit the win rate curves, maximimize the probability of predicting the outcome, minimize the squared error in predicted score, or no fitting.",
     )
     parser.add_argument(
@@ -689,7 +689,7 @@ if __name__ == "__main__":
 
     if args.NormalizeToPawnValue is None:
         if args.NormalizeData is None:
-            args.NormalizeToPawnValue = 356
+            args.NormalizeData = '{"momType": "material", "momMin": 10, "momMax": 78, "momTarget": 58, "as": [-185.71965483,504.85014385,-438.58295743,474.04604627]}'
     else:
         assert (
             args.NormalizeData is None
