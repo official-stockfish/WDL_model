@@ -148,8 +148,8 @@ while True:
         url = "https://tests.stockfishchess.org/api/run_pgns/" + test + ".pgns.tar"
         try:
             response = urllib.request.urlopen(url)
-            mb = int(response.getheader("Content-Length", 0)) // (2**20)
-            msg = f"Downloading{'' if mb == 0 else f' {mb}MB'} .pgns.tar file "
+            mb = int(response.getheader("Content-Length", -(2**20))) // 2**20
+            msg = f"Downloading{'' if mb == -1 else f' {mb}MB'} .pgns.tar file "
             if games is not None:
                 msg += f"with {games} games {'' if args.verbose == 0 else f'(WDL = {wins} {draws} {losses}) '}"
             print(msg + f"to {path} ...")
