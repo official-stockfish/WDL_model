@@ -52,7 +52,7 @@ class WdlData:
             self.NormalizeData["as"] = [float(x) for x in self.NormalizeData["as"]]
             self.normalize_to_pawn_value = int(sum(self.NormalizeData["as"]) + 0.5)
             if not "momType" in self.NormalizeData:
-                self.NormalizeData["momType"] = "move"
+                self.NormalizeData["momType"] = "material"
             assert self.NormalizeData["momType"] in [
                 "move",
                 "material",
@@ -418,7 +418,7 @@ class WdlModel:
         print(f"Corresponding spread = {int(fsum_b + 0.5)};")
         print(f"Corresponding normalized spread = {fsum_b / fsum_a};")
         print(
-            f"Draw rate at 0.0 eval at move {self.momTarget} = {1 - 2 / (1 + np.exp(fsum_a / fsum_b))};"
+            f"Draw rate at 0.0 eval at {wdl_data.momType} {self.momTarget} = {1 - 2 / (1 + np.exp(fsum_a / fsum_b))};"
         )
 
         print("Parameters in internal value units: ")
