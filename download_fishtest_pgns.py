@@ -1,5 +1,15 @@
 import argparse, datetime, json, os, re, tarfile, urllib.request
 
+
+def format_large_number(number):
+    suffixes = ["", "K", "M", "G", "T", "P"]
+    for suffix in suffixes:
+        if number < 1000:
+            return f"{number:.0f}{suffix}"
+        number /= 1000
+    return f"{number:.0f}{suffixes[-1]}"
+
+
 parser = argparse.ArgumentParser(
     description="Bulk-download .pgn.gz files from finished tests on fishtest.",
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -148,8 +158,9 @@ while True:
         url = "https://tests.stockfishchess.org/api/run_pgns/" + test + ".pgns.tar"
         try:
             response = urllib.request.urlopen(url)
-            mb = int(response.getheader("Content-Length", -(2**20))) // 2**20
-            msg = f"Downloading{'' if mb == -1 else f' {mb}MB'} .pgns.tar file "
+            b = int(response.getheader("Content-Length"))
+            b = "" if b is None else format_large_number(b) + "B "
+            msg = f"Downloading {b}.pgns.tar file "
             if games is not None:
                 msg += f"with {games} games {'' if args.verbose == 0 else f'(WDL = {wins} {draws} {losses}) '}"
             print(msg + f"to {path} ...")
