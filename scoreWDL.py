@@ -498,14 +498,29 @@ class WdlPlot:
             self.axs[1, 0].plot(
                 model.ms,
                 poly3(model.ms / model.momTarget, *model.coeffs_a),
-                "r-",
+                color="red",
+                linewidth=2,
                 label=model.label_p_a,
             )
+            if (
+                wdl_data.NormalizeData is not None
+                and wdl_data.NormalizeData["momType"] == wdl_data.momType
+            ):
+                self.axs[1, 0].plot(
+                    model.ms,
+                    poly3(
+                        model.ms / wdl_data.NormalizeData["momTarget"],
+                        *wdl_data.NormalizeData["as"],
+                    ),
+                    color="lightcoral",
+                    linestyle="dashed",
+                    label="p_a of the input data's model",
+                )
             self.axs[1, 0].plot(model.ms, model.bs, "g.", label="bs")
             self.axs[1, 0].plot(
                 model.ms,
                 poly3(model.ms / model.momTarget, *model.coeffs_b),
-                "m-",
+                color="magenta",
                 label=model.label_p_b,
             )
 
