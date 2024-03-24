@@ -514,7 +514,7 @@ class WdlPlot:
                     ),
                     color="lightcoral",
                     linestyle="dashed",
-                    label="p_a (old model)",
+                    label="p_a of the input data's model",
                 )
             self.axs[1, 0].plot(model.ms, model.bs, "g.", label="bs")
             self.axs[1, 0].plot(
