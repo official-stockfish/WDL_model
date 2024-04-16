@@ -238,8 +238,14 @@ class WdlData:
             color="red",
         )
 
+        plt.xlim(index[0] - 1, index[-1] + 1)
+        plt.xticks(
+            [index[0]]
+            + [t for t in plt.xticks()[0] if index[0] < t < index[-1]]
+            + [index[-1]]
+        )
         plt.xlabel(self.momType)
-        plt.ylabel("Number of Games")
+        plt.ylabel("Number of Positions")
         plt.title("Distribution of Wins, Draws, and Losses")
         plt.legend()
         plt.savefig(pngNameDistro)
