@@ -113,8 +113,8 @@ while True:
             ids = [
                 (
                     id,
-                    datetime.datetime.strptime(
-                        response_json[id]["start_time"], "%Y-%m-%d %H:%M:%S.%f"
+                    datetime.datetime.fromisoformat(
+                        response_json[id]["start_time"]
                     ).strftime("%y-%m-%d"),
                     response_json[id],
                 )
