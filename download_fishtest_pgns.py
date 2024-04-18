@@ -123,12 +123,16 @@ while True:
             ]
     except urllib.error.HTTPError as ex:
         print(f"HTTP Error: {ex.code} - {ex.reason}")
+        break
     except urllib.error.URLError as ex:
         print(f"URL Error: {ex.reason}")
+        break
     except json.JSONDecodeError as ex:
         print(f"JSON Decoding Error: {ex}")
+        break
     except Exception as ex:
         print(f"Error: {ex}")
+        break
 
     # download .pgn.tar ball for each test
     for test, dateStr, meta in ids:
