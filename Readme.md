@@ -169,7 +169,8 @@ together with plots of `win_rate(x)`, `draw_rate(x)` and `loss_rate(x)`
 for the fitted `a=p_a(58)` and `b=p_b(58)`. 
 Finally, the bottom left plot shows the collection of
 all the values of `a(mom)` and `b(mom)`, together with plots of the two
-polynomials `p_a` and `p_b`.
+polynomials `p_a` and `p_b`. For comparison it also includes a plot of
+the polynomial `p_a` that was used in the WDL model of the input data.
 
 ---
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
