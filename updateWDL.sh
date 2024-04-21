@@ -5,7 +5,7 @@ set -e
 
 # set range of commits to be considered for the WDL fitting, and other options
 # by default we start from the most recent WDL model change and go to master
-default_firstrev=9b92ada935ddf920491156be22f609afaca4d840
+default_firstrev=6fc7da44ad9c7e2ba6062d5c79daafd29a4dcd6f
 default_lastrev=HEAD
 default_materialMin=10
 firstrev=$default_firstrev
