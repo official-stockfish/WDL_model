@@ -163,9 +163,8 @@ while True:
         url = "https://tests.stockfishchess.org/api/run_pgns/" + test + ".pgn.gz"
         try:
             response = urllib.request.urlopen(url)
-            b = ""  # FIXME
-            # b = int(response.getheader("Content-Length"))
-            # b = "" if b is None else format_large_number(b) + "B "
+            b = response.getheader("Content-Length", None)
+            b = "" if b is None else format_large_number(int(b)) + "B "
             msg = f"Downloading {b}.pgn.gz file "
             if games is not None:
                 msg += f"with {games} games {'' if args.verbose == 0 else f'(WDL = {wins} {draws} {losses}) '}"
