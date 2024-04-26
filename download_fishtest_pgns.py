@@ -1,4 +1,4 @@
-import argparse, datetime, json, os, re, tarfile, urllib.request
+import argparse, datetime, json, os, re, urllib.request
 
 
 def format_large_number(number):
@@ -67,7 +67,8 @@ if not os.path.exists(args.path):
     os.makedirs(args.path)
 
 # find the set of fully downloaded Ids (looking in the full file tree)
-p = re.compile("([a-z0-9]*)-[0-9]*.pgn(|.gz)")  # match any testId-runId.pgn(.gz)
+# match any filename of the form testId-runId.pgn(.gz) or testId.pgn(.gz)
+p = re.compile("([a-z0-9]*)(-[0-9]*)?\.pgn(|\.gz)")
 downloaded = set()
 
 for _, _, files in os.walk(args.path):
@@ -134,7 +135,7 @@ while True:
         print(f"Error: {ex}")
         break
 
-    # download .pgn.tar ball for each test
+    # download collective .pgn.gz for each test
     for test, dateStr, meta in ids:
         path = args.path + dateStr + "/" + test + "/"
         if not os.path.exists(args.path + dateStr):
@@ -159,22 +160,21 @@ while True:
             if games == 0:
                 continue
 
-        url = "https://tests.stockfishchess.org/api/run_pgns/" + test + ".pgns.tar"
+        url = "https://tests.stockfishchess.org/api/run_pgns/" + test + ".pgn.gz"
         try:
             response = urllib.request.urlopen(url)
-            b = int(response.getheader("Content-Length"))
-            b = "" if b is None else format_large_number(b) + "B "
-            msg = f"Downloading {b}.pgns.tar file "
+            b = ""  # FIXME
+            # b = int(response.getheader("Content-Length"))
+            # b = "" if b is None else format_large_number(b) + "B "
+            msg = f"Downloading {b}.pgn.gz file "
             if games is not None:
                 msg += f"with {games} games {'' if args.verbose == 0 else f'(WDL = {wins} {draws} {losses}) '}"
             print(msg + f"to {path} ...")
             tmpName = path + test + ".tmp"
             urllib.request.urlretrieve(url, tmpName)
             if args.verbose >= 2:
-                print("Extracting the tar file ...")
-            with tarfile.open(tmpName, "r") as tar:
-                tar.extractall(path)
-            os.remove(tmpName)
+                print("Download completed, renaming the tmp file ...")
+            os.rename(tmpName, path + test + ".pgn.gz")
         except Exception as ex:
             if args.verbose >= 2:
                 print(f'  error: caught exception "{ex}"')
