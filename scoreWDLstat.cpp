@@ -328,10 +328,9 @@ void ana_files(const std::vector<std::string> &files, const std::string &regex_e
 
     for (const auto &pathname : file_list) {
         fs::path path(pathname);
-        std::string directory     = path.parent_path().string();
         std::string filename      = path.filename().string();
-        std::string test_id       = filename.substr(0, filename.find_last_of('-'));
-        std::string test_filename = pathname.substr(0, pathname.find_last_of('-'));
+        std::string test_id       = filename.substr(0, filename.find_first_of("-."));
+        std::string test_filename = (path.parent_path() / test_id).string();
 
         if (test_map.find(test_id) == test_map.end()) {
             test_map[test_id] = test_filename;
@@ -339,7 +338,7 @@ void ana_files(const std::vector<std::string> &files, const std::string &regex_e
             if (test_warned.find(test_filename) == test_warned.end()) {
                 std::cout << (allow_duplicates ? "Warning" : "Error")
                           << ": Detected a duplicate of test " << test_id << " in directory "
-                          << directory << std::endl;
+                          << path.parent_path().string() << std::endl;
                 test_warned.insert(test_filename);
 
                 if (!allow_duplicates) {
@@ -368,7 +367,10 @@ template <typename STRATEGY>
 void filter_files(std::vector<std::string> &file_list, const map_meta &meta_map,
                   const STRATEGY &strategy) {
     const auto applier = [&](const std::string &pathname) {
-        auto test_filename = pathname.substr(0, pathname.find_last_of('-'));
+        fs::path path(pathname);
+        std::string filename      = path.filename().string();
+        std::string test_id       = filename.substr(0, filename.find_first_of("-."));
+        std::string test_filename = (path.parent_path() / test_id).string();
         return strategy.apply(test_filename, meta_map);
     };
     const auto it = std::remove_if(file_list.begin(), file_list.end(), applier);
