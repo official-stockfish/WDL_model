@@ -1,4 +1,4 @@
-import argparse, datetime, json, os, re, urllib.request
+import argparse, datetime, json, gzip, os, re, urllib.request
 
 
 def format_large_number(number):
@@ -8,6 +8,21 @@ def format_large_number(number):
             return f"{number:.0f}{suffix}"
         number /= 1000
     return f"{number:.0f}{suffixes[-1]}"
+
+
+def open_file_rt(filename):
+    # allow reading text files either plain or in gzip format
+    open_func = gzip.open if filename.endswith(".gz") else open
+    return open_func(filename, "rt")
+
+
+def count_games(filename):
+    count = 0
+    with open_file_rt(filename) as f:
+        for line in f:
+            if "Result" in line:
+                count += 1
+    return count
 
 
 parser = argparse.ArgumentParser(
@@ -171,9 +186,15 @@ while True:
             print(msg + f"to {path} ...")
             tmpName = path + test + ".tmp"
             urllib.request.urlretrieve(url, tmpName)
-            if args.verbose >= 2:
-                print("Download completed, renaming the tmp file ...")
             os.rename(tmpName, path + test + ".pgn.gz")
+            if args.verbose:
+                g = count_games(path + test + ".pgn.gz")
+                print(f"Download completed. The file contains {g} games.", end="")
+                if games and g < games:
+                    print(f" I.e. {games-g} fewer than expected.", end="")
+                elif games and g > games:
+                    print(f" I.e. {g-games} more than expected.", end="")
+                print("")
         except Exception as ex:
             if args.verbose >= 2:
                 print(f'  error: caught exception "{ex}"')
