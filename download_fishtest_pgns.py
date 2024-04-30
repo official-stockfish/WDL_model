@@ -21,7 +21,8 @@ def count_games(filename):
     with open_file_rt(filename) as f:
         for line in f:
             if "Result" in line:
-                count += 1
+                if "1-0" in line or "0-1" in line or "1/2-1/2" in line:
+                    count += 1
     return count
 
 
