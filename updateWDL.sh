@@ -164,7 +164,7 @@ echo "Look recursively in directory $pgnpath for games from SPRT tests using" \
     "$oldepoch) and $lastrev (from $newepoch)."
 
 # obtain the WDL data from games of SPRT tests of the SF revisions of interest
-./scoreWDLstat --dir $pgnpath -r --matchRev $regex_pattern --matchBook "$bookname" --fixFENsource "$fixfen.gz" --SPRTonly -o updateWDL.json >&scoreWDLstat.log
+./scoreWDLstat --dir $pgnpath -r --matchTC "60\+0.6" --matchRev $regex_pattern --matchBook "$bookname" --fixFENsource "$fixfen.gz" --SPRTonly -o updateWDL.json >&scoreWDLstat.log
 
 gamescount=$(grep -o '[0-9]\+ games' scoreWDLstat.log | grep -o '[0-9]\+')
 

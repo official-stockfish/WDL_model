@@ -396,11 +396,11 @@ class BookFilterStrategy {
     }
 };
 
-class FileFilterStrategy {
+class RevFilterStrategy {
     std::regex regex_rev;
 
    public:
-    FileFilterStrategy(const std::regex &rb) : regex_rev(rb) {}
+    RevFilterStrategy(const std::regex &rb) : regex_rev(rb) {}
 
     bool apply(const std::string &filename, const map_meta &meta_map) const {
         if (meta_map.find(filename) == meta_map.end()) {
@@ -415,6 +415,31 @@ class FileFilterStrategy {
         if (meta_map.at(filename).resolved_new.has_value() &&
             std::regex_match(meta_map.at(filename).resolved_new.value(), regex_rev)) {
             return false;
+        }
+
+        return true;
+    }
+};
+
+class TcFilterStrategy {
+    std::regex regex_tc;
+
+   public:
+    TcFilterStrategy(const std::regex &rb) : regex_tc(rb) {}
+
+    bool apply(const std::string &filename, const map_meta &meta_map) const {
+        if (meta_map.find(filename) == meta_map.end()) {
+            return true;
+        }
+
+        if (meta_map.at(filename).new_tc.has_value() && meta_map.at(filename).tc.has_value()) {
+            if (meta_map.at(filename).new_tc.value() != meta_map.at(filename).tc.value()) {
+                return true;
+            }
+
+            if (std::regex_match(meta_map.at(filename).tc.value(), regex_tc)) {
+                return false;
+            }
         }
 
         return true;
@@ -510,6 +535,7 @@ void print_usage(char const *program_name) {
     ss << "  --concurrency <N>     Number of concurrent threads to use (default: maximum)" << "\n";
     ss << "  --matchRev <regex>    Filter data based on revision SHA in metadata" << "\n";
     ss << "  --matchEngine <regex> Filter data based on engine name in pgns, defaults to matchRev if given" << "\n";
+    ss << "  --matchTC <regex>     Filter data based on time control in metadata" << "\n";
     ss << "  --matchBook <regex>   Filter data based on book name in metadata" << "\n";
     ss << "  --matchBookInvert     Invert the filter" << "\n";
     ss << "  --SPRTonly            Analyse only pgns from SPRT tests" << "\n";
@@ -609,10 +635,19 @@ int main(int argc, char const *argv[]) {
 
         if (!regex_rev.empty()) {
             std::cout << "Filtering pgn files matching revision SHA " << regex_rev << std::endl;
-            filter_files(files_pgn, meta_map, FileFilterStrategy(std::regex(regex_rev)));
+            filter_files(files_pgn, meta_map, RevFilterStrategy(std::regex(regex_rev)));
         }
 
         regex_engine = regex_rev;
+    }
+
+    if (cmd.has_argument("--matchTC")) {
+        auto regex_tc = cmd.get_argument("--matchTC");
+
+        if (!regex_tc.empty()) {
+            std::cout << "Filtering pgn files matching TC " << regex_tc << std::endl;
+            filter_files(files_pgn, meta_map, TcFilterStrategy(std::regex(regex_tc)));
+        }
     }
 
     if (cmd.has_argument("--fixFENsource")) {
