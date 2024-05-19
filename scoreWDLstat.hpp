@@ -51,6 +51,7 @@ struct std::equal_to<Key> {
 
 struct TestMetaData {
     std::optional<std::string> book, new_tc, resolved_base, resolved_new, tc;
+    std::optional<int> threads;
     std::optional<bool> sprt;
 };
 
@@ -74,6 +75,7 @@ void from_json(const nlohmann::json &nlohmann_json_j, TestMetaData &nlohmann_jso
     nlohmann_json_t.resolved_base = get_optional(j, "resolved_base");
     nlohmann_json_t.resolved_new  = get_optional(j, "resolved_new");
     nlohmann_json_t.tc            = get_optional(j, "tc");
+    nlohmann_json_t.threads       = get_optional<int>(j, "threads");
 }
 
 /// @brief Custom stof implementation to avoid locale issues, once clang supports std::from_chars

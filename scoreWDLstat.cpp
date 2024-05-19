@@ -446,6 +446,26 @@ class TcFilterStrategy {
     }
 };
 
+class ThreadsFilterStrategy {
+    int threads;
+
+   public:
+    ThreadsFilterStrategy(int t) : threads(t) {}
+
+    bool apply(const std::string &filename, const map_meta &meta_map) const {
+        if (meta_map.find(filename) == meta_map.end()) {
+            return true;
+        }
+
+        if (meta_map.at(filename).threads.has_value() &&
+            meta_map.at(filename).threads.value() == threads) {
+            return false;
+        }
+
+        return true;
+    }
+};
+
 class SprtFilterStrategy {
    public:
     bool apply(const std::string &filename, const map_meta &meta_map) const {
@@ -536,6 +556,7 @@ void print_usage(char const *program_name) {
     ss << "  --matchRev <regex>    Filter data based on revision SHA in metadata" << "\n";
     ss << "  --matchEngine <regex> Filter data based on engine name in pgns, defaults to matchRev if given" << "\n";
     ss << "  --matchTC <regex>     Filter data based on time control in metadata" << "\n";
+    ss << "  --matchThreads <N>    Filter data based on used threads in metadata" << "\n";
     ss << "  --matchBook <regex>   Filter data based on book name in metadata" << "\n";
     ss << "  --matchBookInvert     Invert the filter" << "\n";
     ss << "  --SPRTonly            Analyse only pgns from SPRT tests" << "\n";
@@ -648,6 +669,13 @@ int main(int argc, char const *argv[]) {
             std::cout << "Filtering pgn files matching TC " << regex_tc << std::endl;
             filter_files(files_pgn, meta_map, TcFilterStrategy(std::regex(regex_tc)));
         }
+    }
+
+    if (cmd.has_argument("--matchThreads")) {
+        int threads = std::stoi(cmd.get_argument("--matchThreads"));
+
+        std::cout << "Filtering pgn files using threads = " << threads << std::endl;
+        filter_files(files_pgn, meta_map, ThreadsFilterStrategy(threads));
     }
 
     if (cmd.has_argument("--fixFENsource")) {
