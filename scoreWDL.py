@@ -637,7 +637,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--materialMin",
         type=int,
-        default=10,
+        default=17,
         help="Lower material count limit for filter applied to json data.",
     )
     parser.add_argument(
