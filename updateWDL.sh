@@ -7,7 +7,7 @@ set -e
 # by default we start from the most recent WDL model change and go to master
 default_firstrev=6fc7da44ad9c7e2ba6062d5c79daafd29a4dcd6f
 default_lastrev=HEAD
-default_materialMin=10
+default_materialMin=17
 firstrev=$default_firstrev
 lastrev=$default_lastrev
 materialMin=$default_materialMin
