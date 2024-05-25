@@ -40,7 +40,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-echo "Running: $0 --firstrev=$firstrev --lasttrev=$lastrev --materialMin=$materialMin"
+echo "Running: $0 --firstrev $firstrev --lasttrev $lastrev --materialMin $materialMin"
 
 echo "started at: " $(date)
 
@@ -177,7 +177,7 @@ fi
 python scoreWDL.py updateWDL.json --plot save --pngName updateWDL.png --pngNameDistro updateWDLdistro.png --momType material --momTarget 58 --materialMin $materialMin --moveMin 1 --modelFitting optimizeProbability $oldnormdata >&scoreWDL.log
 
 # extract the total number of positions, and the new NormalizeToPawnValue
-poscount=$(awk -F '[() ,]' '/Retained \(W,D,L\)/ {sum = 0; for (i = 9; i <= NF; i++) sum += $i; print sum; exit}' scoreWDL.log)
+poscount=$(awk -F '[() ,]' '/Retained \(W,D,L\)/ {sum = 0; for (i = 9; i <= NF; i++) sum += $i; printf "%.0f\n", sum; exit}' scoreWDL.log)
 
 if [[ $poscount -eq 0 ]]; then
     echo "No positions found."
