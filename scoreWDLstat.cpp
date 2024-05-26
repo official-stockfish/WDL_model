@@ -467,10 +467,10 @@ class ThreadsFilterStrategy {
 };
 
 class EloFilterStrategy {
-    double EloDiff;
+    double MaxEloDiff;
 
    public:
-    EloFilterStrategy(double ed) : EloDiff(ed) {}
+    EloFilterStrategy(double m) : MaxEloDiff(m) {}
 
     double pentanomialToEloDiff(const std::vector<int> &pentanomial) const {
         auto pairs            = std::accumulate(pentanomial.begin(), pentanomial.end(), 0);
@@ -499,7 +499,7 @@ class EloFilterStrategy {
         }
 
         double fileEloDiff = pentanomialToEloDiff(meta_map.at(filename).pentanomial.value());
-        if (std::abs(fileEloDiff) <= EloDiff) {
+        if (std::abs(fileEloDiff) <= MaxEloDiff) {
             return false;
         }
 
@@ -721,10 +721,10 @@ int main(int argc, char const *argv[]) {
     }
 
     if (cmd.has_argument("--matchMaxEloDiff")) {
-        double EloDiff = std::stod(cmd.get_argument("--matchMaxEloDiff"));
+        double MaxEloDiff = std::stod(cmd.get_argument("--matchMaxEloDiff"));
 
-        std::cout << "Filtering pgn files using EloDiff = " << EloDiff << std::endl;
-        filter_files(files_pgn, meta_map, EloFilterStrategy(EloDiff));
+        std::cout << "Filtering pgn files using MaxEloDiff = " << MaxEloDiff << std::endl;
+        filter_files(files_pgn, meta_map, EloFilterStrategy(MaxEloDiff));
     }
 
     if (cmd.has_argument("--fixFENsource")) {
