@@ -38,7 +38,7 @@ while [[ $# -gt 0 ]]; do
         echo "  --firstrev FIRSTREV                First SF commit to collect games from (default: $default_firstrev)"
         echo "  --lastrev LASTREV                  Last SF commit to collect games from (default: $default_lastrev)"
         echo "  --materialMin MATERIALMIN          Parameter passed to scoreWDL.py (default: $default_materialMin)"
-        echo "  --matchMaxEloDiff MATCHMAXELODIFF  Parameter passed to scoreWDL.py (default: $default_matchMaxEloDiff)"
+        echo "  --matchMaxEloDiff MATCHMAXELODIFF  Parameter passed to scoreWDLstat (default: $default_matchMaxEloDiff)"
         exit 0
         ;;
     *)
