@@ -53,6 +53,7 @@ struct TestMetaData {
     std::optional<std::string> book, new_tc, resolved_base, resolved_new, tc;
     std::optional<int> threads;
     std::optional<bool> sprt;
+    std::optional<std::vector<int>> pentanomial;
 };
 
 template <typename T = std::string>
@@ -76,6 +77,9 @@ void from_json(const nlohmann::json &nlohmann_json_j, TestMetaData &nlohmann_jso
     nlohmann_json_t.resolved_new  = get_optional(j, "resolved_new");
     nlohmann_json_t.tc            = get_optional(j, "tc");
     nlohmann_json_t.threads       = get_optional<int>(j, "threads");
+
+    auto &jr                    = nlohmann_json_j["results"];
+    nlohmann_json_t.pentanomial = get_optional<std::vector<int>>(jr, "pentanomial");
 }
 
 /// @brief Custom stof implementation to avoid locale issues, once clang supports std::from_chars
