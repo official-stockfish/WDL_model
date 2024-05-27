@@ -8,11 +8,11 @@ set -e
 default_firstrev=6fc7da44ad9c7e2ba6062d5c79daafd29a4dcd6f
 default_lastrev=HEAD
 default_materialMin=17
-default_matchMaxEloDiff=5
+default_EloDiffMax=5
 firstrev=$default_firstrev
 lastrev=$default_lastrev
 materialMin=$default_materialMin
-matchMaxEloDiff=$default_matchMaxEloDiff
+EloDiffMax=$default_EloDiffMax
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -28,17 +28,17 @@ while [[ $# -gt 0 ]]; do
         materialMin="$2"
         shift 2
         ;;
-    --matchMaxEloDiff)
-        matchMaxEloDiff="$2"
+    --EloDiffMax)
+        EloDiffMax="$2"
         shift 2
         ;;
     --help)
         echo "Usage: $0 [OPTIONS]"
         echo "Options:"
-        echo "  --firstrev FIRSTREV                First SF commit to collect games from (default: $default_firstrev)"
-        echo "  --lastrev LASTREV                  Last SF commit to collect games from (default: $default_lastrev)"
-        echo "  --materialMin MATERIALMIN          Parameter passed to scoreWDL.py (default: $default_materialMin)"
-        echo "  --matchMaxEloDiff MATCHMAXELODIFF  Parameter passed to scoreWDLstat (default: $default_matchMaxEloDiff)"
+        echo "  --firstrev FIRSTREV        First SF commit to collect games from (default: $default_firstrev)"
+        echo "  --lastrev LASTREV          Last SF commit to collect games from (default: $default_lastrev)"
+        echo "  --materialMin MATERIALMIN  Parameter passed to scoreWDL.py (default: $default_materialMin)"
+        echo "  --EloDiffMax ELODIFFMAX    Parameter passed to scoreWDLstat (default: $default_EloDiffMax)"
         exit 0
         ;;
     *)
@@ -47,7 +47,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-echo "Running: $0 --firstrev $firstrev --lasttrev $lastrev --materialMin $materialMin --matchMaxEloDiff $matchMaxEloDiff"
+echo "Running: $0 --firstrev $firstrev --lasttrev $lastrev --materialMin $materialMin --EloDiffMax $EloDiffMax"
 
 echo "started at: " $(date)
 
@@ -167,12 +167,12 @@ cd ..
 make >&make.log
 
 echo "Look recursively in directory $pgnpath for games with max nElo" \
-    "difference $matchMaxEloDiff using" \
+    "difference $EloDiffMax using" \
     "books matching \"$bookname\" for SF revisions between $firstrev (from" \
     "$oldepoch) and $lastrev (from $newepoch)."
 
 # obtain the WDL data from games of the SF revisions of interest
-./scoreWDLstat --dir $pgnpath -r --matchTC "60\+0.6" --matchThreads 1 --matchMaxEloDiff $matchMaxEloDiff --matchRev $regex_pattern --matchBook "$bookname" --fixFENsource "$fixfen.gz" -o updateWDL.json >&scoreWDLstat.log
+./scoreWDLstat --dir $pgnpath -r --matchTC "60\+0.6" --matchThreads 1 --EloDiffMax $EloDiffMax --matchRev $regex_pattern --matchBook "$bookname" --fixFENsource "$fixfen.gz" -o updateWDL.json >&scoreWDLstat.log
 
 gamescount=$(grep -o '[0-9]\+ games' scoreWDLstat.log | grep -o '[0-9]\+')
 

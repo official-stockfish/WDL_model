@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <numeric>
@@ -468,10 +469,10 @@ class ThreadsFilterStrategy {
 };
 
 class EloFilterStrategy {
-    double MaxEloDiff;
+    double EloDiffMin, EloDiffMax;
 
    public:
-    EloFilterStrategy(double m) : MaxEloDiff(m) {}
+    EloFilterStrategy(double mi, double ma) : EloDiffMin(mi), EloDiffMax(ma) {}
 
     double pentanomialToEloDiff(const std::vector<int> &pentanomial) const {
         auto pairs            = std::accumulate(pentanomial.begin(), pentanomial.end(), 0);
@@ -500,7 +501,7 @@ class EloFilterStrategy {
         }
 
         double fileEloDiff = pentanomialToEloDiff(meta_map.at(filename).pentanomial.value());
-        if (std::abs(fileEloDiff) <= MaxEloDiff) {
+        if (EloDiffMin <= fileEloDiff && fileEloDiff <= EloDiffMax) {
             return false;
         }
 
@@ -601,7 +602,8 @@ void print_usage(char const *program_name) {
     ss << "  --matchThreads <N>    Filter data based on used threads in metadata" << "\n";
     ss << "  --matchBook <regex>   Filter data based on book name in metadata" << "\n";
     ss << "  --matchBookInvert     Invert the filter" << "\n";
-    ss << "  --matchMaxEloDiff <X> Filter data based on estimated nElo difference" << "\n";
+    ss << "  --EloDiffMax <X>      Filter data based on estimated nElo difference" << "\n";
+    ss << "  --EloDiffMin <Y>      Filter data based on estimated nElo difference (defaults to -X if X is given)" << "\n";
     ss << "  --SPRTonly            Analyse only pgns from SPRT tests" << "\n";
     ss << "  --fixFENsource        Patch move counters lost by cutechess-cli based on FENs in this file" << "\n";
     ss << "  --binWidth            bin position scores for faster processing and smoother densities (default 5)" << "\n";
@@ -721,11 +723,18 @@ int main(int argc, char const *argv[]) {
         filter_files(files_pgn, meta_map, ThreadsFilterStrategy(threads));
     }
 
-    if (cmd.has_argument("--matchMaxEloDiff")) {
-        double MaxEloDiff = std::stod(cmd.get_argument("--matchMaxEloDiff"));
+    if (cmd.has_argument("--EloDiffMax") || cmd.has_argument("--EloDiffMin")) {
+        double ma = std::numeric_limits<double>::infinity();
+        if (cmd.has_argument("--EloDiffMax")) {
+            ma = std::stod(cmd.get_argument("--EloDiffMax"));
+        }
+        double mi = -ma;
+        if (cmd.has_argument("--EloDiffMin")) {
+            mi = std::stod(cmd.get_argument("--EloDiffMin"));
+        }
 
-        std::cout << "Filtering pgn files using MaxEloDiff = " << MaxEloDiff << std::endl;
-        filter_files(files_pgn, meta_map, EloFilterStrategy(MaxEloDiff));
+        std::cout << "Filtering pgn files with nElo in [" << mi << ", " << ma << "]" << std::endl;
+        filter_files(files_pgn, meta_map, EloFilterStrategy(mi, ma));
     }
 
     if (cmd.has_argument("--fixFENsource")) {
