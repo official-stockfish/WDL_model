@@ -734,6 +734,11 @@ int main(int argc, char const *argv[]) {
         }
 
         std::cout << "Filtering pgn files with nElo in [" << mi << ", " << ma << "]" << std::endl;
+        if (mi != -ma && !cmd.has_argument("--SPRTonly", true)) {
+            std::cout << "Warning: Asymmetric nElo window suggests --SPRTonly should be used!"
+                      << std::endl;
+        }
+
         filter_files(files_pgn, meta_map, EloFilterStrategy(mi, ma));
     }
 
