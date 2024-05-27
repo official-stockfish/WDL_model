@@ -475,11 +475,11 @@ class EloFilterStrategy {
 
     double pentanomialToEloDiff(const std::vector<int> &pentanomial) const {
         auto pairs            = std::accumulate(pentanomial.begin(), pentanomial.end(), 0);
-        const double WW       = double(pentanomial[0]) / pairs;
-        const double WD       = double(pentanomial[1]) / pairs;
+        const double WW       = double(pentanomial[4]) / pairs;
+        const double WD       = double(pentanomial[3]) / pairs;
         const double WLDD     = double(pentanomial[2]) / pairs;
-        const double LD       = double(pentanomial[3]) / pairs;
-        const double LL       = double(pentanomial[4]) / pairs;
+        const double LD       = double(pentanomial[1]) / pairs;
+        const double LL       = double(pentanomial[0]) / pairs;
         const double score    = WW + 0.75 * WD + 0.5 * WLDD + 0.25 * LD;
         const double WW_dev   = WW * std::pow((1 - score), 2);
         const double WD_dev   = WD * std::pow((0.75 - score), 2);
