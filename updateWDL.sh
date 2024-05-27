@@ -166,12 +166,13 @@ cd ..
 # compile scoreWDLstat if needed
 make >&make.log
 
-echo "Look recursively in directory $pgnpath for games from SPRT tests using" \
+echo "Look recursively in directory $pgnpath for games with max nElo" \
+    "difference $matchMaxEloDiff using" \
     "books matching \"$bookname\" for SF revisions between $firstrev (from" \
     "$oldepoch) and $lastrev (from $newepoch)."
 
-# obtain the WDL data from games of SPRT tests of the SF revisions of interest
-./scoreWDLstat --dir $pgnpath -r --matchTC "60\+0.6" --matchThreads 1 --matchMaxEloDiff $matchMaxEloDiff --matchRev $regex_pattern --matchBook "$bookname" --fixFENsource "$fixfen.gz" --SPRTonly -o updateWDL.json >&scoreWDLstat.log
+# obtain the WDL data from games of the SF revisions of interest
+./scoreWDLstat --dir $pgnpath -r --matchTC "60\+0.6" --matchThreads 1 --matchMaxEloDiff $matchMaxEloDiff --matchRev $regex_pattern --matchBook "$bookname" --fixFENsource "$fixfen.gz" -o updateWDL.json >&scoreWDLstat.log
 
 gamescount=$(grep -o '[0-9]\+ games' scoreWDLstat.log | grep -o '[0-9]\+')
 
