@@ -6,8 +6,10 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <mutex>
+#include <numeric>
 #include <regex>
 #include <set>
 #include <sstream>
@@ -466,6 +468,47 @@ class ThreadsFilterStrategy {
     }
 };
 
+class EloFilterStrategy {
+    double EloDiffMin, EloDiffMax;
+
+   public:
+    EloFilterStrategy(double mi, double ma) : EloDiffMin(mi), EloDiffMax(ma) {}
+
+    double pentanomialToEloDiff(const std::vector<int> &pentanomial) const {
+        auto pairs            = std::accumulate(pentanomial.begin(), pentanomial.end(), 0);
+        const double WW       = double(pentanomial[4]) / pairs;
+        const double WD       = double(pentanomial[3]) / pairs;
+        const double WLDD     = double(pentanomial[2]) / pairs;
+        const double LD       = double(pentanomial[1]) / pairs;
+        const double LL       = double(pentanomial[0]) / pairs;
+        const double score    = WW + 0.75 * WD + 0.5 * WLDD + 0.25 * LD;
+        const double WW_dev   = WW * std::pow((1 - score), 2);
+        const double WD_dev   = WD * std::pow((0.75 - score), 2);
+        const double WLDD_dev = WLDD * std::pow((0.5 - score), 2);
+        const double LD_dev   = LD * std::pow((0.25 - score), 2);
+        const double LL_dev   = LL * std::pow((0 - score), 2);
+        const double variance = WW_dev + WD_dev + WLDD_dev + LD_dev + LL_dev;
+        return (score - 0.5) / std::sqrt(2 * variance) * (800 / std::log(10));
+    }
+
+    bool apply(const std::string &filename, const map_meta &meta_map) const {
+        if (meta_map.find(filename) == meta_map.end()) {
+            return true;
+        }
+
+        if (!meta_map.at(filename).pentanomial.has_value()) {
+            return true;
+        }
+
+        double fileEloDiff = pentanomialToEloDiff(meta_map.at(filename).pentanomial.value());
+        if (EloDiffMin <= fileEloDiff && fileEloDiff <= EloDiffMax) {
+            return false;
+        }
+
+        return true;
+    }
+};
+
 class SprtFilterStrategy {
    public:
     bool apply(const std::string &filename, const map_meta &meta_map) const {
@@ -559,6 +602,8 @@ void print_usage(char const *program_name) {
     ss << "  --matchThreads <N>    Filter data based on used threads in metadata" << "\n";
     ss << "  --matchBook <regex>   Filter data based on book name in metadata" << "\n";
     ss << "  --matchBookInvert     Invert the filter" << "\n";
+    ss << "  --EloDiffMax <X>      Filter data based on estimated nElo difference" << "\n";
+    ss << "  --EloDiffMin <Y>      Filter data based on estimated nElo difference (defaults to -X if X is given)" << "\n";
     ss << "  --SPRTonly            Analyse only pgns from SPRT tests" << "\n";
     ss << "  --fixFENsource        Patch move counters lost by cutechess-cli based on FENs in this file" << "\n";
     ss << "  --binWidth            bin position scores for faster processing and smoother densities (default 5)" << "\n";
@@ -676,6 +721,25 @@ int main(int argc, char const *argv[]) {
 
         std::cout << "Filtering pgn files using threads = " << threads << std::endl;
         filter_files(files_pgn, meta_map, ThreadsFilterStrategy(threads));
+    }
+
+    if (cmd.has_argument("--EloDiffMax") || cmd.has_argument("--EloDiffMin")) {
+        double ma = std::numeric_limits<double>::infinity();
+        if (cmd.has_argument("--EloDiffMax")) {
+            ma = std::stod(cmd.get_argument("--EloDiffMax"));
+        }
+        double mi = -ma;
+        if (cmd.has_argument("--EloDiffMin")) {
+            mi = std::stod(cmd.get_argument("--EloDiffMin"));
+        }
+
+        std::cout << "Filtering pgn files with nElo in [" << mi << ", " << ma << "]" << std::endl;
+        if (mi != -ma && !cmd.has_argument("--SPRTonly", true)) {
+            std::cout << "Warning: Asymmetric nElo window suggests --SPRTonly should be used!"
+                      << std::endl;
+        }
+
+        filter_files(files_pgn, meta_map, EloFilterStrategy(mi, ma));
     }
 
     if (cmd.has_argument("--fixFENsource")) {
