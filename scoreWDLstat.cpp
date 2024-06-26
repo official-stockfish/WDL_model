@@ -646,7 +646,7 @@ int main(int argc, char const *argv[]) {
         return 0;
     }
 
-    if (cmd.has_argument("--concurrency")) {
+    if (cmd.has_argument("--binWidth")) {
         bin_width = std::stoi(cmd.get_argument("--binWidth"));
     }
 
