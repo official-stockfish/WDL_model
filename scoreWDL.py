@@ -147,9 +147,9 @@ class WdlData:
         # define wdl densities: if total == 0, entries will be NaN (useful for contour plots)
         total = self.wins + self.draws + self.losses
         self.mask = total > 0
-        self.w_density = np.full_like(total, np.NaN, dtype=float)
-        self.d_density = np.full_like(total, np.NaN, dtype=float)
-        self.l_density = np.full_like(total, np.NaN, dtype=float)
+        self.w_density = np.full_like(total, np.nan, dtype=float)
+        self.d_density = np.full_like(total, np.nan, dtype=float)
+        self.l_density = np.full_like(total, np.nan, dtype=float)
         self.w_density[self.mask] = self.wins[self.mask] / total[self.mask]
         self.d_density[self.mask] = self.draws[self.mask] / total[self.mask]
         self.l_density[self.mask] = self.losses[self.mask] / total[self.mask]
