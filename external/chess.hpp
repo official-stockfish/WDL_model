@@ -25,7 +25,7 @@ THIS FILE IS AUTO GENERATED DO NOT CHANGE MANUALLY.
 
 Source: https://github.com/Disservin/chess-library
 
-VERSION: 0.6.51
+VERSION: 0.6.55
 */
 
 #ifndef CHESS_HPP
@@ -859,7 +859,6 @@ class attacks {
 
 #include <array>
 #include <cctype>
-#include <charconv>
 #include <optional>
 
 
@@ -1755,20 +1754,27 @@ class Board {
         int hm = 0;
         int fm = 1;
 
+        static auto parseStringViewToInt = [](std::string_view sv) -> std::optional<int> {
+            if (!sv.empty() && sv.back() == ';') sv.remove_suffix(1);
+            try {
+                size_t pos;
+                int value = std::stoi(std::string(sv), &pos);
+                if (pos == sv.size()) return value;
+            } catch (...) {
+            }
+            return std::nullopt;
+        };
+
         if (auto it = std::find(parts.begin(), parts.end(), "hmvc"); it != parts.end()) {
             auto num = *(it + 1);
-            auto max = num.size() - 1;
 
-            auto [p, ec] = std::from_chars(num.data(), num.data() + max, hm);
-            if (ec != std::errc()) throw std::runtime_error("Invalid EPD");
+            hm = parseStringViewToInt(num).value_or(0);
         }
 
         if (auto it = std::find(parts.begin(), parts.end(), "fmvn"); it != parts.end()) {
-            auto num     = *(it + 1);
-            auto max     = num.size() - 1;
-            auto [p, ec] = std::from_chars(num.data(), num.data() + max, fm);
+            auto num = *(it + 1);
 
-            if (ec != std::errc()) throw std::runtime_error("Invalid EPD");
+            fm = parseStringViewToInt(num).value_or(1);
         }
 
         auto fen = std::string(parts[0]) + " " + std::string(parts[1]) + " " + std::string(parts[2]) + " " +
@@ -2278,6 +2284,16 @@ class Board {
                 Square::same_color(pieces(PieceType::BISHOP, Color::WHITE).lsb(),
                                    pieces(PieceType::BISHOP, Color::BLACK).lsb()))
                 return true;
+
+            // one side with two bishops which have the same color
+            auto white_bishops = pieces(PieceType::BISHOP, Color::WHITE);
+            auto black_bishops = pieces(PieceType::BISHOP, Color::BLACK);
+
+            if (white_bishops.count() == 2) {
+                if (Square::same_color(white_bishops.lsb(), white_bishops.msb())) return true;
+            } else if (black_bishops.count() == 2) {
+                if (Square::same_color(black_bishops.lsb(), black_bishops.msb())) return true;
+            }
         }
 
         return false;
@@ -2441,7 +2457,7 @@ class Board {
             for (std::size_t i = 0; i < 6; i++) {
                 end = fen.find(' ', start);
                 if (end == std::string::npos) {
-                    if (i == 5) arr[i] = fen.substr(start);
+                    arr[i] = fen.substr(start);
                     break;
                 }
                 arr[i] = fen.substr(start, end - start);
@@ -2459,11 +2475,22 @@ class Board {
         const auto half_move  = params[4].has_value() ? *params[4] : "0";
         const auto full_move  = params[5].has_value() ? *params[5] : "1";
 
+        static auto parseStringViewToInt = [](std::string_view sv) -> std::optional<int> {
+            if (!sv.empty() && sv.back() == ';') sv.remove_suffix(1);
+            try {
+                size_t pos;
+                int value = std::stoi(std::string(sv), &pos);
+                if (pos == sv.size()) return value;
+            } catch (...) {
+            }
+            return std::nullopt;
+        };
+
         // Half move clock
-        std::from_chars(half_move.data(), half_move.data() + half_move.size(), hfm_);
+        hfm_ = parseStringViewToInt(half_move).value_or(0);
 
         // Full move number
-        std::from_chars(full_move.data(), full_move.data() + full_move.size(), plies_);
+        plies_ = parseStringViewToInt(full_move).value_or(1);
 
         plies_ = plies_ * 2 - 2;
         ep_sq_ = en_passant == "-" ? Square::underlying::NO_SQ : Square(en_passant);
