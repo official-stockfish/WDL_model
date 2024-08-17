@@ -210,7 +210,7 @@ class Analyze : public pgn::Visitor {
                 [&](const map_t::constructor &ctor) { ctor(std::move(key), 1); });
         }
 
-        board.makeMove(uci::parseSan(board, move, moves));
+        board.makeMove<true>(uci::parseSan(board, move, moves));
     }
 
     void endPgn() override {
