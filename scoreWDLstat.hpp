@@ -83,8 +83,6 @@ void from_json(const nlohmann::json &nlohmann_json_j, TestMetaData &nlohmann_jso
     nlohmann_json_t.pentanomial = get_optional<std::vector<int>>(jr, "pentanomial");
 }
 
-// #if (defined(__clang__) && __clang_major__ < 20) || (__GLIBCXX__ && __GLIBCXX__ < 20200122)
-
 #if (defined(__clang__) && __clang_major__ < 20) || \
     !(defined(__GNUC__) && (__GNUC__ >= 11 && __GNUC_MINOR__ >= 1))
 /// @brief Custom stof implementation to avoid locale issues, once clang supports std::from_chars
