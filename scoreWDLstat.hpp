@@ -1,6 +1,7 @@
 #include <zlib.h>
 
 #include <algorithm>
+#include <charconv>
 #include <cstdint>
 #include <filesystem>
 #include <optional>
@@ -82,37 +83,44 @@ void from_json(const nlohmann::json &nlohmann_json_j, TestMetaData &nlohmann_jso
     nlohmann_json_t.pentanomial = get_optional<std::vector<int>>(jr, "pentanomial");
 }
 
+// #if (defined(__clang__) && __clang_major__ < 20) || (__GLIBCXX__ && __GLIBCXX__ < 20200122)
+
+#if (defined(__clang__) && __clang_major__ < 20) || \
+    !(defined(__GNUC__) && (__GNUC__ >= 11 && __GNUC_MINOR__ >= 1))
 /// @brief Custom stof implementation to avoid locale issues, once clang supports std::from_chars
 /// for floats this can be removed
 /// @param str
 /// @return
-inline float fast_stof(const char *str) {
+inline float fast_stof(std::string_view str) {
     float result   = 0.0f;
     int sign       = 1;
     int decimal    = 0;
     float fraction = 1.0f;
 
+    const char *ptr = str.data();
+    const char *end = ptr + str.size();
+
     // Handle sign
-    if (*str == '-') {
+    if (ptr < end && *ptr == '-') {
         sign = -1;
-        str++;
-    } else if (*str == '+') {
-        str++;
+        ptr++;
+    } else if (ptr < end && *ptr == '+') {
+        ptr++;
     }
 
     // Convert integer part
-    while (*str >= '0' && *str <= '9') {
-        result = result * 10.0f + (*str - '0');
-        str++;
+    while (ptr < end && *ptr >= '0' && *ptr <= '9') {
+        result = result * 10.0f + (*ptr - '0');
+        ptr++;
     }
 
     // Convert decimal part
-    if (*str == '.') {
-        str++;
-        while (*str >= '0' && *str <= '9') {
-            result = result * 10.0f + (*str - '0');
+    if (ptr < end && *ptr == '.') {
+        ptr++;
+        while (ptr < end && *ptr >= '0' && *ptr <= '9') {
+            result = result * 10.0f + (*ptr - '0');
             fraction *= 10.0f;
-            str++;
+            ptr++;
         }
         decimal = 1;
     }
@@ -122,9 +130,29 @@ inline float fast_stof(const char *str) {
     if (decimal) {
         result /= fraction;
     }
-
     return result;
 }
+#else
+inline float fast_stof(std::string_view sw) {
+    if (sw[0] == '+') {
+        sw.remove_prefix(1);
+    }
+
+    float result;
+    const char *str_end  = sw.data() + sw.length();
+    const auto fc_result = std::from_chars(sw.data(), str_end, result);
+
+    if (fc_result.ec == std::errc()) {
+        return result;
+    } else if (fc_result.ec == std::errc::invalid_argument) {
+        throw std::invalid_argument("Invalid float format");
+    } else if (fc_result.ec == std::errc::result_out_of_range) {
+        throw std::out_of_range("Float value out of range");
+    }
+
+    throw std::runtime_error("Unknown error in float conversion");
+}
+#endif
 
 /// @brief Get all files from a directory.
 /// @param path
