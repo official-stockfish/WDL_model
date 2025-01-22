@@ -210,17 +210,19 @@ class Analyze : public pgn::Visitor {
                 [&](const map_t::constructor &ctor) { ctor(std::move(key), 1); });
         }
 
-        Move m;
+        try {
+            Move m = uci::parseSan(board, move, moves);
 
-        m = uci::parseSan(board, move, moves);
+            // chess-lib may call move() with empty strings for move
+            if (m == Move::NO_MOVE) {
+                this->skipPgn(true);
+                return;
+            }
 
-        // chess-lib may call move() with empty strings for move
-        if (m == Move::NO_MOVE) {
+            board.makeMove<true>(m);
+        } catch (const uci::AmbiguousMoveError &e) {
             this->skipPgn(true);
-            return;
         }
-
-        board.makeMove<true>(m);
     }
 
     void endPgn() override {
