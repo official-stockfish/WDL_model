@@ -57,8 +57,8 @@ bookname="UHO_Lichess_4852_v..epd"
 # path for PGN files
 pgnpath=pgns
 
-# clone repos if needed, and pull latest revisions
-for repo in "Stockfish" "books"; do
+# clone repo(s) if needed, and pull latest revisions
+for repo in "Stockfish"; do
     if [[ ! -e "$repo" ]]; then
         git clone https://github.com/official-stockfish/"$repo".git >&clone.log
     fi
@@ -68,35 +68,6 @@ for repo in "Stockfish" "books"; do
     git pull >&pull.log
     cd ..
 done
-
-# create a sorted list of all the books matching the regex
-matching_books=()
-for file in $(find books -type f -name "*.zip" | sort); do
-    book=$(basename "$file" .zip)
-    if [[ $book =~ $bookname ]]; then
-        matching_books+=("$book")
-    fi
-done
-
-if [ ${#matching_books[@]} -eq 0 ]; then
-    echo "No matching books found for the regex $bookname."
-    exit 1
-fi
-
-# refetch books if the list of matching books is new
-bookhash=$(echo -n "${matching_books[@]}" | md5sum | cut -d ' ' -f 1)
-fixfen="fixfen_$bookhash.epd"
-
-if [[ ! -e "$fixfen.gz" ]]; then
-    rm -f "$fixfen"
-    for book in "${matching_books[@]}"; do
-        unzip -o books/"$book".zip >&unzip.log
-        awk 'NF >= 6' "$book" >>"$fixfen"
-        rm "$book"
-    done
-    sort -u "$fixfen" -o _tmp_"$fixfen" && mv _tmp_"$fixfen" "$fixfen"
-    gzip "$fixfen"
-fi
 
 # get a SF revision list
 cd Stockfish
@@ -172,7 +143,7 @@ echo "Look recursively in directory $pgnpath for games with max nElo" \
     "$oldepoch) and $lastrev (from $newepoch)."
 
 # obtain the WDL data from games of the SF revisions of interest
-./scoreWDLstat --dir $pgnpath -r --matchTC "60\+0.6" --matchThreads 1 --EloDiffMax $EloDiffMax --matchRev $regex_pattern --matchBook "$bookname" --fixFENsource "$fixfen.gz" -o updateWDL.json >&scoreWDLstat.log
+./scoreWDLstat --dir $pgnpath -r --matchTC "60\+0.6" --matchThreads 1 --EloDiffMax $EloDiffMax --matchRev $regex_pattern --matchBook "$bookname" -o updateWDL.json >&scoreWDLstat.log
 
 gamescount=$(grep -o '[0-9]\+ games' scoreWDLstat.log | grep -o '[0-9]\+')
 
