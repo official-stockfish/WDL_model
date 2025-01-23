@@ -221,6 +221,7 @@ class Analyze : public pgn::Visitor {
 
             board.makeMove<true>(m);
         } catch (const uci::AmbiguousMoveError &e) {
+            std::cerr << e.what() << '\n';
             this->skipPgn(true);
         }
     }
