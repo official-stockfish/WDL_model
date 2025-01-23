@@ -51,8 +51,9 @@ static constexpr int map_size = 1200000;
 /// @brief Analyze a file with pgn games and update the position map, apply filter if present
 class Analyze : public pgn::Visitor {
    public:
-    Analyze(const std::string &regex_engine, const map_fens &fixfen_map, const int bin_width)
-        : regex_engine(regex_engine), fixfen_map(fixfen_map), bin_width(bin_width) {}
+    Analyze(std::string_view file, const std::string &regex_engine, const map_fens &fixfen_map,
+            const int bin_width)
+        : file(file), regex_engine(regex_engine), fixfen_map(fixfen_map), bin_width(bin_width) {}
 
     virtual ~Analyze() {}
 
@@ -98,7 +99,8 @@ class Analyze : public pgn::Visitor {
                 auto it         = fixfen_map.find(fen);
 
                 if (it == fixfen_map.end()) {
-                    std::cerr << "Could not find FEN " << fen << " in fixFENsource." << std::endl;
+                    std::cerr << "While parsing " << file << " could not find FEN " << fen
+                              << " in fixFENsource." << std::endl;
                     std::exit(1);
                 }
 
@@ -210,7 +212,20 @@ class Analyze : public pgn::Visitor {
                 [&](const map_t::constructor &ctor) { ctor(std::move(key), 1); });
         }
 
-        board.makeMove<true>(uci::parseSan(board, move, moves));
+        try {
+            Move m = uci::parseSan(board, move, moves);
+
+            // chess-lib may call move() with empty strings for move
+            if (m == Move::NO_MOVE) {
+                this->skipPgn(true);
+                return;
+            }
+
+            board.makeMove<true>(m);
+        } catch (const uci::AmbiguousMoveError &e) {
+            std::cerr << "While parsing " << file << " encountered: " << e.what() << '\n';
+            this->skipPgn(true);
+        }
     }
 
     void endPgn() override {
@@ -228,6 +243,7 @@ class Analyze : public pgn::Visitor {
     }
 
    private:
+    std::string_view file;
     const std::string &regex_engine;
     const map_fens &fixfen_map;
     const int bin_width;
@@ -254,7 +270,7 @@ void ana_files(const std::vector<std::string> &files, const std::string &regex_e
                const map_fens &fixfen_map, const int bin_width) {
     for (const auto &file : files) {
         const auto pgn_iterator = [&](std::istream &iss) {
-            auto vis = std::make_unique<Analyze>(regex_engine, fixfen_map, bin_width);
+            auto vis = std::make_unique<Analyze>(file, regex_engine, fixfen_map, bin_width);
 
             pgn::StreamParser parser(iss);
 
