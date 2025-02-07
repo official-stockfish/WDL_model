@@ -165,8 +165,6 @@ while True:
             if args.verbose >= 1:
                 print(f"Skipping SPSA test {test} ...")
             continue
-        with open(path + test + ".json", "w") as jsonFile:
-            json.dump(meta, jsonFile, indent=4, sort_keys=True)
         games = None
         if "results" in meta:
             wins = meta["results"].get("wins", 0)
@@ -188,6 +186,8 @@ while True:
             tmpName = path + test + ".tmp"
             urllib.request.urlretrieve(url, tmpName)
             os.rename(tmpName, path + test + ".pgn.gz")
+            with open(path + test + ".json", "w") as jsonFile:
+                json.dump(meta, jsonFile, indent=4, sort_keys=True)
             if args.verbose:
                 g = count_games(path + test + ".pgn.gz")
                 print(f"Download completed. The file contains {g} games.", end="")
