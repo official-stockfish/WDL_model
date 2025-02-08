@@ -23,7 +23,8 @@ if not os.path.exists(args.path):
     exit
 
 # find the set of downloaded Ids (looking in the full file tree)
-p = re.compile("([a-z0-9]*)-[0-9]*.pgn(|.gz)")
+# match any filename of the form testId-runId.pgn(.gz) or testId.pgn(.gz)
+p = re.compile("([a-z0-9]*)(-[0-9]*)?\.pgn(|\.gz)")
 tests = set()
 
 for path, _, files in os.walk(args.path):
