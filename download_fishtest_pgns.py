@@ -34,7 +34,7 @@ parser = argparse.ArgumentParser(
 parser.add_argument(
     "--path",
     default="./pgns",
-    help="Downloaded .pgn.gz files will be stored in PATH/date/test-id/.",
+    help="Downloaded .pgn.gz files will be stored in PATH/YY-MM-DD/test-Id/.",
 )
 parser.add_argument(
     "--time_delta",
@@ -44,27 +44,36 @@ parser.add_argument(
 )
 parser.add_argument(
     "--ltc_only",
-    type=bool,
-    default=True,
-    help="A flag for LTC tests only.",
+    type=str,
+    default="True",
+    help="A True/False flag for LTC tests only.",
+)
+parser.add_argument(
+    "--tc_lower_limit",
+    type=float,
+    help="Download only tests where base tc for each side is at least this.",
+)
+parser.add_argument(
+    "--tc_upper_limit",
+    type=float,
+    help="Download only tests where base tc for each side is at most this.",
 )
 parser.add_argument(
     "--success_only",
-    type=bool,
-    default=False,
-    help="A flag for Green tests only.",
+    type=str,
+    default="False",
+    help="A True/False flag for green tests only.",
 )
 parser.add_argument(
     "--yellow_only",
-    type=bool,
-    default=False,
-    help="A flag for yellow tests only.",
+    type=str,
+    default="False",
+    help="A True/False flag for yellow tests only.",
 )
 parser.add_argument(
     "--username",
     type=str,
-    default="",
-    help="Specified username to download from their finished tests.",
+    help="Download USERNAME's tests only.",
 )
 parser.add_argument(
     "-v",
@@ -106,13 +115,13 @@ result_time_utc = current_time_utc - time_difference
 unix_timestamp = result_time_utc.timestamp()
 
 additional_query_params = f"&timestamp={unix_timestamp}"
-if args.ltc_only:
+if args.ltc_only.lower == "true":
     additional_query_params += "&ltc_only=1"
-if args.success_only:
+if args.success_only.lower == "true":
     additional_query_params += "&success_only=1"
-if args.yellow_only:
+if args.yellow_only.lower == "true":
     additional_query_params += "&yellow_only=1"
-if args.username != "":
+if args.username is not None:
     additional_query_params += f"&username={args.username}"
 
 page = 1
@@ -163,7 +172,7 @@ while True:
             print(f"Collecting meta data for test {test} ...")
         if "spsa" in meta.get("args", {}):
             if args.verbose >= 1:
-                print(f"Skipping SPSA test {test} ...")
+                print(f"  Skipping SPSA test {test} ...")
             continue
         games = None
         if "results" in meta:
@@ -172,6 +181,42 @@ while True:
             losses = meta["results"].get("losses", 0)
             games = wins + draws + losses
             if games == 0:
+                if args.verbose >= 1:
+                    print(f"  No games found, skipping test {test} ...")
+                continue
+        tcStrings = None
+        if "args" in meta:
+            tc = meta["args"].get("tc", "")
+            new_tc = meta["args"].get("new_tc", "")
+            if tc and new_tc:
+                tcStrings = [tc] if tc == new_tc else [tc, new_tc]
+
+        if args.tc_lower_limit is not None or args.tc_upper_limit is not None:
+            if tcStrings is None:
+                if args.verbose >= 1:
+                    print(f"  Missing tc data, skipping test {test} ...")
+                continue
+            tc_skip = False
+            for tc in tcStrings:
+                tc_base = re.search(r"^(\d+(\.\d+)?)", tc)
+                if tc_base:
+                    tc_base = float(tc_base.group(1))
+                else:
+                    if args.verbose >= 1:
+                        print(f'  Malformed tc data "{tc}", skipping test {test} ...')
+                    tc_skip = True
+                    continue
+                if args.tc_lower_limit is not None and tc_base < args.tc_lower_limit:
+                    if args.verbose >= 1:
+                        print(f'  Too short tc "{tc}", skipping test {test} ...')
+                    tc_skip = True
+                    continue
+                if args.tc_upper_limit is not None and tc_base > args.tc_upper_limit:
+                    if args.verbose >= 1:
+                        print(f'  Too long tc "{tc}", skipping test {test} ...')
+                    tc_skip = True
+                    continue
+            if tc_skip:
                 continue
 
         url = "https://tests.stockfishchess.org/api/run_pgns/" + test + ".pgn.gz"
@@ -182,6 +227,8 @@ while True:
             msg = f"Downloading {b}.pgn.gz file "
             if games is not None:
                 msg += f"with {games} games {'' if args.verbose == 0 else f'(WDL = {wins} {draws} {losses}) '}"
+            if args.verbose >= 1 and tcStrings is not None:
+                msg += "at TC " + " vs. ".join(tcStrings) + " "
             print(msg + f"to {path} ...")
             tmpName = path + test + ".tmp"
             urllib.request.urlretrieve(url, tmpName)
