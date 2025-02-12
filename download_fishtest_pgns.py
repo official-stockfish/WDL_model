@@ -115,11 +115,11 @@ result_time_utc = current_time_utc - time_difference
 unix_timestamp = result_time_utc.timestamp()
 
 additional_query_params = f"&timestamp={unix_timestamp}"
-if args.ltc_only.lower == "true":
+if args.ltc_only.lower() == "true":
     additional_query_params += "&ltc_only=1"
-if args.success_only.lower == "true":
+if args.success_only.lower() == "true":
     additional_query_params += "&success_only=1"
-if args.yellow_only.lower == "true":
+if args.yellow_only.lower() == "true":
     additional_query_params += "&yellow_only=1"
 if args.username is not None:
     additional_query_params += f"&username={args.username}"
