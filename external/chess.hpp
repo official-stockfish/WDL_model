@@ -25,7 +25,7 @@ THIS FILE IS AUTO GENERATED DO NOT CHANGE MANUALLY.
 
 Source: https://github.com/Disservin/chess-library
 
-VERSION: 0.7.4
+VERSION: 0.8.4
 */
 
 #ifndef CHESS_HPP
@@ -75,6 +75,22 @@ class Color {
             color = underlying::WHITE;
         } else if (str == "b") {
             color = underlying::BLACK;
+        }
+    }
+
+    /**
+     * @brief Gets the long string representation of the color
+     * @return "White" for WHITE, "Black" for BLACK
+     * "None" for NONE
+     */
+    [[nodiscard]] std::string longStr() const {
+        switch (color) {
+            case underlying::WHITE:
+                return "White";
+            case underlying::BLACK:
+                return "Black";
+            default:
+                return "None";
         }
     }
 
@@ -153,6 +169,16 @@ constexpr char tolower(char c) { return (c >= 'A' && c <= 'Z') ? (c - 'A' + 'a')
 }  // namespace chess
 
 namespace chess {
+
+#define CHESS_DECLARE_RANK(N)                            \
+    static constexpr auto SQ_A##N = underlying::SQ_A##N; \
+    static constexpr auto SQ_B##N = underlying::SQ_B##N; \
+    static constexpr auto SQ_C##N = underlying::SQ_C##N; \
+    static constexpr auto SQ_D##N = underlying::SQ_D##N; \
+    static constexpr auto SQ_E##N = underlying::SQ_E##N; \
+    static constexpr auto SQ_F##N = underlying::SQ_F##N; \
+    static constexpr auto SQ_G##N = underlying::SQ_G##N; \
+    static constexpr auto SQ_H##N = underlying::SQ_H##N;
 
 class File {
    public:
@@ -275,6 +301,24 @@ class Square {
         NO_SQ
     };
     // clang-format on
+
+// when c++20
+#if __cplusplus >= 202002L
+    using enum underlying;
+#else
+
+    CHESS_DECLARE_RANK(1)
+    CHESS_DECLARE_RANK(2)
+    CHESS_DECLARE_RANK(3)
+    CHESS_DECLARE_RANK(4)
+    CHESS_DECLARE_RANK(5)
+    CHESS_DECLARE_RANK(6)
+    CHESS_DECLARE_RANK(7)
+    CHESS_DECLARE_RANK(8)
+
+    static constexpr auto NO_SQ = underlying::NO_SQ;
+
+#endif
 
     constexpr Square() : sq(underlying::NO_SQ) {}
 
@@ -470,7 +514,7 @@ class Square {
      * @return
      */
     [[nodiscard]] static constexpr Square castling_king_square(bool is_king_side, Color c) noexcept {
-        return Square(is_king_side ? Square::underlying::SQ_G1 : Square::underlying::SQ_C1).relative_square(c);
+        return Square(is_king_side ? Square::SQ_G1 : Square::SQ_C1).relative_square(c);
     }
 
     /**
@@ -480,7 +524,7 @@ class Square {
      * @return
      */
     [[nodiscard]] static constexpr Square castling_rook_square(bool is_king_side, Color c) noexcept {
-        return Square(is_king_side ? Square::underlying::SQ_F1 : Square::underlying::SQ_D1).relative_square(c);
+        return Square(is_king_side ? Square::SQ_F1 : Square::SQ_D1).relative_square(c);
     }
 
     /**
@@ -517,6 +561,8 @@ enum class Direction : int8_t {
 constexpr Square operator+(Square sq, Direction dir) {
     return static_cast<Square>(sq.index() + static_cast<int8_t>(dir));
 }
+
+#undef CHESS_DECLARE_RANK
 
 }  // namespace chess
 
@@ -1945,7 +1991,7 @@ class Board {
 
         // Append information about the en passant square (if any)
         // and the half-move clock and full move number to the FEN string
-        if (ep_sq_ == Square::underlying::NO_SQ)
+        if (ep_sq_ == Square::NO_SQ)
             ss += " -";
         else {
             ss += ' ';
@@ -1998,8 +2044,8 @@ class Board {
         hfm_++;
         plies_++;
 
-        if (ep_sq_ != Square::underlying::NO_SQ) key_ ^= Zobrist::enpassant(ep_sq_.file());
-        ep_sq_ = Square::underlying::NO_SQ;
+        if (ep_sq_ != Square::NO_SQ) key_ ^= Zobrist::enpassant(ep_sq_.file());
+        ep_sq_ = Square::NO_SQ;
 
         if (capture) {
             removePiece(captured, move.to());
@@ -2221,8 +2267,8 @@ class Board {
         prev_states_.emplace_back(key_, cr_, ep_sq_, hfm_, Piece::NONE);
 
         key_ ^= Zobrist::sideToMove();
-        if (ep_sq_ != Square::underlying::NO_SQ) key_ ^= Zobrist::enpassant(ep_sq_.file());
-        ep_sq_ = Square::underlying::NO_SQ;
+        if (ep_sq_ != Square::NO_SQ) key_ ^= Zobrist::enpassant(ep_sq_.file());
+        ep_sq_ = Square::NO_SQ;
 
         stm_ = ~stm_;
 
@@ -2543,7 +2589,7 @@ class Board {
         }
 
         U64 ep_hash = 0ULL;
-        if (ep_sq_ != Square::underlying::NO_SQ) ep_hash ^= Zobrist::enpassant(ep_sq_.file());
+        if (ep_sq_ != Square::NO_SQ) ep_hash ^= Zobrist::enpassant(ep_sq_.file());
 
         U64 stm_hash = 0ULL;
         if (stm_ == Color::WHITE) stm_hash ^= Zobrist::sideToMove();
@@ -2654,7 +2700,7 @@ class Board {
             const auto castling   = params[2].has_value() ? *params[2] : "-";
             const auto en_passant = params[3].has_value() ? *params[3] : "-";
 
-            const auto ep  = en_passant == "-" ? Square::underlying::NO_SQ : Square(en_passant);
+            const auto ep  = en_passant == "-" ? Square::NO_SQ : Square(en_passant);
             const auto stm = (move_right == "w") ? Color::WHITE : Color::BLACK;
 
             CastlingRights cr;
@@ -2823,7 +2869,7 @@ class Board {
         // 14 => any black rook with castling rights, side will be deduced from the file
         // 15 => black king and black is side to move
         static std::uint8_t convertMeaning(const CastlingRights &cr, Color stm, Square ep, Square sq, Piece piece) {
-            if (piece.type() == PieceType::PAWN && ep != Square::underlying::NO_SQ) {
+            if (piece.type() == PieceType::PAWN && ep != Square::NO_SQ) {
                 if (Square(static_cast<int>(sq.index()) ^ 8) == ep) return 12;
             }
 
@@ -2861,7 +2907,7 @@ class Board {
     CastlingRights cr_ = {};
     uint16_t plies_    = 0;
     Color stm_         = Color::WHITE;
-    Square ep_sq_      = Square::underlying::NO_SQ;
+    Square ep_sq_      = Square::NO_SQ;
     uint8_t hfm_       = 0;
 
     bool chess960_ = false;
@@ -2942,7 +2988,7 @@ class Board {
         plies_ = parseStringViewToInt(full_move).value_or(1);
 
         plies_ = plies_ * 2 - 2;
-        ep_sq_ = en_passant == "-" ? Square::underlying::NO_SQ : Square(en_passant);
+        ep_sq_ = en_passant == "-" ? Square::NO_SQ : Square(en_passant);
         stm_   = (move_right == "w") ? Color::WHITE : Color::BLACK;
         key_   = 0ULL;
         cr_.clear();
@@ -2978,8 +3024,7 @@ class Board {
         static const auto find_rook = [](const Board &board, CastlingRights::Side side, Color color) {
             const auto king_side = CastlingRights::Side::KING_SIDE;
             const auto king_sq   = board.kingSq(color);
-            const auto sq_corner = Square(side == king_side ? Square::underlying::SQ_H1 : Square::underlying::SQ_A1)
-                                       .relative_square(color);
+            const auto sq_corner = Square(side == king_side ? Square::SQ_H1 : Square::SQ_A1).relative_square(color);
 
             const auto start = side == king_side ? king_sq + 1 : king_sq - 1;
 
@@ -3034,13 +3079,13 @@ class Board {
         }
 
         // check if ep square itself is valid
-        if (ep_sq_ != Square::underlying::NO_SQ && !((ep_sq_.rank() == Rank::RANK_3 && stm_ == Color::BLACK) ||
-                                                     (ep_sq_.rank() == Rank::RANK_6 && stm_ == Color::WHITE))) {
-            ep_sq_ = Square::underlying::NO_SQ;
+        if (ep_sq_ != Square::NO_SQ && !((ep_sq_.rank() == Rank::RANK_3 && stm_ == Color::BLACK) ||
+                                         (ep_sq_.rank() == Rank::RANK_6 && stm_ == Color::WHITE))) {
+            ep_sq_ = Square::NO_SQ;
         }
 
         // check if ep square is valid, i.e. if there is a pawn that can capture it
-        if (ep_sq_ != Square::underlying::NO_SQ) {
+        if (ep_sq_ != Square::NO_SQ) {
             bool valid;
 
             if (stm_ == Color::WHITE) {
@@ -3050,7 +3095,7 @@ class Board {
             }
 
             if (!valid)
-                ep_sq_ = Square::underlying::NO_SQ;
+                ep_sq_ = Square::NO_SQ;
             else
                 key_ ^= Zobrist::enpassant(ep_sq_.file());
         }
@@ -3555,7 +3600,7 @@ inline void movegen::generatePawnMoves(const Board &board, Movelist &moves, Bitb
 
     const Square ep = board.enpassantSq();
 
-    if (ep != Square::underlying::NO_SQ) {
+    if (ep != Square::NO_SQ) {
         auto m = generateEPMove(board, checkmask, pin_d, pawns_lr, ep, c);
 
         for (const auto &move : m) {
@@ -3890,18 +3935,49 @@ class Visitor {
     bool skip_ = false;
 };
 
-class StreamParserException : public std::exception {
+class StreamParserError {
    public:
-    explicit StreamParserException(const char *message) : msg_(message) {}
+    enum Code {
+        None,
+        ExceededMaxStringLength,
+        InvalidHeaderMissingClosingBracket,
+        InvalidHeaderMissingClosingQuote,
+        NotEnoughData
+    };
 
-    explicit StreamParserException(const std::string &message) : msg_(message) {}
+    StreamParserError() : code_(None) {}
 
-    virtual ~StreamParserException() noexcept {}
+    StreamParserError(Code code) : code_(code) {}
 
-    virtual const char *what() const noexcept { return msg_.c_str(); }
+    Code code() const { return code_; }
 
-   protected:
-    std::string msg_;
+    bool hasError() const { return code_ != None; }
+
+    std::string message() const {
+        switch (code_) {
+            case None:
+                return "No error";
+            case InvalidHeaderMissingClosingBracket:
+                return "Invalid header: missing closing bracket";
+            case InvalidHeaderMissingClosingQuote:
+                return "Invalid header: missing closing quote";
+            case NotEnoughData:
+                return "Not enough data";
+            default:
+                assert(false);
+                return "Unknown error";
+        }
+    }
+
+    bool operator==(Code code) const { return code_ == code; }
+    bool operator!=(Code code) const { return code_ != code; }
+    bool operator==(const StreamParserError &other) const { return code_ == other.code_; }
+    bool operator!=(const StreamParserError &other) const { return code_ != other.code_; }
+
+    operator bool() const { return code_ != None; }
+
+   private:
+    Code code_;
 };
 
 template <std::size_t BUFFER_SIZE =
@@ -3917,15 +3993,13 @@ template <std::size_t BUFFER_SIZE =
           >
 class StreamParser {
    public:
-    // Exception Class
-
     StreamParser(std::istream &stream) : stream_buffer(stream) {}
 
-    void readGames(Visitor &vis) {
+    StreamParserError readGames(Visitor &vis) {
         visitor = &vis;
 
         if (!stream_buffer.fill()) {
-            return;
+            return StreamParserError::NotEnoughData;
         }
 
         while (auto c = stream_buffer.some()) {
@@ -3937,10 +4011,18 @@ class StreamParser {
                     pgn_end = false;
 
                     processHeader();
+
+                    if (error != StreamParserError::None) {
+                        return error;
+                    }
                 }
 
             } else if (in_body) {
                 processBody();
+
+                if (error != StreamParserError::None) {
+                    return error;
+                }
             }
 
             if (!dont_advance_after_body) stream_buffer.advance();
@@ -3950,6 +4032,8 @@ class StreamParser {
         if (!pgn_end) {
             onEnd();
         }
+
+        return error;
     }
 
    private:
@@ -3961,27 +4045,25 @@ class StreamParser {
 
         std::string_view get() const noexcept { return std::string_view(buffer_.data(), index_); }
 
-        void operator+=(char c) {
-            assert(index_ < N);
-            buffer_[index_] = c;
-            ++index_;
-        }
-
-        void remove_suffix(std::size_t n) {
-#ifndef CHESS_NO_EXCEPTIONS
-            if (n > index_) {
-                throw StreamParserException("LineBuffer underflow");
+        bool add(char c) {
+            if (index_ >= N) {
+                return false;
             }
-#endif
 
-            index_ -= n;
+            buffer_[index_] = c;
+
+            ++index_;
+
+            return true;
         }
 
        private:
         // PGN lines are limited to 255 characters
-        static constexpr int N      = 255;
+        static constexpr int N = 255;
+
         std::array<char, N> buffer_ = {};
-        std::size_t index_          = 0;
+
+        std::size_t index_ = 0;
     };
 
     class StreamBuffer {
@@ -3994,21 +4076,21 @@ class StreamParser {
 
         // Get the current character, skip carriage returns
         std::optional<char> some() {
-            if (buffer_index_ < bytes_read_) {
-                const auto c = buffer_[buffer_index_];
+            while (true) {
+                if (buffer_index_ < bytes_read_) {
+                    const auto c = buffer_[buffer_index_];
 
-                if (c == '\r') {
-                    ++buffer_index_;
-                    return some();
+                    if (c == '\r') {
+                        ++buffer_index_;
+                        continue;
+                    }
+
+                    return c;
                 }
 
-                return c;
-            } else {
                 if (!fill()) {
                     return std::nullopt;
                 }
-
-                return some();
             }
         }
 
@@ -4045,8 +4127,6 @@ class StreamParser {
         }
 
         bool fill() {
-            if (!stream_.good()) return false;
-
             buffer_index_ = 0;
 
             stream_.read(buffer_.data(), N * N);
@@ -4055,15 +4135,17 @@ class StreamParser {
             return bytes_read_ > 0;
         }
 
-        void advance() {
+        void fill_if_needed() {
             if (buffer_index_ >= bytes_read_) {
                 fill();
             }
-
-            ++buffer_index_;
         }
 
+        void advance() { ++buffer_index_; }
+
         char peek() {
+            fill_if_needed();
+
             if (buffer_index_ + 1 >= bytes_read_) {
                 return stream_.peek();
             }
@@ -4099,7 +4181,7 @@ class StreamParser {
 
     void callVisitorMoveFunction() {
         if (!move.empty()) {
-            if (!visitor->skip()) visitor->move(move.get(), comment.get());
+            if (!visitor->skip()) visitor->move(move.get(), comment);
 
             move.clear();
             comment.clear();
@@ -4119,7 +4201,11 @@ class StreamParser {
                         if (is_space(*k)) {
                             break;
                         } else {
-                            header.first += *k;
+                            if (!header.first.add(*k)) {
+                                error = StreamParserError::ExceededMaxStringLength;
+                                return;
+                            }
+
                             stream_buffer.advance();
                         }
                     }
@@ -4138,21 +4224,27 @@ class StreamParser {
                             stream_buffer.advance();
 
                             // we should be now at ]
-                            assert(stream_buffer.current().value() == ']');
+                            if (stream_buffer.current().value_or('\0') != ']') {
+                                error = StreamParserError::InvalidHeaderMissingClosingBracket;
+                                return;
+                            }
+
                             stream_buffer.advance();
 
                             break;
-                        }
-#ifndef CHESS_NO_EXCEPTIONS
-                        else if (*k == '\n') {
+                        } else if (*k == '\n') {
                             // we missed the closing quote and read until the newline character
                             // this is an invalid pgn, let's throw an error
-                            throw StreamParserException("Invalid PGN, missing closing quote in header");
-                        }
-#endif
-                        else {
+                            error = StreamParserError::InvalidHeaderMissingClosingQuote;
+                            return;
+                        } else {
                             backslash = false;
-                            header.second += *k;
+
+                            if (!header.second.add(*k)) {
+                                error = StreamParserError::ExceededMaxStringLength;
+                                return;
+                            }
+
                             stream_buffer.advance();
                         }
                     }
@@ -4176,7 +4268,7 @@ class StreamParser {
 
                     if (!visitor->skip()) visitor->startMoves();
 
-                    goto exit_loop;
+                    return;
                 default:
                     // this should normally not happen
                     // lets just go into the body, will this always be save?
@@ -4185,11 +4277,9 @@ class StreamParser {
 
                     if (!visitor->skip()) visitor->startMoves();
 
-                    goto exit_loop;
+                    return;
             }
         }
-
-    exit_loop:;
     }
 
     void processBody() {
@@ -4228,7 +4318,7 @@ class StreamParser {
 
                 // the game has no moves, but a comment followed by a game termination
                 if (!visitor->skip()) {
-                    visitor->move("", comment.get());
+                    visitor->move("", comment);
 
                     comment.clear();
                 }
@@ -4368,8 +4458,10 @@ class StreamParser {
                 }
                 // castling
                 else {
-                    move += '0';
-                    move += '-';
+                    if (!move.add('0') || !move.add('-')) {
+                        error = StreamParserError::ExceededMaxStringLength;
+                        return;
+                    }
 
                     if (parseMove()) {
                         stream_buffer.advance();
@@ -4387,7 +4479,10 @@ class StreamParser {
                 break;
             }
 
-            move += *c;
+            if (!move.add(*c)) {
+                error = StreamParserError::ExceededMaxStringLength;
+                return true;
+            }
 
             stream_buffer.advance();
         }
@@ -4501,10 +4596,12 @@ class StreamParser {
     // one time allocations
     std::pair<LineBuffer, LineBuffer> header = {LineBuffer{}, LineBuffer{}};
 
-    LineBuffer move    = {};
-    LineBuffer comment = {};
+    LineBuffer move     = {};
+    std::string comment = {};
 
     // State
+
+    StreamParserError error = StreamParserError::None;
 
     bool in_header = true;
     bool in_body   = false;
@@ -4570,32 +4667,31 @@ class uci {
             return Move::NO_MOVE;
         }
 
-        PieceType piece = board.at(source).type();
+        auto pt = board.at(source).type();
 
         // castling in chess960
-        if (board.chess960() && piece == PieceType::KING && board.at(target).type() == PieceType::ROOK &&
+        if (board.chess960() && pt == PieceType::KING && board.at(target).type() == PieceType::ROOK &&
             board.at(target).color() == board.sideToMove()) {
             return Move::make<Move::CASTLING>(source, target);
         }
 
         // convert to king captures rook
         // in chess960 the move should be sent as king captures rook already!
-        if (!board.chess960() && piece == PieceType::KING && Square::distance(target, source) == 2) {
+        if (!board.chess960() && pt == PieceType::KING && Square::distance(target, source) == 2) {
             target = Square(target > source ? File::FILE_H : File::FILE_A, source.rank());
             return Move::make<Move::CASTLING>(source, target);
         }
 
         // en passant
-        if (piece == PieceType::PAWN && target == board.enpassantSq()) {
+        if (pt == PieceType::PAWN && target == board.enpassantSq()) {
             return Move::make<Move::ENPASSANT>(source, target);
         }
 
         // promotion
-        if (piece == PieceType::PAWN && uci.length() == 5 && Square::back_rank(target, ~board.sideToMove())) {
+        if (pt == PieceType::PAWN && uci.length() == 5 && Square::back_rank(target, ~board.sideToMove())) {
             auto promotion = PieceType(uci.substr(4, 1));
 
-            if (promotion != PieceType::QUEEN && promotion != PieceType::ROOK && promotion != PieceType::BISHOP &&
-                promotion != PieceType::KNIGHT) {
+            if (promotion == PieceType::NONE || promotion == PieceType::KING || promotion == PieceType::PAWN) {
                 return Move::NO_MOVE;
             }
 
@@ -4664,26 +4760,32 @@ class uci {
 
     /**
      * @brief Parse a san string and return the move.
-     * @tparam PEDANTIC
+     * This function will throw a SanParseError if the san string is invalid.
      * @param board
      * @param san
      * @return
      */
-    template <bool PEDANTIC = false>
     [[nodiscard]] static Move parseSan(const Board &board, std::string_view san) noexcept(false) {
         Movelist moves;
 
-        return parseSan<PEDANTIC>(board, san, moves);
+        return parseSan(board, san, moves);
     }
 
-    template <bool PEDANTIC = false>
+    /**
+     * @brief Parse a san string and return the move.
+     * This function will throw a SanParseError if the san string is invalid.
+     * @param board
+     * @param san
+     * @param moves
+     * @return
+     */
     [[nodiscard]] static Move parseSan(const Board &board, std::string_view san, Movelist &moves) noexcept(false) {
         if (san.empty()) {
             return Move::NO_MOVE;
         }
 
         static constexpr auto pt_to_pgt = [](PieceType pt) { return 1 << (pt); };
-        const SanMoveInformation info   = parseSanInfo<PEDANTIC>(san);
+        const SanMoveInformation info   = parseSanInfo(san);
 
         if (info.capture) {
             movegen::legalmoves<movegen::MoveGenType::CAPTURE>(moves, board, pt_to_pgt(info.piece));
@@ -4730,7 +4832,7 @@ class uci {
                 }
             }
             // Handle moves with specific from square
-            else if (info.from != Square::underlying::NO_SQ) {
+            else if (info.from != Square::NO_SQ) {
                 if (move.from() != info.from) {
                     continue;
                 }
@@ -4763,6 +4865,34 @@ class uci {
         return matchingMove;
     }
 
+    /**
+     * @brief Check if a string is a valid UCI move. Must also have the correct length.
+     * @param move
+     * @return
+     */
+    static bool isUciMove(const std::string &move) noexcept {
+        bool is_uci = false;
+
+        static constexpr auto is_digit     = [](char c) { return c >= '1' && c <= '8'; };
+        static constexpr auto is_file      = [](char c) { return c >= 'a' && c <= 'h'; };
+        static constexpr auto is_promotion = [](char c) { return c == 'n' || c == 'b' || c == 'r' || c == 'q'; };
+
+        // assert that the move is in uci format, [abcdefgh][1-8][abcdefgh][1-8][nbrq]
+        if (move.size() >= 4) {
+            is_uci = is_file(move[0]) && is_digit(move[1]) && is_file(move[2]) && is_digit(move[3]);
+        }
+
+        if (move.size() == 5) {
+            is_uci = is_uci && is_promotion(move[4]);
+        }
+
+        if (move.size() > 5) {
+            return false;
+        }
+
+        return is_uci;
+    }
+
    private:
     struct SanMoveInformation {
         File from_file = File::NO_FILE;
@@ -4770,10 +4900,12 @@ class uci {
 
         PieceType promotion = PieceType::NONE;
 
-        Square from = Square::underlying::NO_SQ;
-        Square to   = Square::underlying::NO_SQ;  // a valid move always has a to square
+        Square from = Square::NO_SQ;
+        // a valid move always has a to square
+        Square to = Square::NO_SQ;
 
-        PieceType piece = PieceType::NONE;  // a valid move always has a piece
+        // a valid move always has a piece
+        PieceType piece = PieceType::NONE;
 
         bool castling_short = false;
         bool castling_long  = false;
@@ -4781,13 +4913,10 @@ class uci {
         bool capture = false;
     };
 
-    template <bool PEDANTIC = false>
     [[nodiscard]] static SanMoveInformation parseSanInfo(std::string_view san) noexcept(false) {
 #ifndef CHESS_NO_EXCEPTIONS
-        if constexpr (PEDANTIC) {
-            if (san.length() < 2) {
-                throw SanParseError("Failed to parse san. At step 0: " + std::string(san));
-            }
+        if (san.length() < 2) {
+            throw SanParseError("Failed to parse san. At step 0: " + std::string(san));
         }
 #endif
         constexpr auto parse_castle = [](std::string_view &san, SanMoveInformation &info, char castling_char) {
@@ -4894,96 +5023,113 @@ class uci {
 
     template <bool LAN = false>
     static void moveToRep(Board board, const Move &move, std::string &str) {
-        if (move.typeOf() == Move::CASTLING) {
-            str = move.to() > move.from() ? "O-O" : "O-O-O";
+        if (handleCastling(move, str)) {
+            board.makeMove(move);
+            if (board.inCheck()) appendCheckSymbol(board, str);
             return;
         }
 
-        const PieceType pt = board.at(move.from()).type();
+        const PieceType pt   = board.at(move.from()).type();
+        const bool isCapture = board.at(move.to()) != Piece::NONE || move.typeOf() == Move::ENPASSANT;
 
         assert(pt != PieceType::NONE);
 
         if (pt != PieceType::PAWN) {
-            str += std::toupper(static_cast<std::string>(pt)[0]);
+            appendPieceSymbol(pt, str);
         }
 
         if constexpr (LAN) {
-            str += static_cast<std::string>(move.from().file());
-            str += static_cast<std::string>(move.from().rank());
-        } else if (pt != PieceType::PAWN) {
-            Movelist moves;
-            movegen::legalmoves(moves, board, 1 << pt);
-
-            bool needFile         = false;
-            bool needRank         = false;
-            bool hasAmbiguousMove = false;
-
-            for (const auto &m : moves) {
-                if (m != move && m.to() == move.to()) {
-                    hasAmbiguousMove = true;
-
-                    /*
-                    First, if the moving pieces can be distinguished by their originating files, the originating file
-                    letter of the moving piece is inserted immediately after the moving piece letter.
-
-                    Second (when the first step fails), if the moving pieces can be distinguished by their originating
-                    ranks, the originating rank digit of the moving piece is inserted immediately after the moving piece
-                    letter.
-
-                    Third (when both the first and the second steps fail), the two character square coordinate of the
-                    originating square of the moving piece is inserted immediately after the moving piece letter.
-                    */
-
-                    if (isIdentifiableByType(moves, move, move.from().file())) {
-                        needFile = true;
-                        break;
-                    }
-
-                    if (isIdentifiableByType(moves, move, move.from().rank())) {
-                        needRank = true;
-                        break;
-                    }
-                }
-            }
-
-            if (needFile) str += static_cast<std::string>(move.from().file());
-            if (needRank) str += static_cast<std::string>(move.from().rank());
-
-            // we weren't able to disambiguate the move by either file or rank, so we need to use both
-            if (hasAmbiguousMove && !needFile && !needRank) {
-                str += static_cast<std::string>(move.from().file());
-                str += static_cast<std::string>(move.from().rank());
+            appendSquare(move.from(), str);
+        } else {
+            if (pt == PieceType::PAWN) {
+                str += isCapture ? static_cast<std::string>(move.from().file()) : "";
+            } else {
+                resolveAmbiguity(board, move, pt, str);
             }
         }
 
-        if (board.at(move.to()) != Piece::NONE || move.typeOf() == Move::ENPASSANT) {
-            if (pt == PieceType::PAWN) {
-                str += static_cast<std::string>(move.from().file());
-            }
-
+        if (isCapture) {
             str += 'x';
         }
 
-        str += static_cast<std::string>(move.to().file());
-        str += static_cast<std::string>(move.to().rank());
+        appendSquare(move.to(), str);
 
-        if (move.typeOf() == Move::PROMOTION) {
-            const auto promotion_pt = static_cast<std::string>(move.promotionType());
-
-            str += '=';
-            str += std::toupper(promotion_pt[0]);
-        }
+        if (move.typeOf() == Move::PROMOTION) appendPromotion(move, str);
 
         board.makeMove(move);
 
-        if (!board.inCheck()) {
-            return;
+        if (board.inCheck()) appendCheckSymbol(board, str);
+    }
+
+    static bool handleCastling(const Move &move, std::string &str) {
+        if (move.typeOf() != Move::CASTLING) return false;
+
+        str = (move.to().file() > move.from().file()) ? "O-O" : "O-O-O";
+        return true;
+    }
+
+    static void appendPieceSymbol(PieceType pieceType, std::string &str) {
+        str += std::toupper(static_cast<std::string>(pieceType)[0]);
+    }
+
+    static void appendSquare(Square square, std::string &str) {
+        str += static_cast<std::string>(square.file());
+        str += static_cast<std::string>(square.rank());
+    }
+
+    static void appendPromotion(const Move &move, std::string &str) {
+        str += '=';
+        str += std::toupper(static_cast<std::string>(move.promotionType())[0]);
+    }
+
+    static void appendCheckSymbol(Board &board, std::string &str) {
+        const auto gameState = board.isGameOver().second;
+        str += (gameState == GameResult::LOSE) ? '#' : '+';
+    }
+
+    static void resolveAmbiguity(const Board &board, const Move &move, PieceType pieceType, std::string &str) {
+        Movelist moves;
+        movegen::legalmoves(moves, board, 1 << pieceType);
+
+        bool needFile         = false;
+        bool needRank         = false;
+        bool hasAmbiguousMove = false;
+
+        for (const auto &m : moves) {
+            if (m != move && m.to() == move.to()) {
+                hasAmbiguousMove = true;
+
+                /*
+                First, if the moving pieces can be distinguished by their originating files, the originating
+                file letter of the moving piece is inserted immediately after the moving piece letter.
+
+                Second (when the first step fails), if the moving pieces can be distinguished by their
+                originating ranks, the originating rank digit of the moving piece is inserted immediately after
+                the moving piece letter.
+
+                Third (when both the first and the second steps fail), the two character square coordinate of
+                the originating square of the moving piece is inserted immediately after the moving piece
+                letter.
+                */
+
+                if (isIdentifiableByType(moves, move, move.from().file())) {
+                    needFile = true;
+                    break;
+                }
+
+                if (isIdentifiableByType(moves, move, move.from().rank())) {
+                    needRank = true;
+                    break;
+                }
+            }
         }
 
-        if (board.isGameOver().second == GameResult::LOSE) {
-            str += '#';
-        } else {
-            str += '+';
+        if (needFile) str += static_cast<std::string>(move.from().file());
+        if (needRank) str += static_cast<std::string>(move.from().rank());
+
+        // we weren't able to disambiguate the move by either file or rank, so we need to use both
+        if (hasAmbiguousMove && !needFile && !needRank) {
+            appendSquare(move.from(), str);
         }
     }
 
