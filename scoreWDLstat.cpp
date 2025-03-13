@@ -274,11 +274,10 @@ void ana_files(const std::vector<std::string> &files, const std::string &regex_e
 
             pgn::StreamParser parser(iss);
 
-            try {
-                parser.readGames(*vis);
-            } catch (const std::exception &e) {
-                std::cout << "Error when parsing: " << file << std::endl;
-                std::cerr << e.what() << '\n';
+            auto error = parser.readGames(*vis);
+
+            if (error) {
+                std::cerr << "Error while parsing: " << file << ". Error: " << error.message() << std::endl;
             }
         };
 
