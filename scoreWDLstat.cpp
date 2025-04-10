@@ -173,21 +173,9 @@ class Analyze : public pgn::Visitor {
                 const auto match_eval = comment.substr(0, delimiter_pos);
 
                 if (match_eval[1] == 'M') {
-                    if (match_eval[0] == '+') {
-                        key.eval = 1001;
-                    } else {
-                        key.eval = -1001;
-                    }
-
+                    key.eval = match_eval[0] == '+' ? 1001 : -1001;
                 } else {
-                    int eval = 100 * fast_stof(match_eval.data());
-
-                    if (eval > 1000) {
-                        eval = 1000;
-                    } else if (eval < -1000) {
-                        eval = -1000;
-                    }
-
+                    int eval = std::clamp(int(100 * fast_stof(match_eval.data())), -1000, 1000);
                     // reduce precision
                     key.eval = int(std::round(eval / float(bin_width))) * bin_width;
                 }
@@ -277,7 +265,8 @@ void ana_files(const std::vector<std::string> &files, const std::string &regex_e
             auto error = parser.readGames(*vis);
 
             if (error) {
-                std::cerr << "Error while parsing: " << file << ". Error: " << error.message() << std::endl;
+                std::cerr << "Error while parsing: " << file << ". Error: " << error.message()
+                          << std::endl;
             }
         };
 
