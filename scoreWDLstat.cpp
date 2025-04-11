@@ -660,6 +660,10 @@ int main(int argc, char const *argv[]) {
 
     if (cmd.has_argument("--file")) {
         files_pgn = {cmd.get_argument("--file")};
+        if (!fs::exists(files_pgn[0])) {
+            std::cout << "Error: File not found: " << files_pgn[0] << std::endl;
+            std::exit(1);
+        }
     } else {
         auto path = cmd.get_argument("--dir", default_path);
 
