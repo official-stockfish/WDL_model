@@ -113,7 +113,7 @@ class Analyze : public pgn::Visitor {
             }
         }
 
-        if (key == "Variant" && value == "fischerandom") {
+        if (key == "Variant" && (value == "fischerandom" || value == "Chess960")) {
             board.set960(true);
         }
 
