@@ -71,6 +71,12 @@ parser.add_argument(
     help="A True/False flag for yellow tests only.",
 )
 parser.add_argument(
+    "--standard_chess_only",
+    type=str,
+    default="False",
+    help="A True/False flag for tests with standard chess books only.",
+)
+parser.add_argument(
     "--username",
     type=str,
     help="Download USERNAME's tests only.",
@@ -123,6 +129,7 @@ if args.yellow_only.lower() == "true":
     additional_query_params += "&yellow_only=1"
 if args.username is not None:
     additional_query_params += f"&username={args.username}"
+standard_chess_only = args.standard_chess_only.lower() == "true"
 
 page = 1
 
@@ -190,6 +197,11 @@ while True:
             new_tc = meta["args"].get("new_tc", "")
             if tc and new_tc:
                 tcStrings = [tc] if tc == new_tc else [tc, new_tc]
+            book = meta["args"].get("book", "")
+            if standard_chess_only and "frc" in book.lower():
+                if args.verbose >= 1:
+                    print(f"  Skipping test {test} with book {book} ...")
+                continue
 
         if args.tc_lower_limit is not None or args.tc_upper_limit is not None:
             if tcStrings is None:
