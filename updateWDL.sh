@@ -167,6 +167,8 @@ newpawn=$(grep -oP 'const int NormalizeToPawnValue = \K\d+' scoreWDL.log)
 
 if [[ $newpawn -ne $oldpawn ]]; then
     echo "Based on $poscount positions from $gamescount games, NormalizeToPawnValue should change from $oldpawn to $newpawn."
+    new5050=$(( newpawn * 100 / oldpawn ))
+    echo "In the updated WDL model ${new5050}cp would roughly map to 100cp."
 else
     echo "Based on $poscount positions from $gamescount games, NormalizeToPawnValue should stay at $oldpawn."
 fi
