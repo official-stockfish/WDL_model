@@ -24,7 +24,7 @@ if not os.path.exists(args.path):
 
 # find the set of downloaded Ids (looking in the full file tree)
 # match any filename of the form testId-runId.pgn(.gz) or testId.pgn(.gz)
-p = re.compile("([a-z0-9]*)(-[0-9]*)?\.pgn(|\.gz)")
+p = re.compile(r"([a-z0-9]*)(-[0-9]*)?\.pgn(|\.gz)")
 tests = set()
 
 for path, _, files in os.walk(args.path):
@@ -36,7 +36,7 @@ for path, _, files in os.walk(args.path):
 
 print(f"Found {len(tests)} downloaded tests in {args.path}.")
 
-p = re.compile("([a-z0-9]*).json")
+p = re.compile(r"([a-z0-9]*).json")
 
 # download metadata for each test
 for json_name in tests:
