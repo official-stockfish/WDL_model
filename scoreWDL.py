@@ -710,7 +710,7 @@ if __name__ == "__main__":
 
     if args.NormalizeToPawnValue is None:
         if args.NormalizeData is None:
-            args.NormalizeData = '{"momType": "material", "momMin": 17, "momMax": 78, "momTarget": 58, "as": [-72.32565836,185.93832038,-144.58862193,416.44950446]}'
+            args.NormalizeData = '{"momType": "material", "momMin": 17, "momMax": 78, "momTarget": 58, "as": [-142.72052667,372.35176398,-340.71073572,415.23490212]}'
     else:
         assert (
             args.NormalizeData is None
